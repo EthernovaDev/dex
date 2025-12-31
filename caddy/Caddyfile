@@ -1,0 +1,64 @@
+{
+  email ethernovacoin@gmail.com
+}
+
+dex.ethnova.net {
+  encode gzip
+  @html {
+    path / /index.html /info /info/ /info/index.html
+    path_regexp html \.html$
+  }
+  header @html Cache-Control "no-cache, no-store, must-revalidate"
+  @ui_static path /static/*
+  header @ui_static Cache-Control "public, max-age=31536000, immutable"
+
+  @index path / /index.html
+  handle @index {
+    root * /opt/novadex/current/dex-ui/build
+    file_server
+  }
+
+  @info_static path /info/static/*
+  handle @info_static {
+    header Cache-Control "public, max-age=31536000, immutable"
+    uri strip_prefix /info
+    root * /opt/novadex/current/dex-info/build
+    file_server
+  }
+
+  handle /info/subgraphs/* {
+    uri replace /info ""
+    reverse_proxy 127.0.0.1:8000
+  }
+
+  handle /info/graphql {
+    rewrite * /subgraphs/name/novadex/novadex
+    reverse_proxy 127.0.0.1:8000
+  }
+
+  @info_hash {
+    path_regexp info_path ^/info/(.+)
+    not path /info/static/* /info/subgraphs/* /info/graphql
+  }
+  redir @info_hash /info/#/{http.regexp.info_path.1} 302
+
+  handle_path /info* {
+    root * /opt/novadex/current/dex-info/build
+    try_files {path} /index.html
+    file_server
+  }
+
+  handle /subgraphs/* {
+    reverse_proxy 127.0.0.1:8000
+  }
+
+  handle_path /graphql {
+    rewrite * /subgraphs/name/novadex/novadex
+    reverse_proxy 127.0.0.1:8000
+  }
+
+  handle {
+    root * /opt/novadex/current/dex-ui/build
+    file_server
+  }
+}

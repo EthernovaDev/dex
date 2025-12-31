@@ -1,0 +1,23 @@
+{
+  "name": "Ethernova Default",
+  "timestamp": "2025-12-29T23:00:16Z",
+  "version": { "major": 1, "minor": 0, "patch": 0 },
+  "tokens": [
+    {
+      "chainId": 77777,
+      "address": "0x0f6547E149FBc1d6E515BA15199CB6848ca43517",
+      "symbol": "WNOVA",
+      "name": "Wrapped NOVA",
+      "decimals": 18,
+      "logoURI": ""
+    },
+    {
+      "chainId": 77777,
+      "address": "0x0840F3c4f2A2D4C43AfB8Ec2d8d14d18CD8d3955",
+      "symbol": "TONY",
+      "name": "STARK - IRON MAN",
+      "decimals": 18,
+      "logoURI": ""
+    }
+  ]
+}

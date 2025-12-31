@@ -36,6 +36,7 @@ const CandleStickChart = ({
 }) => {
   // reference for DOM element to create with chart
   const ref = useRef()
+  const tooltipRef = useRef(null)
 
   const formattedData = data?.map((entry) => {
     return {
@@ -59,7 +60,7 @@ const CandleStickChart = ({
       })
     : []
 
-  if (formattedData && formattedData.length > 0) {
+  if (formattedData && formattedData.length > 0 && Number.isFinite(Number(base))) {
     formattedData.push({
       time: dayjs().unix(),
       open: parseFloat(formattedData[formattedData.length - 1].close),
@@ -70,7 +71,7 @@ const CandleStickChart = ({
   }
 
   // pointer to the chart object
-  const [chartCreated, setChartCreated] = useState(false)
+  const [chartCreated, setChartCreated] = useState(null)
   const dataPrev = usePrevious(data)
 
   const [darkMode] = useDarkModeManager()
@@ -80,29 +81,34 @@ const CandleStickChart = ({
   // reset the chart if theme switches
   useEffect(() => {
     if (chartCreated && previousTheme !== darkMode) {
-      // remove the tooltip element
-      let tooltip = document.getElementById('tooltip-id')
-      let node = document.getElementById('test-id')
-      node.removeChild(tooltip)
-      chartCreated.resize(0, 0)
-      setChartCreated()
+      const node = ref.current
+      if (tooltipRef.current && node) {
+        node.removeChild(tooltipRef.current)
+        tooltipRef.current = null
+      }
+      if (node) node.innerHTML = ''
+      if (chartCreated?.remove) chartCreated.remove()
+      setChartCreated(null)
     }
   }, [chartCreated, darkMode, previousTheme])
 
   useEffect(() => {
     if (data !== dataPrev && chartCreated) {
-      // remove the tooltip element
-      let tooltip = document.getElementById('tooltip-id')
-      let node = document.getElementById('test-id')
-      node.removeChild(tooltip)
-      chartCreated.resize(0, 0)
-      setChartCreated()
+      const node = ref.current
+      if (tooltipRef.current && node) {
+        node.removeChild(tooltipRef.current)
+        tooltipRef.current = null
+      }
+      if (node) node.innerHTML = ''
+      if (chartCreated?.remove) chartCreated.remove()
+      setChartCreated(null)
     }
   }, [chartCreated, data, dataPrev])
 
   // if no chart created yet, create one with options and add to DOM manually
   useEffect(() => {
-    if (!chartCreated) {
+    if (!chartCreated && ref.current) {
+      ref.current.innerHTML = ''
       const chart = createChart(ref.current, {
         width: width,
         height: height,
@@ -159,9 +165,9 @@ const CandleStickChart = ({
       }
 
       var toolTip = document.createElement('div')
-      toolTip.setAttribute('id', 'tooltip-id')
       toolTip.className = 'three-line-legend'
       ref.current.appendChild(toolTip)
+      tooltipRef.current = toolTip
       toolTip.style.display = 'block'
       toolTip.style.left = (margin ? 116 : 10) + 'px'
       toolTip.style.top = 50 + 'px'
@@ -214,9 +220,17 @@ const CandleStickChart = ({
     }
   }, [chartCreated, height, width])
 
+  useEffect(() => {
+    return () => {
+      if (chartCreated?.remove) chartCreated.remove()
+      if (ref.current) ref.current.innerHTML = ''
+      tooltipRef.current = null
+    }
+  }, [chartCreated])
+
   return (
     <div>
-      <div ref={ref} id="test-id" />
+      <div ref={ref} />
       <IconWrapper>
         <Play
           onClick={() => {

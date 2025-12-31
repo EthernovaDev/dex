@@ -14,6 +14,7 @@ import DropdownSelect from '../DropdownSelect'
 import CandleStickChart from '../CandleChart'
 import LocalLoader from '../LocalLoader'
 import { useDarkModeManager } from '../../contexts/LocalStorage'
+import { WRAPPED_NATIVE_ADDRESS } from '../../constants/urls'
 
 const ChartWrapper = styled.div`
   height: 100%;
@@ -71,10 +72,10 @@ const PairChart = ({ address, color, base0, base1 }) => {
   const hourlyRate1 = hourlyData && hourlyData[1]
 
   // formatted symbols for overflow
-  const formattedSymbol0 =
-    pairData?.token0?.symbol.length > 6 ? pairData?.token0?.symbol.slice(0, 5) + '...' : pairData?.token0?.symbol
-  const formattedSymbol1 =
-    pairData?.token1?.symbol.length > 6 ? pairData?.token1?.symbol.slice(0, 5) + '...' : pairData?.token1?.symbol
+  const symbol0 = pairData?.token0?.symbol ?? ''
+  const symbol1 = pairData?.token1?.symbol ?? ''
+  const formattedSymbol0 = symbol0 && symbol0.length > 6 ? symbol0.slice(0, 5) + '...' : symbol0
+  const formattedSymbol1 = symbol1 && symbol1.length > 6 ? symbol1.slice(0, 5) + '...' : symbol1
 
   const below1600 = useMedia('(max-width: 1600px)')
   const below1080 = useMedia('(max-width: 1080px)')
@@ -83,7 +84,23 @@ const PairChart = ({ address, color, base0, base1 }) => {
   let utcStartTime = getTimeframe(timeWindow)
   chartData = chartData?.filter((entry) => entry.date >= utcStartTime)
 
-  if (chartData && chartData.length === 0) {
+  const token0Id = pairData?.token0?.id?.toLowerCase?.() || ''
+  const token1Id = pairData?.token1?.id?.toLowerCase?.() || ''
+  const isWnovaPair = token0Id === WRAPPED_NATIVE_ADDRESS || token1Id === WRAPPED_NATIVE_ADDRESS
+
+  const chartDataMapped = React.useMemo(() => {
+    if (!chartData) return chartData
+    if (!isWnovaPair) return chartData
+    return chartData.map((entry) => {
+      const volume = token0Id === WRAPPED_NATIVE_ADDRESS ? entry.dailyVolumeToken0 : entry.dailyVolumeToken1
+      return {
+        ...entry,
+        dailyVolumeETH: volume ? parseFloat(volume) : 0,
+      }
+    })
+  }, [chartData, isWnovaPair, token0Id])
+
+  if (chartDataMapped && chartDataMapped.length === 0) {
     return (
       <ChartWrapper>
         <EmptyCard height="300px">No historical data yet.</EmptyCard>{' '}
@@ -148,7 +165,7 @@ const PairChart = ({ address, color, base0, base1 }) => {
                 setChartFilter(CHART_VIEW.RATE0)
               }}
             >
-              {pairData.token0 ? formattedSymbol1 + '/' + formattedSymbol0 : '-'}
+              {pairData?.token0 ? formattedSymbol1 + '/' + formattedSymbol0 : '-'}
             </OptionButton>
             <OptionButton
               active={chartFilter === CHART_VIEW.RATE1}
@@ -157,7 +174,7 @@ const PairChart = ({ address, color, base0, base1 }) => {
                 setChartFilter(CHART_VIEW.RATE1)
               }}
             >
-              {pairData.token0 ? formattedSymbol0 + '/' + formattedSymbol1 : '-'}
+              {pairData?.token0 ? formattedSymbol0 + '/' + formattedSymbol1 : '-'}
             </OptionButton>
           </AutoRow>
           <AutoRow justify="flex-end" gap="6px">
@@ -184,7 +201,7 @@ const PairChart = ({ address, color, base0, base1 }) => {
       )}
       {chartFilter === CHART_VIEW.LIQUIDITY && (
         <ResponsiveContainer aspect={aspect}>
-          <AreaChart margin={{ top: 0, right: 10, bottom: 6, left: 0 }} barCategoryGap={1} data={chartData}>
+          <AreaChart margin={{ top: 0, right: 10, bottom: 6, left: 0 }} barCategoryGap={1} data={chartDataMapped}>
             <defs>
               <linearGradient id="colorUv" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor={color} stopOpacity={0.35} />
@@ -206,7 +223,7 @@ const PairChart = ({ address, color, base0, base1 }) => {
             <YAxis
               type="number"
               orientation="right"
-              tickFormatter={(tick) => '$' + toK(tick)}
+              tickFormatter={(tick) => toK(tick)}
               axisLine={false}
               tickLine={false}
               interval="preserveEnd"
@@ -217,7 +234,7 @@ const PairChart = ({ address, color, base0, base1 }) => {
             />
             <Tooltip
               cursor={true}
-              formatter={(val) => formattedNum(val, true)}
+              formatter={(val) => formattedNum(val, false)}
               labelFormatter={(label) => toNiceDateYear(label)}
               labelStyle={{ paddingTop: 4 }}
               contentStyle={{
@@ -232,7 +249,7 @@ const PairChart = ({ address, color, base0, base1 }) => {
               strokeWidth={2}
               dot={false}
               type="monotone"
-              name={' (USD)'}
+              name={isWnovaPair ? 'Liquidity (WNOVA)' : 'Liquidity'}
               dataKey={'reserveUSD'}
               yAxisId={0}
               stroke={darken(0.12, color)}
@@ -277,7 +294,7 @@ const PairChart = ({ address, color, base0, base1 }) => {
           <BarChart
             margin={{ top: 0, right: 0, bottom: 6, left: below1080 ? 0 : 10 }}
             barCategoryGap={1}
-            data={chartData}
+            data={chartDataMapped}
           >
             <XAxis
               tickLine={false}
@@ -295,7 +312,7 @@ const PairChart = ({ address, color, base0, base1 }) => {
               type="number"
               axisLine={false}
               tickMargin={16}
-              tickFormatter={(tick) => '$' + toK(tick)}
+              tickFormatter={(tick) => toK(tick)}
               tickLine={false}
               interval="preserveEnd"
               orientation="right"
@@ -305,7 +322,7 @@ const PairChart = ({ address, color, base0, base1 }) => {
             />
             <Tooltip
               cursor={{ fill: color, opacity: 0.1 }}
-              formatter={(val) => formattedNum(val, true)}
+              formatter={(val) => formattedNum(val, false)}
               labelFormatter={(label) => toNiceDateYear(label)}
               labelStyle={{ paddingTop: 4 }}
               contentStyle={{
@@ -318,8 +335,8 @@ const PairChart = ({ address, color, base0, base1 }) => {
             />
             <Bar
               type="monotone"
-              name={'Volume'}
-              dataKey={'dailyVolumeUSD'}
+              name={isWnovaPair ? 'Volume (WNOVA)' : 'Volume'}
+              dataKey={isWnovaPair ? 'dailyVolumeETH' : 'dailyVolumeUSD'}
               fill={color}
               opacity={'0.4'}
               yAxisId={0}

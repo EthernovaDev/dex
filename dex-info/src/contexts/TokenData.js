@@ -298,28 +298,45 @@ const getTopTokens = async (ethPrice, ethPriceOld) => {
             oneDayHistory?.tradeVolumeUSD ?? 0,
             twoDayHistory?.tradeVolumeUSD ?? 0
           )
+          const derivedEthTwo = parseFloat(twoDayHistory?.derivedETH ?? 0)
+          const [oneDayVolumeETH, volumeChangeETH] = get2DayPercentChange(
+            data.tradeVolume * derivedEthNow,
+            oneDayHistory?.tradeVolume ? oneDayHistory.tradeVolume * derivedEthOld : 0,
+            twoDayHistory?.tradeVolume ? twoDayHistory.tradeVolume * derivedEthTwo : 0
+          )
           const [oneDayTxns, txnChange] = get2DayPercentChange(
             data.txCount,
             oneDayHistory?.txCount ?? 0,
             twoDayHistory?.txCount ?? 0
           )
 
+          const derivedEthNow = parseFloat(data?.derivedETH ?? 0)
+          const derivedEthOld = parseFloat(oneDayHistory?.derivedETH ?? 0)
           const currentLiquidityUSD = data?.totalLiquidity * ethPrice * data?.derivedETH
           const oldLiquidityUSD = oneDayHistory?.totalLiquidity * ethPriceOld * oneDayHistory?.derivedETH
+          const currentLiquidityETH = data?.totalLiquidity ? data.totalLiquidity * derivedEthNow : 0
+          const oldLiquidityETH = oneDayHistory?.totalLiquidity ? oneDayHistory.totalLiquidity * derivedEthOld : 0
 
           // percent changes
           const priceChangeUSD = getPercentChange(
             data?.derivedETH * ethPrice,
             oneDayHistory?.derivedETH ? oneDayHistory?.derivedETH * ethPriceOld : 0
           )
+          const priceChangeETH = getPercentChange(derivedEthNow, derivedEthOld)
 
           // set data
           data.priceUSD = data?.derivedETH * ethPrice
+          data.priceETH = derivedEthNow
           data.totalLiquidityUSD = currentLiquidityUSD
+          data.totalLiquidityETH = currentLiquidityETH
           data.oneDayVolumeUSD = parseFloat(oneDayVolumeUSD)
+          data.oneDayVolumeETH = parseFloat(oneDayVolumeETH)
           data.volumeChangeUSD = volumeChangeUSD
+          data.volumeChangeETH = volumeChangeETH
           data.priceChangeUSD = priceChangeUSD
+          data.priceChangeETH = priceChangeETH
           data.liquidityChangeUSD = getPercentChange(currentLiquidityUSD ?? 0, oldLiquidityUSD ?? 0)
+          data.liquidityChangeETH = getPercentChange(currentLiquidityETH ?? 0, oldLiquidityETH ?? 0)
           data.oneDayTxns = oneDayTxns
           data.txnChange = txnChange
 
@@ -419,6 +436,12 @@ const getTokenData = async (address, ethPrice, ethPriceOld) => {
       oneDayData?.tradeVolumeUSD ?? 0,
       twoDayData?.tradeVolumeUSD ?? 0
     )
+    const derivedEthTwo = parseFloat(twoDayData?.derivedETH ?? 0)
+    const [oneDayVolumeETH, volumeChangeETH] = get2DayPercentChange(
+      data.tradeVolume * derivedEthNow,
+      oneDayData?.tradeVolume ? oneDayData.tradeVolume * derivedEthOld : 0,
+      twoDayData?.tradeVolume ? twoDayData.tradeVolume * derivedEthTwo : 0
+    )
 
     // calculate percentage changes and daily changes
     const [oneDayVolumeUT, volumeChangeUT] = get2DayPercentChange(
@@ -434,24 +457,35 @@ const getTokenData = async (address, ethPrice, ethPriceOld) => {
       twoDayData?.txCount ?? 0
     )
 
+    const derivedEthNow = parseFloat(data?.derivedETH ?? 0)
+    const derivedEthOld = parseFloat(oneDayData?.derivedETH ?? 0)
     const priceChangeUSD = getPercentChange(
       data?.derivedETH * ethPrice,
       parseFloat(oneDayData?.derivedETH ?? 0) * ethPriceOld
     )
+    const priceChangeETH = getPercentChange(derivedEthNow, derivedEthOld)
 
     const currentLiquidityUSD = data?.totalLiquidity * ethPrice * data?.derivedETH
     const oldLiquidityUSD = oneDayData?.totalLiquidity * ethPriceOld * oneDayData?.derivedETH
+    const currentLiquidityETH = data?.totalLiquidity ? data.totalLiquidity * derivedEthNow : 0
+    const oldLiquidityETH = oneDayData?.totalLiquidity ? oneDayData.totalLiquidity * derivedEthOld : 0
 
     // set data
     data.priceUSD = data?.derivedETH * ethPrice
+    data.priceETH = derivedEthNow
     data.totalLiquidityUSD = currentLiquidityUSD
+    data.totalLiquidityETH = currentLiquidityETH
     data.oneDayVolumeUSD = oneDayVolumeUSD
+    data.oneDayVolumeETH = parseFloat(oneDayVolumeETH)
     data.volumeChangeUSD = volumeChangeUSD
+    data.volumeChangeETH = volumeChangeETH
     data.priceChangeUSD = priceChangeUSD
+    data.priceChangeETH = priceChangeETH
     data.oneDayVolumeUT = oneDayVolumeUT
     data.volumeChangeUT = volumeChangeUT
     const liquidityChangeUSD = getPercentChange(currentLiquidityUSD ?? 0, oldLiquidityUSD ?? 0)
     data.liquidityChangeUSD = liquidityChangeUSD
+    data.liquidityChangeETH = getPercentChange(currentLiquidityETH ?? 0, oldLiquidityETH ?? 0)
     data.oneDayTxns = oneDayTxns
     data.txnChange = txnChange
 
@@ -630,12 +664,21 @@ const getTokenChartData = async (tokenAddress) => {
       dayIndexSet.add((data[i].date / oneDay).toFixed(0))
       dayIndexArray.push(data[i])
       dayData.dailyVolumeUSD = parseFloat(dayData.dailyVolumeUSD)
+      dayData.dailyVolumeETH = parseFloat(dayData.dailyVolumeETH)
+      dayData.totalLiquidityETH = parseFloat(dayData.totalLiquidityETH)
+      if (dayData.totalLiquidityToken && dayData.totalLiquidityETH) {
+        dayData.priceETH = parseFloat(dayData.totalLiquidityETH) / parseFloat(dayData.totalLiquidityToken)
+      } else {
+        dayData.priceETH = 0
+      }
     })
 
     // fill in empty days
     let timestamp = data[0] && data[0].date ? data[0].date : startTime
     let latestLiquidityUSD = data[0] && data[0].totalLiquidityUSD
+    let latestLiquidityETH = data[0] && data[0].totalLiquidityETH
     let latestPriceUSD = data[0] && data[0].priceUSD
+    let latestPriceETH = data[0] && data[0].priceETH
     let latestPairDatas = data[0] && data[0].mostLiquidPairs
     let index = 1
     while (timestamp < utcEndTime.startOf('minute').unix() - oneDay) {
@@ -646,13 +689,18 @@ const getTokenChartData = async (tokenAddress) => {
           date: nextDay,
           dayString: nextDay,
           dailyVolumeUSD: 0,
+          dailyVolumeETH: 0,
           priceUSD: latestPriceUSD,
+          priceETH: latestPriceETH,
           totalLiquidityUSD: latestLiquidityUSD,
+          totalLiquidityETH: latestLiquidityETH,
           mostLiquidPairs: latestPairDatas,
         })
       } else {
         latestLiquidityUSD = dayIndexArray[index].totalLiquidityUSD
+        latestLiquidityETH = dayIndexArray[index].totalLiquidityETH
         latestPriceUSD = dayIndexArray[index].priceUSD
+        latestPriceETH = dayIndexArray[index].priceETH
         latestPairDatas = dayIndexArray[index].mostLiquidPairs
         index = index + 1
       }

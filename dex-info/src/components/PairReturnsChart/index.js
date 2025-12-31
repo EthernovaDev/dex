@@ -117,7 +117,7 @@ const PairReturnsChart = ({ account, position }) => {
             <YAxis
               type="number"
               orientation="right"
-              tickFormatter={(tick) => '$' + toK(tick)}
+              tickFormatter={(tick) => toK(tick)}
               axisLine={false}
               tickLine={false}
               interval="preserveStartEnd"
@@ -127,7 +127,7 @@ const PairReturnsChart = ({ account, position }) => {
             />
             <Tooltip
               cursor={true}
-              formatter={(val) => formattedNum(val, true)}
+              formatter={(val) => formattedNum(val, false)}
               labelFormatter={(label) => toNiceDateYear(label)}
               labelStyle={{ paddingTop: 4 }}
               contentStyle={{

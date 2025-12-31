@@ -24,10 +24,10 @@ export default function GlobalStats() {
   const below400 = useMedia('(max-width: 400px)')
   const below816 = useMedia('(max-width: 816px)')
 
-  const { oneDayVolumeUSD, oneDayTxns, pairCount } = useGlobalData()
+  const { oneDayVolumeETH, oneDayTxns, pairCount } = useGlobalData()
   const [ethPrice] = useEthPrice()
-  const formattedEthPrice = ethPrice ? formattedNum(ethPrice, true) : '-'
-  const oneDayFees = oneDayVolumeUSD ? formattedNum(oneDayVolumeUSD * 0.003, true) : ''
+  const formattedEthPrice = ethPrice ? formattedNum(ethPrice, false) : '—'
+  const oneDayFees = oneDayVolumeETH ? formattedNum(oneDayVolumeETH * 0.003, false) : '—'
 
   return (
     <Header>
@@ -51,7 +51,7 @@ export default function GlobalStats() {
           )}
           {!below1295 && (
             <TYPE.main mr={'1rem'}>
-              Fees (24H): <Medium>{oneDayFees}</Medium>&nbsp;
+              Fees (24H, WNOVA): <Medium>{oneDayFees}</Medium>&nbsp;
             </TYPE.main>
           )}
         </RowFixed>

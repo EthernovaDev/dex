@@ -287,6 +287,18 @@ async function getGlobalData(ethPrice, oldEthPrice) {
         twoWeekData.totalVolumeUSD
       )
 
+      const [oneDayVolumeETH, volumeChangeETH] = get2DayPercentChange(
+        data.totalVolumeETH,
+        oneDayData.totalVolumeETH,
+        twoDayData.totalVolumeETH
+      )
+
+      const [oneWeekVolumeETH, weeklyVolumeChangeETH] = get2DayPercentChange(
+        data.totalVolumeETH,
+        oneWeekData.totalVolumeETH,
+        twoWeekData.totalVolumeETH
+      )
+
       const [oneDayTxns, txnChange] = get2DayPercentChange(
         data.txCount,
         oneDayData.txCount ? oneDayData.txCount : 0,
@@ -299,6 +311,7 @@ async function getGlobalData(ethPrice, oldEthPrice) {
         data.totalLiquidityETH * ethPrice,
         oneDayData.totalLiquidityETH * oldEthPrice
       )
+      const liquidityChangeETH = getPercentChange(data.totalLiquidityETH, oneDayData.totalLiquidityETH)
 
       // add relevant fields with the calculated amounts
       data.oneDayVolumeUSD = oneDayVolumeUSD
@@ -306,6 +319,11 @@ async function getGlobalData(ethPrice, oldEthPrice) {
       data.weeklyVolumeChange = weeklyVolumeChange
       data.volumeChangeUSD = volumeChangeUSD
       data.liquidityChangeUSD = liquidityChangeUSD
+      data.oneDayVolumeETH = oneDayVolumeETH
+      data.oneWeekVolumeETH = oneWeekVolumeETH
+      data.weeklyVolumeChangeETH = weeklyVolumeChangeETH
+      data.volumeChangeETH = volumeChangeETH
+      data.liquidityChangeETH = liquidityChangeETH
       data.oneDayTxns = oneDayTxns
       data.txnChange = txnChange
     }
@@ -359,11 +377,13 @@ const getChartData = async (oldestDateToFetch, offsetData) => {
         dayIndexSet.add((data[i].date / oneDay).toFixed(0))
         dayIndexArray.push(data[i])
         dayData.dailyVolumeUSD = parseFloat(dayData.dailyVolumeUSD)
+        dayData.dailyVolumeETH = parseFloat(dayData.dailyVolumeETH)
       })
 
       // fill in empty days ( there will be no day datas if no trades made that day )
       let timestamp = data[0].date ? data[0].date : oldestDateToFetch
       let latestLiquidityUSD = data[0].totalLiquidityUSD
+      let latestLiquidityETH = data[0].totalLiquidityETH
       let latestDayDats = data[0].mostLiquidTokens
       let index = 1
       while (timestamp < utcEndTime.unix() - oneDay) {
@@ -374,11 +394,14 @@ const getChartData = async (oldestDateToFetch, offsetData) => {
           data.push({
             date: nextDay,
             dailyVolumeUSD: 0,
+            dailyVolumeETH: 0,
             totalLiquidityUSD: latestLiquidityUSD,
+            totalLiquidityETH: latestLiquidityETH,
             mostLiquidTokens: latestDayDats,
           })
         } else {
           latestLiquidityUSD = dayIndexArray[index].totalLiquidityUSD
+          latestLiquidityETH = dayIndexArray[index].totalLiquidityETH
           latestDayDats = dayIndexArray[index].mostLiquidTokens
           index = index + 1
         }
@@ -413,6 +436,8 @@ const getChartData = async (oldestDateToFetch, offsetData) => {
       weeklyData[startIndexWeekly].date = data[i].date
       weeklyData[startIndexWeekly].weeklyVolumeUSD =
         (weeklyData[startIndexWeekly].weeklyVolumeUSD ?? 0) + data[i].dailyVolumeUSD
+      weeklyData[startIndexWeekly].weeklyVolumeETH =
+        (weeklyData[startIndexWeekly].weeklyVolumeETH ?? 0) + data[i].dailyVolumeETH
     })
 
     if (!checked) {

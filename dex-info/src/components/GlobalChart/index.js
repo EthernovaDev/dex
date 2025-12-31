@@ -29,8 +29,14 @@ const GlobalChart = ({ display }) => {
 
   // global historical data
   const [dailyData, weeklyData] = useGlobalChartData()
-  const { totalLiquidityUSD, oneDayVolumeUSD, volumeChangeUSD, liquidityChangeUSD, oneWeekVolume, weeklyVolumeChange } =
-    useGlobalData()
+  const {
+    totalLiquidityETH,
+    oneDayVolumeETH,
+    volumeChangeETH,
+    liquidityChangeETH,
+    oneWeekVolumeETH,
+    weeklyVolumeChangeETH,
+  } = useGlobalData()
 
   // based on window, get starttim
   let utcStartTime = getTimeframe(timeWindow)
@@ -80,10 +86,10 @@ const GlobalChart = ({ display }) => {
         <ResponsiveContainer aspect={60 / 28} ref={ref}>
           <TradingViewChart
             data={dailyData}
-            base={totalLiquidityUSD}
-            baseChange={liquidityChangeUSD}
-            title="Liquidity"
-            field="totalLiquidityUSD"
+            base={totalLiquidityETH}
+            baseChange={liquidityChangeETH}
+            title="Liquidity (WNOVA)"
+            field="totalLiquidityETH"
             width={width}
             type={CHART_TYPES.AREA}
           />
@@ -93,10 +99,10 @@ const GlobalChart = ({ display }) => {
         <ResponsiveContainer aspect={60 / 28}>
           <TradingViewChart
             data={chartDataFiltered}
-            base={volumeWindow === VOLUME_WINDOW.WEEKLY ? oneWeekVolume : oneDayVolumeUSD}
-            baseChange={volumeWindow === VOLUME_WINDOW.WEEKLY ? weeklyVolumeChange : volumeChangeUSD}
-            title={volumeWindow === VOLUME_WINDOW.WEEKLY ? 'Volume (7d)' : 'Volume'}
-            field={volumeWindow === VOLUME_WINDOW.WEEKLY ? 'weeklyVolumeUSD' : 'dailyVolumeUSD'}
+            base={volumeWindow === VOLUME_WINDOW.WEEKLY ? oneWeekVolumeETH : oneDayVolumeETH}
+            baseChange={volumeWindow === VOLUME_WINDOW.WEEKLY ? weeklyVolumeChangeETH : volumeChangeETH}
+            title={volumeWindow === VOLUME_WINDOW.WEEKLY ? 'Volume (7d, WNOVA)' : 'Volume (WNOVA)'}
+            field={volumeWindow === VOLUME_WINDOW.WEEKLY ? 'weeklyVolumeETH' : 'dailyVolumeETH'}
             width={width}
             type={CHART_TYPES.BAR}
             useWeekly={volumeWindow === VOLUME_WINDOW.WEEKLY}

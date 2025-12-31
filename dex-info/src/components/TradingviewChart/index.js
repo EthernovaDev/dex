@@ -35,29 +35,35 @@ const TradingViewChart = ({
 }) => {
   // reference for DOM element to create with chart
   const ref = useRef()
+  const tooltipRef = useRef(null)
 
   // pointer to the chart object
-  const [chartCreated, setChartCreated] = useState(false)
+  const [chartCreated, setChartCreated] = useState(null)
   const dataPrev = usePrevious(data)
 
   useEffect(() => {
     if (data !== dataPrev && chartCreated && type === CHART_TYPES.BAR) {
-      // remove the tooltip element
-      let tooltip = document.getElementById('tooltip-id' + type)
-      let node = document.getElementById('test-id' + type)
-      node.removeChild(tooltip)
-      chartCreated.resize(0, 0)
-      setChartCreated()
+      const node = ref.current
+      if (tooltipRef.current && node) {
+        node.removeChild(tooltipRef.current)
+        tooltipRef.current = null
+      }
+      if (node) node.innerHTML = ''
+      if (chartCreated?.remove) chartCreated.remove()
+      setChartCreated(null)
     }
   }, [chartCreated, data, dataPrev, type])
 
   // parese the data and format for tardingview consumption
-  const formattedData = data?.map((entry) => {
-    return {
-      time: dayjs.unix(entry.date).utc().format('YYYY-MM-DD'),
-      value: parseFloat(entry[field]),
-    }
-  })
+  const formattedData = data
+    ?.map((entry) => {
+      const value = parseFloat(entry?.[field])
+      return {
+        time: dayjs.unix(entry.date).utc().format('YYYY-MM-DD'),
+        value,
+      }
+    })
+    .filter((entry) => Number.isFinite(entry.value))
 
   // adjust the scale based on the type of chart
   const topScale = type === CHART_TYPES.AREA ? 0.32 : 0.2
@@ -69,18 +75,21 @@ const TradingViewChart = ({
   // reset the chart if them switches
   useEffect(() => {
     if (chartCreated && previousTheme !== darkMode) {
-      // remove the tooltip element
-      let tooltip = document.getElementById('tooltip-id' + type)
-      let node = document.getElementById('test-id' + type)
-      node.removeChild(tooltip)
-      chartCreated.resize(0, 0)
-      setChartCreated()
+      const node = ref.current
+      if (tooltipRef.current && node) {
+        node.removeChild(tooltipRef.current)
+        tooltipRef.current = null
+      }
+      if (node) node.innerHTML = ''
+      if (chartCreated?.remove) chartCreated.remove()
+      setChartCreated(null)
     }
   }, [chartCreated, darkMode, previousTheme, type])
 
   // if no chart created yet, create one with options and add to DOM manually
   useEffect(() => {
-    if (!chartCreated && formattedData) {
+    if (!chartCreated && formattedData && ref.current) {
+      ref.current.innerHTML = ''
       var chart = createChart(ref.current, {
         width: width,
         height: HEIGHT,
@@ -149,9 +158,9 @@ const TradingViewChart = ({
 
       series.setData(formattedData)
       var toolTip = document.createElement('div')
-      toolTip.setAttribute('id', 'tooltip-id' + type)
       toolTip.className = darkMode ? 'three-line-legend-dark' : 'three-line-legend'
       ref.current.appendChild(toolTip)
+      tooltipRef.current = toolTip
       toolTip.style.display = 'block'
       toolTip.style.fontWeight = '500'
       toolTip.style.left = -4 + 'px'
@@ -239,9 +248,17 @@ const TradingViewChart = ({
     }
   }, [chartCreated, width])
 
+  useEffect(() => {
+    return () => {
+      if (chartCreated?.remove) chartCreated.remove()
+      if (ref.current) ref.current.innerHTML = ''
+      tooltipRef.current = null
+    }
+  }, [chartCreated])
+
   return (
     <Wrapper>
-      <div ref={ref} id={'test-id' + type} />
+      <div ref={ref} />
       <IconWrapper>
         <Play
           onClick={() => {

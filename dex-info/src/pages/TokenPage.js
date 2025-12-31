@@ -111,13 +111,19 @@ function TokenPage({ address, history }) {
     name,
     symbol,
     priceUSD,
+    priceETH,
     oneDayVolumeUSD,
+    oneDayVolumeETH,
     totalLiquidityUSD,
+    totalLiquidityETH,
     volumeChangeUSD,
+    volumeChangeETH,
     oneDayVolumeUT,
     volumeChangeUT,
     priceChangeUSD,
+    priceChangeETH,
     liquidityChangeUSD,
+    liquidityChangeETH,
     oneDayTxns,
     txnChange,
   } = tokenData || {}
@@ -143,18 +149,18 @@ function TokenPage({ address, history }) {
   const transactions = useTokenTransactions(address)
 
   // price
-  const price = priceUSD ? formattedNum(priceUSD, true) : isWrappedNative ? '1 NOVA' : '—'
-  const priceChange = formattedPercent(priceChangeUSD)
+  const price = priceETH ? formattedNum(priceETH, false) : isWrappedNative ? '1 WNOVA' : '—'
+  const priceChange = formattedPercent(priceChangeETH)
 
   // volume
-  const volume = formattedNum(!!oneDayVolumeUSD ? oneDayVolumeUSD : oneDayVolumeUT, true)
+  const volume = formattedNum(!!oneDayVolumeETH ? oneDayVolumeETH : oneDayVolumeUT, false)
 
-  const usingUtVolume = oneDayVolumeUSD === 0 && !!oneDayVolumeUT
-  const volumeChange = formattedPercent(!usingUtVolume ? volumeChangeUSD : volumeChangeUT)
+  const usingUtVolume = oneDayVolumeETH === 0 && !!oneDayVolumeUT
+  const volumeChange = formattedPercent(!usingUtVolume ? volumeChangeETH : volumeChangeUT)
 
   // liquidity
-  const liquidity = formattedNum(totalLiquidityUSD, true)
-  const liquidityChange = formattedPercent(liquidityChangeUSD)
+  const liquidity = formattedNum(totalLiquidityETH ?? totalLiquidityUSD, false)
+  const liquidityChange = formattedPercent(liquidityChangeETH ?? liquidityChangeUSD)
 
   // transactions
   const txnChangeFormatted = formattedPercent(txnChange)
@@ -179,7 +185,7 @@ function TokenPage({ address, history }) {
     })
   }, [])
 
-  const [useTracked, setUseTracked] = useState(true)
+  const [useTracked, setUseTracked] = useState(false)
 
   if (TOKEN_BLACKLIST.includes(address)) {
     return (
@@ -308,7 +314,7 @@ function TokenPage({ address, history }) {
                   <Panel>
                     <AutoColumn gap="20px">
                       <RowBetween>
-                        <TYPE.main>Price</TYPE.main>
+                        <TYPE.main>Price (WNOVA)</TYPE.main>
                         <div />
                       </RowBetween>
                       <RowBetween align="flex-end">
@@ -324,7 +330,7 @@ function TokenPage({ address, history }) {
                 <Panel>
                   <AutoColumn gap="20px">
                     <RowBetween>
-                      <TYPE.main>Total Liquidity</TYPE.main>
+                      <TYPE.main>Total Liquidity (WNOVA)</TYPE.main>
                       <div />
                     </RowBetween>
                     <RowBetween align="flex-end">
@@ -338,7 +344,7 @@ function TokenPage({ address, history }) {
                 <Panel>
                   <AutoColumn gap="20px">
                     <RowBetween>
-                      <TYPE.main>Volume (24hrs)</TYPE.main>
+                      <TYPE.main>Volume (24hrs, WNOVA)</TYPE.main>
                       <div />
                     </RowBetween>
                     <RowBetween align="flex-end">
@@ -370,7 +376,7 @@ function TokenPage({ address, history }) {
                     gridRow: below1080 ? '' : '1/4',
                   }}
                 >
-                  <TokenChart address={address} color={backgroundColor} base={priceUSD} />
+                  <TokenChart address={address} color={backgroundColor} base={priceETH} />
                 </Panel>
               </PanelWrapper>
             </>
@@ -383,7 +389,7 @@ function TokenPage({ address, history }) {
                   setChecked={() => setUseTracked(!useTracked)}
                   text={'Hide untracked pairs'}
                 />
-                <QuestionHelper text="USD amounts may be inaccurate in low liquidity pairs or pairs without NOVA or stablecoins." />
+                <QuestionHelper text="Values are shown in WNOVA; pairs without WNOVA may not have volume estimates." />
               </AutoRow>
             </RowBetween>
             <Panel

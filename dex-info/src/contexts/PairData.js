@@ -25,6 +25,7 @@ import {
   splitQuery,
 } from '../utils'
 import { timeframeOptions, TRACKED_OVERRIDES_PAIRS, TRACKED_OVERRIDES_TOKENS } from '../constants'
+import { WRAPPED_NATIVE_ADDRESS } from '../constants/urls'
 import { useLatestBlocks } from './Application'
 import { updateNameData } from '../utils/data'
 
@@ -269,12 +270,24 @@ function parseData(data, oneDayData, twoDayData, oneWeekData, ethPrice, oneDayBl
     oneDayData?.untrackedVolumeUSD ? parseFloat(oneDayData?.untrackedVolumeUSD) : 0,
     twoDayData?.untrackedVolumeUSD ? twoDayData?.untrackedVolumeUSD : 0
   )
+  const [oneDayVolumeToken0, volumeChangeToken0] = get2DayPercentChange(
+    data?.volumeToken0,
+    oneDayData?.volumeToken0 ? parseFloat(oneDayData?.volumeToken0) : 0,
+    twoDayData?.volumeToken0 ? twoDayData?.volumeToken0 : 0
+  )
+  const [oneDayVolumeToken1, volumeChangeToken1] = get2DayPercentChange(
+    data?.volumeToken1,
+    oneDayData?.volumeToken1 ? parseFloat(oneDayData?.volumeToken1) : 0,
+    twoDayData?.volumeToken1 ? twoDayData?.volumeToken1 : 0
+  )
 
   const oneWeekVolumeUSD = parseFloat(oneWeekData ? data?.volumeUSD - oneWeekData?.volumeUSD : data.volumeUSD)
 
   const oneWeekVolumeUntracked = parseFloat(
     oneWeekData ? data?.untrackedVolumeUSD - oneWeekData?.untrackedVolumeUSD : data.untrackedVolumeUSD
   )
+  const oneWeekVolumeToken0 = parseFloat(oneWeekData ? data?.volumeToken0 - oneWeekData?.volumeToken0 : data.volumeToken0)
+  const oneWeekVolumeToken1 = parseFloat(oneWeekData ? data?.volumeToken1 - oneWeekData?.volumeToken1 : data.volumeToken1)
 
   // set volume properties
   data.oneDayVolumeUSD = parseFloat(oneDayVolumeUSD)
@@ -283,10 +296,32 @@ function parseData(data, oneDayData, twoDayData, oneWeekData, ethPrice, oneDayBl
   data.oneDayVolumeUntracked = oneDayVolumeUntracked
   data.oneWeekVolumeUntracked = oneWeekVolumeUntracked
   data.volumeChangeUntracked = volumeChangeUntracked
+  data.oneDayVolumeToken0 = parseFloat(oneDayVolumeToken0)
+  data.oneDayVolumeToken1 = parseFloat(oneDayVolumeToken1)
+  data.oneWeekVolumeToken0 = oneWeekVolumeToken0
+  data.oneWeekVolumeToken1 = oneWeekVolumeToken1
+  data.volumeChangeToken0 = volumeChangeToken0
+  data.volumeChangeToken1 = volumeChangeToken1
 
   // set liquidity properties
   data.trackedReserveUSD = data.trackedReserveETH * ethPrice
   data.liquidityChangeUSD = getPercentChange(data.reserveUSD, oneDayData?.reserveUSD)
+  data.liquidityChangeETH = getPercentChange(data.reserveETH, oneDayData?.reserveETH)
+  const token0Id = data.token0?.id?.toLowerCase?.() || ''
+  const token1Id = data.token1?.id?.toLowerCase?.() || ''
+  if (token0Id === WRAPPED_NATIVE_ADDRESS) {
+    data.oneDayVolumeETH = data.oneDayVolumeToken0
+    data.oneWeekVolumeETH = oneWeekVolumeToken0
+    data.volumeChangeETH = volumeChangeToken0
+  } else if (token1Id === WRAPPED_NATIVE_ADDRESS) {
+    data.oneDayVolumeETH = data.oneDayVolumeToken1
+    data.oneWeekVolumeETH = oneWeekVolumeToken1
+    data.volumeChangeETH = volumeChangeToken1
+  } else {
+    data.oneDayVolumeETH = 0
+    data.oneWeekVolumeETH = 0
+    data.volumeChangeETH = 0
+  }
 
   // format if pair hasnt existed for a day or a week
   if (!oneDayData && data && data.createdAtBlockNumber > oneDayBlock) {
@@ -294,9 +329,15 @@ function parseData(data, oneDayData, twoDayData, oneWeekData, ethPrice, oneDayBl
   }
   if (!oneDayData && data) {
     data.oneDayVolumeUSD = parseFloat(data.volumeUSD)
+    if (data.oneDayVolumeETH === 0) {
+      data.oneDayVolumeETH = data.oneDayVolumeToken0 || data.oneDayVolumeToken1 || 0
+    }
   }
   if (!oneWeekData && data) {
     data.oneWeekVolumeUSD = parseFloat(data.volumeUSD)
+    if (data.oneWeekVolumeETH === 0) {
+      data.oneWeekVolumeETH = oneWeekVolumeToken0 || oneWeekVolumeToken1 || 0
+    }
   }
 
   if (

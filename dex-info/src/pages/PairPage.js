@@ -135,13 +135,11 @@ function PairPage({ pairAddress, history }) {
     token1,
     reserve0,
     reserve1,
-    reserveUSD,
-    trackedReserveUSD,
-    oneDayVolumeUSD,
-    volumeChangeUSD,
-    oneDayVolumeUntracked,
-    volumeChangeUntracked,
-    liquidityChangeUSD,
+    reserveETH,
+    trackedReserveETH,
+    oneDayVolumeETH,
+    volumeChangeETH,
+    liquidityChangeETH,
   } = usePairData(pairAddress)
 
   useEffect(() => {
@@ -151,40 +149,29 @@ function PairPage({ pairAddress, history }) {
   const transactions = usePairTransactions(pairAddress)
   const backgroundColor = useColor(pairAddress)
 
-  const formattedLiquidity = reserveUSD ? formattedNum(reserveUSD, true) : formattedNum(trackedReserveUSD, true)
-  const usingUntrackedLiquidity = !trackedReserveUSD && !!reserveUSD
-  const liquidityChange = formattedPercent(liquidityChangeUSD)
+  const formattedLiquidity = reserveETH ? formattedNum(reserveETH, false) : formattedNum(trackedReserveETH, false)
+  const usingUntrackedLiquidity = !trackedReserveETH && !!reserveETH
+  const liquidityChange = formattedPercent(liquidityChangeETH)
 
   // volume
-  const volume = !!oneDayVolumeUSD ? formattedNum(oneDayVolumeUSD, true) : formattedNum(oneDayVolumeUntracked, true)
-  const usingUtVolume = oneDayVolumeUSD === 0 && !!oneDayVolumeUntracked
-  const volumeChange = formattedPercent(!usingUtVolume ? volumeChangeUSD : volumeChangeUntracked)
+  const volume = oneDayVolumeETH ? formattedNum(oneDayVolumeETH, false) : '—'
+  const usingUtVolume = oneDayVolumeETH === 0
+  const volumeChange = formattedPercent(volumeChangeETH)
 
-  const showUSDWaning = usingUntrackedLiquidity | usingUtVolume
+  const showUSDWaning = false
 
   // get fees	  // get fees
-  const fees =
-    oneDayVolumeUSD || oneDayVolumeUSD === 0
-      ? usingUtVolume
-        ? formattedNum(oneDayVolumeUntracked * 0.003, true)
-        : formattedNum(oneDayVolumeUSD * 0.003, true)
-      : '-'
-
-  // token data for usd
-  const [ethPrice] = useEthPrice()
-  const token0USD =
-    token0?.derivedETH && ethPrice ? formattedNum(parseFloat(token0.derivedETH) * parseFloat(ethPrice), true) : ''
-
-  const token1USD =
-    token1?.derivedETH && ethPrice ? formattedNum(parseFloat(token1.derivedETH) * parseFloat(ethPrice), true) : ''
+  const fees = oneDayVolumeETH || oneDayVolumeETH === 0 ? formattedNum(oneDayVolumeETH * 0.003, false) : '—'
 
   // rates
   const token0Rate = reserve0 && reserve1 ? formattedNum(reserve1 / reserve0) : '-'
   const token1Rate = reserve0 && reserve1 ? formattedNum(reserve0 / reserve1) : '-'
 
   // formatted symbols for overflow
-  const formattedSymbol0 = token0?.symbol.length > 6 ? token0?.symbol.slice(0, 5) + '...' : token0?.symbol
-  const formattedSymbol1 = token1?.symbol.length > 6 ? token1?.symbol.slice(0, 5) + '...' : token1?.symbol
+  const formattedSymbol0 =
+    token0?.symbol?.length > 6 ? token0?.symbol.slice(0, 5) + '...' : token0?.symbol || ''
+  const formattedSymbol1 =
+    token1?.symbol?.length > 6 ? token1?.symbol.slice(0, 5) + '...' : token1?.symbol || ''
 
   const below1080 = useMedia('(max-width: 1080px)')
   const below900 = useMedia('(max-width: 900px)')
@@ -325,11 +312,7 @@ function PairPage({ pairAddress, history }) {
                 <RowFixed>
                   <TokenLogo address={token0?.id} size={'16px'} />
                   <TYPE.main fontSize={'16px'} lineHeight={1} fontWeight={500} ml={'4px'}>
-                    {token0 && token1
-                      ? `1 ${formattedSymbol0} = ${token0Rate} ${formattedSymbol1} ${
-                          parseFloat(token0?.derivedETH) ? '(' + token0USD + ')' : ''
-                        }`
-                      : '-'}
+                    {token0 && token1 ? `1 ${formattedSymbol0} = ${token0Rate} ${formattedSymbol1}` : '-'}
                   </TYPE.main>
                 </RowFixed>
               </FixedPanel>
@@ -337,11 +320,7 @@ function PairPage({ pairAddress, history }) {
                 <RowFixed>
                   <TokenLogo address={token1?.id} size={'16px'} />
                   <TYPE.main fontSize={'16px'} lineHeight={1} fontWeight={500} ml={'4px'}>
-                    {token0 && token1
-                      ? `1 ${formattedSymbol1} = ${token1Rate} ${formattedSymbol0}  ${
-                          parseFloat(token1?.derivedETH) ? '(' + token1USD + ')' : ''
-                        }`
-                      : '-'}
+                    {token0 && token1 ? `1 ${formattedSymbol1} = ${token1Rate} ${formattedSymbol0}` : '-'}
                   </TYPE.main>
                 </RowFixed>
               </FixedPanel>
@@ -363,7 +342,7 @@ function PairPage({ pairAddress, history }) {
                 <Panel style={{ height: '100%' }}>
                   <AutoColumn gap="20px">
                     <RowBetween>
-                      <TYPE.main>Total Liquidity </TYPE.main>
+                      <TYPE.main>Total Liquidity (WNOVA)</TYPE.main>
                       <div />
                     </RowBetween>
                     <RowBetween align="flex-end">
@@ -377,7 +356,7 @@ function PairPage({ pairAddress, history }) {
                 <Panel style={{ height: '100%' }}>
                   <AutoColumn gap="20px">
                     <RowBetween>
-                      <TYPE.main>Volume (24hrs) </TYPE.main>
+                      <TYPE.main>Volume (24hrs, WNOVA)</TYPE.main>
                       <div />
                     </RowBetween>
                     <RowBetween align="flex-end">
@@ -391,7 +370,7 @@ function PairPage({ pairAddress, history }) {
                 <Panel style={{ height: '100%' }}>
                   <AutoColumn gap="20px">
                     <RowBetween>
-                      <TYPE.main>Fees (24hrs)</TYPE.main>
+                      <TYPE.main>Fees (24hrs, WNOVA)</TYPE.main>
                       <div />
                     </RowBetween>
                     <RowBetween align="flex-end">

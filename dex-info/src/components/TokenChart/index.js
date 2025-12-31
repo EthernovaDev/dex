@@ -243,7 +243,7 @@ const TokenChart = ({ address, color, base }) => {
             <YAxis
               type="number"
               orientation="right"
-              tickFormatter={(tick) => '$' + toK(tick)}
+              tickFormatter={(tick) => toK(tick)}
               axisLine={false}
               tickLine={false}
               interval="preserveEnd"
@@ -253,7 +253,7 @@ const TokenChart = ({ address, color, base }) => {
             />
             <Tooltip
               cursor={true}
-              formatter={(val) => formattedNum(val, true)}
+              formatter={(val) => formattedNum(val, false)}
               labelFormatter={(label) => toNiceDateYear(label)}
               labelStyle={{ paddingTop: 4 }}
               contentStyle={{
@@ -266,12 +266,12 @@ const TokenChart = ({ address, color, base }) => {
             />
             <Area
               key={'other'}
-              dataKey={'totalLiquidityUSD'}
+              dataKey={'totalLiquidityETH'}
               stackId="2"
               strokeWidth={2}
               dot={false}
               type="monotone"
-              name={'Liquidity'}
+              name={'Liquidity (WNOVA)'}
               yAxisId={0}
               stroke={darken(0.12, color)}
               fill="url(#colorUv)"
@@ -304,7 +304,7 @@ const TokenChart = ({ address, color, base }) => {
               <YAxis
                 type="number"
                 orientation="right"
-                tickFormatter={(tick) => '$' + toK(tick)}
+                tickFormatter={(tick) => toK(tick)}
                 axisLine={false}
                 tickLine={false}
                 interval="preserveEnd"
@@ -314,7 +314,7 @@ const TokenChart = ({ address, color, base }) => {
               />
               <Tooltip
                 cursor={true}
-                formatter={(val) => formattedNum(val, true)}
+                formatter={(val) => formattedNum(val, false)}
                 labelFormatter={(label) => toNiceDateYear(label)}
                 labelStyle={{ paddingTop: 4 }}
                 contentStyle={{
@@ -327,12 +327,12 @@ const TokenChart = ({ address, color, base }) => {
               />
               <Area
                 key={'other'}
-                dataKey={'priceUSD'}
+                dataKey={'priceETH'}
                 stackId="2"
                 strokeWidth={2}
                 dot={false}
                 type="monotone"
-                name={'Price'}
+                name={'Price (WNOVA)'}
                 yAxisId={0}
                 stroke={darken(0.12, color)}
                 fill="url(#colorUv)"
@@ -366,7 +366,7 @@ const TokenChart = ({ address, color, base }) => {
               type="number"
               axisLine={false}
               tickMargin={16}
-              tickFormatter={(tick) => '$' + toK(tick)}
+              tickFormatter={(tick) => toK(tick)}
               tickLine={false}
               orientation="right"
               interval="preserveEnd"
@@ -376,7 +376,7 @@ const TokenChart = ({ address, color, base }) => {
             />
             <Tooltip
               cursor={{ fill: color, opacity: 0.1 }}
-              formatter={(val) => formattedNum(val, true)}
+              formatter={(val) => formattedNum(val, false)}
               labelFormatter={(label) => toNiceDateYear(label)}
               labelStyle={{ paddingTop: 4 }}
               contentStyle={{
@@ -389,8 +389,8 @@ const TokenChart = ({ address, color, base }) => {
             />
             <Bar
               type="monotone"
-              name={'Volume'}
-              dataKey={'dailyVolumeUSD'}
+              name={'Volume (WNOVA)'}
+              dataKey={'dailyVolumeETH'}
               fill={color}
               opacity={'0.4'}
               yAxisId={0}

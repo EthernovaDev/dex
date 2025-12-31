@@ -58,7 +58,7 @@ function GlobalPage() {
   const allPairs = useAllPairData()
   const allTokens = useAllTokenData()
   const transactions = useGlobalTransactions()
-  const { totalLiquidityUSD, oneDayVolumeUSD, volumeChangeUSD, liquidityChangeUSD } = useGlobalData()
+  const { totalLiquidityETH, oneDayVolumeETH, volumeChangeETH, liquidityChangeETH } = useGlobalData()
 
   // breakpoints
   const below800 = useMedia('(max-width: 800px)')
@@ -72,7 +72,7 @@ function GlobalPage() {
   }, [])
 
   // for tracked data on pairs
-  const [useTracked, setUseTracked] = useState(true)
+  const [useTracked, setUseTracked] = useState(false)
 
   return (
     <PageWrapper>
@@ -83,6 +83,9 @@ function GlobalPage() {
             <TYPE.largeHeader>{below800 ? 'NovaDEX Analytics' : 'NovaDEX Analytics'}</TYPE.largeHeader>
             <Search />
             <GlobalStats />
+            <TYPE.light fontSize={12} color="text2">
+              No USD oracle on Ethernova yet — values shown in WNOVA where possible.
+            </TYPE.light>
           </AutoColumn>
           <OnchainMarketPanel
             rpcUrl={RPC_URL}
@@ -99,27 +102,27 @@ function GlobalPage() {
                   <AutoColumn gap="36px">
                     <AutoColumn gap="20px">
                       <RowBetween>
-                        <TYPE.main>Volume (24hrs)</TYPE.main>
+                        <TYPE.main>Volume (24hrs, WNOVA)</TYPE.main>
                         <div />
                       </RowBetween>
                       <RowBetween align="flex-end">
                         <TYPE.main fontSize={'1.5rem'} lineHeight={1} fontWeight={600}>
-                          {oneDayVolumeUSD ? formattedNum(oneDayVolumeUSD, true) : '-'}
+                          {oneDayVolumeETH ? formattedNum(oneDayVolumeETH, false) : '-'}
                         </TYPE.main>
-                        <TYPE.main fontSize={12}>{volumeChangeUSD ? formattedPercent(volumeChangeUSD) : '-'}</TYPE.main>
+                        <TYPE.main fontSize={12}>{formattedPercent(volumeChangeETH)}</TYPE.main>
                       </RowBetween>
                     </AutoColumn>
                     <AutoColumn gap="20px">
                       <RowBetween>
-                        <TYPE.main>Total Liquidity</TYPE.main>
+                        <TYPE.main>Total Liquidity (WNOVA)</TYPE.main>
                         <div />
                       </RowBetween>
                       <RowBetween align="flex-end">
                         <TYPE.main fontSize={'1.5rem'} lineHeight={1} fontWeight={600}>
-                          {totalLiquidityUSD ? formattedNum(totalLiquidityUSD, true) : '-'}
+                          {totalLiquidityETH ? formattedNum(totalLiquidityETH, false) : '-'}
                         </TYPE.main>
                         <TYPE.main fontSize={12}>
-                          {liquidityChangeUSD ? formattedPercent(liquidityChangeUSD) : '-'}
+                          {formattedPercent(liquidityChangeETH)}
                         </TYPE.main>
                       </RowBetween>
                     </AutoColumn>
@@ -130,18 +133,24 @@ function GlobalPage() {
           )}
           {!below800 && (
             <GridRow>
-              <Panel style={{ height: '100%', minHeight: '300px' }} data-testid="overview-liquidity-chart">
-                <GlobalChart display="liquidity" />
+              <Panel style={{ height: '100%', minHeight: '300px' }}>
+                <div data-testid="chart-liquidity" style={{ height: '100%' }}>
+                  <GlobalChart display="liquidity" />
+                </div>
               </Panel>
-              <Panel style={{ height: '100%' }} data-testid="overview-volume-chart">
-                <GlobalChart display="volume" />
+              <Panel style={{ height: '100%' }}>
+                <div data-testid="chart-volume" style={{ height: '100%' }}>
+                  <GlobalChart display="volume" />
+                </div>
               </Panel>
             </GridRow>
           )}
           {below800 && (
             <AutoColumn style={{ marginTop: '6px' }} gap="24px">
-              <Panel style={{ height: '100%', minHeight: '300px' }} data-testid="overview-liquidity-chart">
-                <GlobalChart display="liquidity" />
+              <Panel style={{ height: '100%', minHeight: '300px' }}>
+                <div data-testid="chart-liquidity" style={{ height: '100%' }}>
+                  <GlobalChart display="liquidity" />
+                </div>
               </Panel>
             </AutoColumn>
           )}
@@ -165,9 +174,9 @@ function GlobalPage() {
                 <CheckBox
                   checked={useTracked}
                   setChecked={() => setUseTracked(!useTracked)}
-                  text={'Hide untracked pairs'}
+                  text={'Hide pairs without WNOVA'}
                 />
-                <QuestionHelper text="USD amounts may be inaccurate in low liquidity pairs or pairs without NOVA or stablecoins." />
+                <QuestionHelper text="Values are shown in WNOVA; pairs without WNOVA are still listed but may not have volume estimates." />
                 <CustomLink to={'/pairs'}>See All</CustomLink>
               </AutoRow>
             </RowBetween>

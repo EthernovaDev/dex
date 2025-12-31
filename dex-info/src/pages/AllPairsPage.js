@@ -21,7 +21,7 @@ function AllPairsPage() {
 
   const below800 = useMedia('(max-width: 800px)')
 
-  const [useTracked, setUseTracked] = useState(true)
+  const [useTracked, setUseTracked] = useState(false)
 
   return (
     <PageWrapper>
@@ -31,8 +31,8 @@ function AllPairsPage() {
           {!below800 && <Search small={true} />}
         </RowBetween>
         <AutoRow gap="4px">
-          <CheckBox checked={useTracked} setChecked={() => setUseTracked(!useTracked)} text={'Hide untracked pairs'} />
-          <QuestionHelper text="USD amounts may be inaccurate in low liquidity pairs or pairs without NOVA or stablecoins." />
+          <CheckBox checked={useTracked} setChecked={() => setUseTracked(!useTracked)} text={'Hide pairs without WNOVA'} />
+          <QuestionHelper text="Values are shown in WNOVA; pairs without WNOVA may not have volume estimates." />
         </AutoRow>
         <Panel style={{ padding: below800 && '1rem 0 0 0 ' }}>
           <PairList pairs={allPairs} disbaleLinks={true} maxItems={50} useTracked={useTracked} />

@@ -328,9 +328,11 @@ export const formatNumber = (num) => {
 }
 
 // using a currency library here in case we want to add more in future
+const USD_ENABLED = false
+
 export const formatDollarAmount = (num, digits) => {
   const formatter = new Intl.NumberFormat([], {
-    style: 'currency',
+    style: USD_ENABLED ? 'currency' : 'decimal',
     currency: 'USD',
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
@@ -345,31 +347,32 @@ export const toSignificant = (number, significantDigits) => {
 }
 
 export const formattedNum = (number, usd = false, acceptNegatives = false) => {
+  const useUsd = usd && USD_ENABLED
   if (isNaN(number) || number === '' || number === undefined) {
-    return usd ? '$0' : 0
+    return useUsd ? '$0' : 0
   }
   let num = parseFloat(number)
 
   if (num > 500000000) {
-    return (usd ? '$' : '') + toK(num.toFixed(0), true)
+    return (useUsd ? '$' : '') + toK(num.toFixed(0), true)
   }
 
   if (num === 0) {
-    if (usd) {
+    if (useUsd) {
       return '$0'
     }
     return 0
   }
 
   if (num < 0.0001 && num > 0) {
-    return usd ? '< $0.0001' : '< 0.0001'
+    return useUsd ? '< $0.0001' : '< 0.0001'
   }
 
   if (num > 1000) {
-    return usd ? formatDollarAmount(num, 0) : Number(parseFloat(num).toFixed(0)).toLocaleString()
+    return useUsd ? formatDollarAmount(num, 0) : Number(parseFloat(num).toFixed(0)).toLocaleString()
   }
 
-  if (usd) {
+  if (useUsd) {
     if (num < 0.1) {
       return formatDollarAmount(num, 4)
     } else {

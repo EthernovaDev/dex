@@ -636,6 +636,8 @@ const PairFields = `
     totalSupply
     trackedReserveETH
     reserveETH
+    volumeToken0
+    volumeToken1
     volumeUSD
     untrackedVolumeUSD
     token0Price

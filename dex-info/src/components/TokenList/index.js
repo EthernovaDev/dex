@@ -15,6 +15,7 @@ import { withRouter } from 'react-router-dom'
 import { TOKEN_BLACKLIST } from '../../constants'
 import FormattedName from '../FormattedName'
 import { TYPE } from '../../Theme'
+import { WRAPPED_NATIVE_ADDRESS, TONY_ADDRESS } from '../../constants/urls'
 
 dayjs.extend(utc)
 
@@ -111,13 +112,13 @@ const DataText = styled(Flex)`
 `
 
 const SORT_FIELD = {
-  LIQ: 'totalLiquidityUSD',
-  VOL: 'oneDayVolumeUSD',
+  LIQ: 'totalLiquidityETH',
+  VOL: 'oneDayVolumeETH',
   VOL_UT: 'oneDayVolumeUT',
   SYMBOL: 'symbol',
   NAME: 'name',
-  PRICE: 'priceUSD',
-  CHANGE: 'priceChangeUSD',
+  PRICE: 'priceETH',
+  CHANGE: 'priceChangeETH',
 }
 
 // @TODO rework into virtualized list
@@ -140,14 +141,44 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
   }, [tokens])
 
   const formattedTokens = useMemo(() => {
-    return (
+    const fromSubgraph =
       tokens &&
       Object.keys(tokens)
         .filter((key) => {
           return !TOKEN_BLACKLIST.includes(key)
         })
         .map((key) => tokens[key])
-    )
+
+    if (fromSubgraph && fromSubgraph.length) return fromSubgraph
+
+    const fallback = []
+    if (WRAPPED_NATIVE_ADDRESS) {
+      fallback.push({
+        id: WRAPPED_NATIVE_ADDRESS,
+        symbol: 'WNOVA',
+        name: 'Wrapped NOVA',
+        derivedETH: 1,
+        priceETH: 1,
+        totalLiquidity: 0,
+        totalLiquidityETH: 0,
+        oneDayVolumeETH: 0,
+        priceChangeETH: 0,
+      })
+    }
+    if (TONY_ADDRESS) {
+      fallback.push({
+        id: TONY_ADDRESS,
+        symbol: 'TONY',
+        name: 'STARK - IRON MAN',
+        derivedETH: 0,
+        priceETH: 0,
+        totalLiquidity: 0,
+        totalLiquidityETH: 0,
+        oneDayVolumeETH: 0,
+        priceChangeETH: 0,
+      })
+    }
+    return fallback
   }, [tokens])
 
   useEffect(() => {
@@ -156,7 +187,7 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
       if (formattedTokens.length % itemMax === 0) {
         extraPages = 0
       }
-      setMaxPage(Math.floor(formattedTokens.length / itemMax) + extraPages)
+      setMaxPage(Math.max(1, Math.floor(formattedTokens.length / itemMax) + extraPages))
     }
   }, [tokens, formattedTokens, itemMax])
 
@@ -168,7 +199,7 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
           if (sortedColumn === SORT_FIELD.SYMBOL || sortedColumn === SORT_FIELD.NAME) {
             return a[sortedColumn] > b[sortedColumn] ? (sortDirection ? -1 : 1) * 1 : (sortDirection ? -1 : 1) * -1
           }
-          return parseFloat(a[sortedColumn]) > parseFloat(b[sortedColumn])
+          return parseFloat(a[sortedColumn] ?? 0) > parseFloat(b[sortedColumn] ?? 0)
             ? (sortDirection ? -1 : 1) * 1
             : (sortDirection ? -1 : 1) * -1
         })
@@ -198,14 +229,14 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
             <FormattedName text={item.symbol} maxCharacters={5} />
           </DataText>
         )}
-        <DataText area="liq">{formattedNum(item.totalLiquidityUSD, true)}</DataText>
-        <DataText area="vol">{formattedNum(item.oneDayVolumeUSD, true)}</DataText>
+        <DataText area="liq">{formattedNum(item.totalLiquidityETH ?? 0, false)}</DataText>
+        <DataText area="vol">{formattedNum(item.oneDayVolumeETH ?? 0, false)}</DataText>
         {!below1080 && (
           <DataText area="price" color="text" fontWeight="500">
-            {formattedNum(item.priceUSD, true)}
+            {formattedNum(item.priceETH ?? item.derivedETH ?? 0, false)}
           </DataText>
         )}
-        {!below1080 && <DataText area="change">{formattedPercent(item.priceChangeUSD)}</DataText>}
+        {!below1080 && <DataText area="change">{formattedPercent(item.priceChangeETH)}</DataText>}
       </DashGrid>
     )
   }
@@ -248,7 +279,7 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
               setSortDirection(sortedColumn !== SORT_FIELD.LIQ ? true : !sortDirection)
             }}
           >
-            Liquidity {sortedColumn === SORT_FIELD.LIQ ? (!sortDirection ? '↑' : '↓') : ''}
+            Liquidity (WNOVA) {sortedColumn === SORT_FIELD.LIQ ? (!sortDirection ? '↑' : '↓') : ''}
           </ClickableText>
         </Flex>
         <Flex alignItems="center">
@@ -261,7 +292,7 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
               )
             }}
           >
-            Volume (24hrs)
+            Volume (24hrs, WNOVA)
             {sortedColumn === (useTracked ? SORT_FIELD.VOL_UT : SORT_FIELD.VOL) ? (!sortDirection ? '↑' : '↓') : ''}
           </ClickableText>
         </Flex>
@@ -274,7 +305,7 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
                 setSortDirection(sortedColumn !== SORT_FIELD.PRICE ? true : !sortDirection)
               }}
             >
-              Price {sortedColumn === SORT_FIELD.PRICE ? (!sortDirection ? '↑' : '↓') : ''}
+              Price (WNOVA) {sortedColumn === SORT_FIELD.PRICE ? (!sortDirection ? '↑' : '↓') : ''}
             </ClickableText>
           </Flex>
         )}
@@ -295,15 +326,18 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
       </DashGrid>
       <Divider />
       <List p={0}>
-        {filteredList &&
+        {filteredList && filteredList.length ? (
           filteredList.map((item, index) => {
             return (
-              <div key={index}>
-                <ListItem key={index} index={(page - 1) * itemMax + index + 1} item={item} />
+              <div key={index} data-testid={`token-row-${item.id}`}>
+                <ListItem index={(page - 1) * itemMax + index + 1} item={item} />
                 <Divider />
               </div>
             )
-          })}
+          })
+        ) : (
+          <TYPE.light style={{ padding: '1rem' }}>No tokens yet.</TYPE.light>
+        )}
       </List>
       <PageButtons>
         <div onClick={() => setPage(page === 1 ? page : page - 1)}>

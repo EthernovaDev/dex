@@ -181,7 +181,7 @@ export default function OnchainMarketPanel({
       <StatsRow>
         <StatCard>
           Current price
-          <StatValue>{lastPrice ? `${formattedNum(lastPrice, true)} TONY/WNOVA` : '—'}</StatValue>
+          <StatValue>{lastPrice ? `${formattedNum(lastPrice, false)} TONY/WNOVA` : '—'}</StatValue>
         </StatCard>
         <StatCard>
           24h change
@@ -191,7 +191,7 @@ export default function OnchainMarketPanel({
         </StatCard>
         <StatCard>
           24h volume
-          <StatValue>{volume24h ? `${formattedNum(volume24h, true)} TONY` : '—'}</StatValue>
+          <StatValue>{volume24h ? `${formattedNum(volume24h, false)} TONY` : '—'}</StatValue>
         </StatCard>
         <StatCard>
           24h trades

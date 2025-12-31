@@ -118,6 +118,32 @@ const url = process.env.PAIR_URL;
 });
 NODE
 
+echo "[INFO] Checking /info/#/overview charts via Playwright..."
+OVERVIEW_URL="${BASE_URL}/info/#/overview"
+NODE_PATH="/opt/novadex/scripts/node_modules" OVERVIEW_URL="$OVERVIEW_URL" node <<'NODE' || exit 1
+const { chromium } = require('playwright');
+const url = process.env.OVERVIEW_URL;
+(async () => {
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await page.waitForTimeout(5000);
+  const crashed = await page.locator('text=NovaDEX Analytics crashed').count();
+  const liquidity = await page.locator('[data-testid="chart-liquidity"]').count();
+  const volume = await page.locator('[data-testid="chart-volume"]').count();
+  const html = await page.content();
+  await browser.close();
+  if (crashed) throw new Error('NovaDEX Analytics crashed on overview');
+  if (liquidity !== 1) throw new Error(`Expected 1 liquidity chart, got ${liquidity}`);
+  if (volume !== 1) throw new Error(`Expected 1 volume chart, got ${volume}`);
+  if (/undefined%|NaN%/i.test(html)) throw new Error('Found undefined%/NaN% in overview HTML');
+  console.log('[OK] /info/#/overview rendered with single charts');
+})().catch((err) => {
+  console.error('[ERROR] /info/#/overview render failed', err?.message || err);
+  process.exit(1);
+});
+NODE
+
 if [ -n "$PAIR" ]; then
   echo "[INFO] Checking /info/#/token route via Playwright..."
   WNOVA="$(jq -r '.addresses.wnova // empty' "$DEPLOYMENTS")"

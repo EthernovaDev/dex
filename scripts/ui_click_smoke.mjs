@@ -43,12 +43,16 @@ async function main() {
   const infuraHits = []
   const uniswapHits = []
   const notFoundHits = []
+  const addLiquidityFailures = []
   const routesRendered = {
     swap: false,
     pool: false,
     explore: false,
     import: false,
-    infoPair: false
+    infoPair: false,
+    infoOverview: false,
+    infoTokens: false,
+    infoPairs: false
   }
 
   let rpcSoft503 = 0
@@ -238,7 +242,6 @@ async function main() {
     )
   }
 
-  const addLiquidityFailures = []
   for (const route of addLiquidityRoutes) {
     await page.goto(route, { waitUntil: 'domcontentloaded', timeout: 60000 })
     await page.waitForTimeout(2000)
@@ -349,20 +352,47 @@ async function main() {
     }
   }
 
-  await page.goto(`${BASE_URL}/info/#/home`, { waitUntil: 'domcontentloaded', timeout: 60000 })
-  await page.waitForTimeout(6000)
-  const volumeCharts = await page.locator('[data-testid="overview-volume-chart"]').count()
-  const liquidityCharts = await page.locator('[data-testid="overview-liquidity-chart"]').count()
-  if (volumeCharts !== 1) {
-    addLiquidityFailures.push(`Overview volume charts count ${volumeCharts}`)
+  for (let i = 0; i < 3; i += 1) {
+    await page.goto(`${BASE_URL}/info/#/overview`, { waitUntil: 'domcontentloaded', timeout: 60000 })
+    await page.waitForTimeout(4000)
+    const volumeCharts = await page.locator('[data-testid="chart-volume"]').count()
+    const liquidityCharts = await page.locator('[data-testid="chart-liquidity"]').count()
+    if (volumeCharts !== 1) {
+      addLiquidityFailures.push(`Overview volume charts count ${volumeCharts} (refresh ${i + 1})`)
+    }
+    if (liquidityCharts !== 1) {
+      addLiquidityFailures.push(`Overview liquidity charts count ${liquidityCharts} (refresh ${i + 1})`)
+    }
+    const banner = await page.locator('text=Subgraph offline').count()
+    if (banner && (volumeCharts !== 1 || liquidityCharts !== 1)) {
+      addLiquidityFailures.push('Subgraph offline banner blocked chart render')
+    }
+    const htmlContent = await page.content()
+    if (/undefined%|NaN%/i.test(htmlContent)) {
+      addLiquidityFailures.push('Overview contains undefined%/NaN%')
+    }
+    if (/\$/i.test(htmlContent)) {
+      addLiquidityFailures.push('Overview contains $ (USD) strings')
+    }
   }
-  if (liquidityCharts !== 1) {
-    addLiquidityFailures.push(`Overview liquidity charts count ${liquidityCharts}`)
+  routesRendered.infoOverview = true
+
+  await page.goto(`${BASE_URL}/info/#/tokens`, { waitUntil: 'domcontentloaded', timeout: 60000 })
+  await page.waitForTimeout(4000)
+  const tokenRows = await page.locator('[data-testid^="token-row-"]').count()
+  if (!tokenRows) {
+    addLiquidityFailures.push('Tokens list is empty')
+  } else {
+    routesRendered.infoTokens = true
   }
 
-  const htmlContent = await page.content()
-  if (/undefined%|NaN%/i.test(htmlContent)) {
-    addLiquidityFailures.push('Overview contains undefined%/NaN%')
+  await page.goto(`${BASE_URL}/info/#/pairs`, { waitUntil: 'domcontentloaded', timeout: 60000 })
+  await page.waitForTimeout(4000)
+  const pairRows = await page.locator('[data-testid^="pair-row-"]').count()
+  if (!pairRows) {
+    addLiquidityFailures.push('Pairs list is empty')
+  } else {
+    routesRendered.infoPairs = true
   }
 
   const rootHtml = await page.evaluate(() => {

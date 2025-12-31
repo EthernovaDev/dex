@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { withRouter } from 'react-router-dom'
 import { Box } from 'rebass'
 import styled from 'styled-components'
@@ -73,6 +73,19 @@ function GlobalPage() {
 
   // for tracked data on pairs
   const [useTracked, setUseTracked] = useState(false)
+  const wnovaLower = WNOVA_ADDRESS?.toLowerCase?.() || ''
+  const tonyLower = TONY_ADDRESS?.toLowerCase?.() || ''
+  const pairSwaps = useMemo(() => {
+    if (!transactions?.swaps?.length || !wnovaLower || !tonyLower) return []
+    return transactions.swaps.filter((swap) => {
+      const token0 = swap?.pair?.token0?.id?.toLowerCase?.()
+      const token1 = swap?.pair?.token1?.id?.toLowerCase?.()
+      return (
+        (token0 === wnovaLower && token1 === tonyLower) ||
+        (token1 === wnovaLower && token0 === tonyLower)
+      )
+    })
+  }, [transactions, wnovaLower, tonyLower])
 
   return (
     <PageWrapper>
@@ -93,6 +106,7 @@ function GlobalPage() {
             wnovaAddress={WNOVA_ADDRESS}
             tonyAddress={TONY_ADDRESS}
             pairAddress={PAIR_ADDRESS}
+            swaps={pairSwaps}
             showVolume={false}
           />
           {below800 && ( // mobile card

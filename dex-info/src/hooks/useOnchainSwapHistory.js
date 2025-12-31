@@ -237,7 +237,7 @@ export function useOnchainSwapHistory({
             candle.close = price.toNumber()
             candle.high = Math.max(candle.high, price.toNumber())
             candle.low = Math.min(candle.low, price.toNumber())
-            candle.volume = candle.volume.plus(quote)
+            candle.volume = candle.volume.plus(base)
             candlesMap.set(bucket, candle)
 
             trades.push({

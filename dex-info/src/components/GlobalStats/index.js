@@ -2,7 +2,8 @@ import React from 'react'
 import styled from 'styled-components'
 import { RowFixed, RowBetween } from '../Row'
 import { useMedia } from 'react-use'
-import { useGlobalData, useEthPrice } from '../../contexts/GlobalData'
+import { useGlobalData } from '../../contexts/GlobalData'
+import { useSpotPriceHistory } from '../../hooks/useSpotPriceHistory'
 import { formattedNum, localNumber } from '../../utils'
 
 import { TYPE } from '../../Theme'
@@ -25,8 +26,12 @@ export default function GlobalStats() {
   const below816 = useMedia('(max-width: 816px)')
 
   const { oneDayVolumeETH, oneDayTxns, pairCount } = useGlobalData()
-  const [ethPrice] = useEthPrice()
-  const formattedEthPrice = ethPrice ? formattedNum(ethPrice, false) : '—'
+  const rpcUrl = process.env.REACT_APP_RPC_URL
+  const factoryAddress = process.env.REACT_APP_FACTORY_ADDRESS
+  const wnovaAddress = process.env.REACT_APP_WNOVA_ADDRESS
+  const tonyAddress = process.env.REACT_APP_TONY_ADDRESS
+  const spotHistory = useSpotPriceHistory(rpcUrl, factoryAddress, wnovaAddress, tonyAddress)
+  const formattedSpot = spotHistory?.lastPrice ? formattedNum(spotHistory.lastPrice, false) : '—'
   const oneDayFees = oneDayVolumeETH ? formattedNum(oneDayVolumeETH * 0.003, false) : '—'
 
   return (
@@ -35,7 +40,7 @@ export default function GlobalStats() {
         <RowFixed>
           {!below400 && (
             <TYPE.main mr={'1rem'} style={{ position: 'relative' }}>
-              NOVA Price: <Medium>{formattedEthPrice}</Medium>
+              Pool price (TONY/WNOVA): <Medium>{formattedSpot}</Medium>
             </TYPE.main>
           )}
 

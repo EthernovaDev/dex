@@ -352,7 +352,7 @@ async function main() {
     }
   }
 
-  for (let i = 0; i < 3; i += 1) {
+  for (let i = 0; i < 10; i += 1) {
     await page.goto(`${BASE_URL}/info/#/overview`, { waitUntil: 'domcontentloaded', timeout: 60000 })
     await page.waitForTimeout(4000)
     const volumeCharts = await page.locator('[data-testid="chart-volume"]').count()
@@ -373,6 +373,9 @@ async function main() {
     }
     if (/\$/i.test(htmlContent)) {
       addLiquidityFailures.push('Overview contains $ (USD) strings')
+    }
+    if (/Page\\s+1\\s+of\\s+0/i.test(htmlContent)) {
+      addLiquidityFailures.push('Overview pagination shows Page 1 of 0')
     }
   }
   routesRendered.infoOverview = true

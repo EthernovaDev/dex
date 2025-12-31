@@ -383,6 +383,24 @@ export const formattedNum = (number, usd = false, acceptNegatives = false) => {
   return Number(parseFloat(num).toFixed(4)).toString()
 }
 
+export const formatPrice = (value) => {
+  const num = Number(value)
+  if (!Number.isFinite(num)) return '—'
+  if (num === 0) return '0'
+  const abs = Math.abs(num)
+  if (abs < 0.000001) return '< 0.000001'
+  if (abs < 0.001) return trimTrailingZeros(num.toFixed(6))
+  if (abs < 0.01) return trimTrailingZeros(num.toFixed(5))
+  if (abs < 1) return trimTrailingZeros(num.toFixed(4))
+  if (abs < 1000) return trimTrailingZeros(num.toFixed(4))
+  return formattedNum(num, false)
+}
+
+function trimTrailingZeros(value) {
+  if (typeof value !== 'string') return value
+  return value.replace(/(?:\.0+|(\.\d+?)0+)$/, '$1')
+}
+
 export function rawPercent(percentRaw) {
   let percent = parseFloat(percentRaw * 100)
   if (!percent || percent === 0) {

@@ -219,9 +219,10 @@ const TokenChart = ({ address, color, base }) => {
           </AutoRow>
         </RowBetween>
       )}
-      {chartFilter === CHART_VIEW.LIQUIDITY && chartData && (
-        <ResponsiveContainer aspect={aspect}>
-          <AreaChart margin={{ top: 0, right: 10, bottom: 6, left: 0 }} barCategoryGap={1} data={chartData}>
+      {chartFilter === CHART_VIEW.LIQUIDITY &&
+        (chartData ? (
+          <ResponsiveContainer aspect={aspect}>
+            <AreaChart margin={{ top: 0, right: 10, bottom: 6, left: 0 }} barCategoryGap={1} data={chartData}>
             <defs>
               <linearGradient id="colorUv" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor={color} stopOpacity={0.35} />
@@ -264,25 +265,28 @@ const TokenChart = ({ address, color, base }) => {
               }}
               wrapperStyle={{ top: -70, left: -10 }}
             />
-            <Area
-              key={'other'}
-              dataKey={'totalLiquidityETH'}
-              stackId="2"
-              strokeWidth={2}
-              dot={false}
-              type="monotone"
-              name={'Liquidity (WNOVA)'}
-              yAxisId={0}
-              stroke={darken(0.12, color)}
-              fill="url(#colorUv)"
-            />
-          </AreaChart>
-        </ResponsiveContainer>
-      )}
+              <Area
+                key={'other'}
+                dataKey={'totalLiquidityETH'}
+                stackId="2"
+                strokeWidth={2}
+                dot={false}
+                type="monotone"
+                name={'Liquidity (WNOVA)'}
+                yAxisId={0}
+                stroke={darken(0.12, color)}
+                fill="url(#colorUv)"
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        ) : (
+          <LocalLoader />
+        ))}
       {chartFilter === CHART_VIEW.PRICE &&
         (frequency === DATA_FREQUENCY.LINE ? (
-          <ResponsiveContainer aspect={below1080 ? 60 / 32 : 60 / 16}>
-            <AreaChart margin={{ top: 0, right: 10, bottom: 6, left: 0 }} barCategoryGap={1} data={chartData}>
+          chartData ? (
+            <ResponsiveContainer aspect={below1080 ? 60 / 32 : 60 / 16}>
+              <AreaChart margin={{ top: 0, right: 10, bottom: 6, left: 0 }} barCategoryGap={1} data={chartData}>
               <defs>
                 <linearGradient id="colorUv" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor={color} stopOpacity={0.35} />
@@ -325,20 +329,23 @@ const TokenChart = ({ address, color, base }) => {
                 }}
                 wrapperStyle={{ top: -70, left: -10 }}
               />
-              <Area
-                key={'other'}
-                dataKey={'priceETH'}
-                stackId="2"
-                strokeWidth={2}
-                dot={false}
-                type="monotone"
-                name={'Price (WNOVA)'}
-                yAxisId={0}
-                stroke={darken(0.12, color)}
-                fill="url(#colorUv)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
+                <Area
+                  key={'other'}
+                  dataKey={'priceETH'}
+                  stackId="2"
+                  strokeWidth={2}
+                  dot={false}
+                  type="monotone"
+                  name={'Price (WNOVA)'}
+                  yAxisId={0}
+                  stroke={darken(0.12, color)}
+                  fill="url(#colorUv)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <LocalLoader />
+          )
         ) : priceData ? (
           <ResponsiveContainer aspect={aspect} ref={ref}>
             <CandleStickChart data={priceData} width={width} base={base} />
@@ -347,9 +354,10 @@ const TokenChart = ({ address, color, base }) => {
           <LocalLoader />
         ))}
 
-      {chartFilter === CHART_VIEW.VOLUME && (
-        <ResponsiveContainer aspect={aspect}>
-          <BarChart margin={{ top: 0, right: 10, bottom: 6, left: 10 }} barCategoryGap={1} data={chartData}>
+      {chartFilter === CHART_VIEW.VOLUME &&
+        (chartData ? (
+          <ResponsiveContainer aspect={aspect}>
+            <BarChart margin={{ top: 0, right: 10, bottom: 6, left: 10 }} barCategoryGap={1} data={chartData}>
             <XAxis
               tickLine={false}
               axisLine={false}
@@ -387,18 +395,20 @@ const TokenChart = ({ address, color, base }) => {
               }}
               wrapperStyle={{ top: -70, left: -10 }}
             />
-            <Bar
-              type="monotone"
-              name={'Volume (WNOVA)'}
-              dataKey={'dailyVolumeETH'}
-              fill={color}
-              opacity={'0.4'}
-              yAxisId={0}
-              stroke={color}
-            />
-          </BarChart>
-        </ResponsiveContainer>
-      )}
+              <Bar
+                type="monotone"
+                name={'Volume (WNOVA)'}
+                dataKey={'dailyVolumeETH'}
+                fill={color}
+                opacity={'0.4'}
+                yAxisId={0}
+                stroke={color}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        ) : (
+          <LocalLoader />
+        ))}
     </ChartWrapper>
   )
 }

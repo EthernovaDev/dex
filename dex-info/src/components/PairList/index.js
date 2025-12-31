@@ -17,6 +17,7 @@ import { TYPE } from '../../Theme'
 import { PAIR_BLACKLIST } from '../../constants'
 import { AutoColumn } from '../Column'
 import { WRAPPED_NATIVE_ADDRESS, TONY_ADDRESS, PAIR_ADDRESS } from '../../constants/urls'
+import BigNumber from 'bignumber.js'
 
 dayjs.extend(utc)
 
@@ -128,6 +129,72 @@ const FIELD_TO_VALUE = (field, useTracked) => {
   }
 }
 
+const safeBig = (value) => {
+  try {
+    return new BigNumber(value || 0)
+  } catch {
+    return new BigNumber(0)
+  }
+}
+
+const getPairMetrics = (pairData) => {
+  if (!pairData) {
+    return {
+      liquidity: new BigNumber(0),
+      volume24h: new BigNumber(0),
+      volume7d: new BigNumber(0),
+      fees24h: new BigNumber(0),
+      apy: 0,
+      hasWnova: false,
+    }
+  }
+  const token0Id = pairData.token0?.id?.toLowerCase?.() || ''
+  const token1Id = pairData.token1?.id?.toLowerCase?.() || ''
+  const isToken0Wnova = token0Id === WRAPPED_NATIVE_ADDRESS
+  const isToken1Wnova = token1Id === WRAPPED_NATIVE_ADDRESS
+  const reserve0 = safeBig(pairData.reserve0 ?? 0)
+  const reserve1 = safeBig(pairData.reserve1 ?? 0)
+
+  let liquidity = safeBig(pairData.trackedReserveETH ?? 0)
+  if (liquidity.isZero()) {
+    liquidity = safeBig(pairData.reserveETH ?? 0)
+  }
+
+  if (isToken0Wnova || isToken1Wnova) {
+    const reserveWnova = isToken0Wnova ? reserve0 : reserve1
+    const reserveOther = isToken0Wnova ? reserve1 : reserve0
+    const otherPrice = safeBig(isToken0Wnova ? pairData.token1Price : pairData.token0Price)
+    if (reserveWnova.gt(0)) {
+      const otherValue = otherPrice.gt(0) ? reserveOther.multipliedBy(otherPrice) : new BigNumber(0)
+      liquidity = reserveWnova.plus(otherValue)
+    }
+  }
+
+  let volume24h = safeBig(pairData.oneDayVolumeETH ?? 0)
+  if (volume24h.isZero()) {
+    if (isToken0Wnova) volume24h = safeBig(pairData.oneDayVolumeToken0 ?? 0)
+    if (isToken1Wnova) volume24h = safeBig(pairData.oneDayVolumeToken1 ?? 0)
+  }
+
+  let volume7d = safeBig(pairData.oneWeekVolumeETH ?? 0)
+  if (volume7d.isZero()) {
+    if (isToken0Wnova) volume7d = safeBig(pairData.oneWeekVolumeToken0 ?? 0)
+    if (isToken1Wnova) volume7d = safeBig(pairData.oneWeekVolumeToken1 ?? 0)
+  }
+
+  const fees24h = volume24h.gt(0) ? volume24h.multipliedBy(0.003) : new BigNumber(0)
+  const apy = liquidity.gt(0) ? fees24h.multipliedBy(365).multipliedBy(100).dividedBy(liquidity).toNumber() : 0
+
+  return {
+    liquidity,
+    volume24h,
+    volume7d,
+    fees24h,
+    apy,
+    hasWnova: isToken0Wnova || isToken1Wnova,
+  }
+}
+
 const formatDataText = (value, trackedValue, supressWarning = false) => {
   const showUntracked = value !== '—' && !trackedValue && !supressWarning
   return (
@@ -187,47 +254,31 @@ function PairList({ pairs, color, disbaleLinks, maxItems = 10, useTracked = fals
     }
   }, [ITEMS_PER_PAGE, resolvedPairs])
 
-  const getLiquidityValue = (pairData) => {
-    if (!pairData) return 0
-    const trackedEth = parseFloat(pairData.trackedReserveETH ?? 0)
-    const reserveEth = parseFloat(pairData.reserveETH ?? 0)
-    if (trackedEth > 0) return trackedEth
-    if (reserveEth > 0) return reserveEth
-    const trackedUsd = parseFloat(pairData.trackedReserveUSD ?? 0)
-    const reserveUsd = parseFloat(pairData.reserveUSD ?? 0)
-    return trackedUsd > 0 ? trackedUsd : reserveUsd
-  }
-
-  const getVolumeValue = (pairData) => {
-    if (!pairData) return 0
-    const token0Id = pairData.token0?.id?.toLowerCase?.() || ''
-    const token1Id = pairData.token1?.id?.toLowerCase?.() || ''
-    if (token0Id === WRAPPED_NATIVE_ADDRESS && pairData.oneDayVolumeToken0) {
-      return parseFloat(pairData.oneDayVolumeToken0)
-    }
-    if (token1Id === WRAPPED_NATIVE_ADDRESS && pairData.oneDayVolumeToken1) {
-      return parseFloat(pairData.oneDayVolumeToken1)
-    }
-    return parseFloat(pairData.oneDayVolumeETH ?? 0)
-  }
+  const pairEntries = React.useMemo(() => {
+    if (!resolvedPairs) return []
+    return Object.keys(resolvedPairs).map((id) => {
+      const pairData = resolvedPairs[id]
+      return { id, pairData, metrics: getPairMetrics(pairData) }
+    })
+  }, [resolvedPairs])
 
   const ListItem = ({ pairAddress, index }) => {
     const pairData = resolvedPairs[pairAddress]
+    const metrics = getPairMetrics(pairData)
 
     if (pairData && pairData.token0 && pairData.token1) {
-      const liquidityValue = getLiquidityValue(pairData)
-      const volumeValue = getVolumeValue(pairData)
+      const liquidityValue = metrics.liquidity.gt(0) ? metrics.liquidity.toString() : null
+      const volumeValue = metrics.volume24h.gt(0) ? metrics.volume24h.toString() : null
       const liquidity = liquidityValue ? formattedNum(liquidityValue, false) : '—'
       const volume = volumeValue ? formattedNum(volumeValue, false) : '—'
 
-      const weekVolumeValue = parseFloat(pairData.oneWeekVolumeETH ?? 0)
+      const weekVolumeValue = metrics.volume7d.gt(0) ? metrics.volume7d.toString() : null
       const weekVolume = weekVolumeValue ? formattedNum(weekVolumeValue, false) : '—'
 
-      const feesValue = volumeValue ? volumeValue * 0.003 : 0
+      const feesValue = metrics.fees24h.gt(0) ? metrics.fees24h.toString() : null
       const fees = feesValue ? formattedNum(feesValue, false) : '—'
 
-      const apyBase = liquidityValue > 0 ? (feesValue * 365 * 100) / liquidityValue : 0
-      const apy = apyBase ? formattedPercent(apyBase) : '—'
+      const apy = metrics.apy ? formattedPercent(metrics.apy) : '—'
 
       return (
         <DashGrid style={{ height: '48px' }} disbaleLinks={disbaleLinks} focus={true}>
@@ -248,11 +299,11 @@ function PairList({ pairs, color, disbaleLinks, maxItems = 10, useTracked = fals
               />
             </CustomLink>
           </DataText>
-          <DataText area="liq">{formatDataText(liquidity, pairData.trackedReserveETH)}</DataText>
-          <DataText area="vol">{formatDataText(volume, pairData.oneDayVolumeETH)}</DataText>
-          {!below1080 && <DataText area="volWeek">{formatDataText(weekVolume, pairData.oneWeekVolumeETH)}</DataText>}
-          {!below1080 && <DataText area="fees">{formatDataText(fees, pairData.oneDayVolumeETH)}</DataText>}
-          {!below1080 && <DataText area="apy">{formatDataText(apy, pairData.oneDayVolumeETH, true)}</DataText>}
+          <DataText area="liq">{formatDataText(liquidity, metrics.hasWnova)}</DataText>
+          <DataText area="vol">{formatDataText(volume, metrics.hasWnova)}</DataText>
+          {!below1080 && <DataText area="volWeek">{formatDataText(weekVolume, metrics.hasWnova)}</DataText>}
+          {!below1080 && <DataText area="fees">{formatDataText(fees, metrics.hasWnova)}</DataText>}
+          {!below1080 && <DataText area="apy">{formatDataText(apy, metrics.hasWnova, true)}</DataText>}
         </DashGrid>
       )
     } else {
@@ -261,38 +312,50 @@ function PairList({ pairs, color, disbaleLinks, maxItems = 10, useTracked = fals
   }
 
   const pairList =
-    resolvedPairs &&
-    Object.keys(resolvedPairs)
-      .filter((address) => {
-        if (PAIR_BLACKLIST.includes(address)) return false
-        const entry = resolvedPairs[address]
-        if (!entry) return false
+    pairEntries &&
+    pairEntries
+      .filter((entry) => {
+        if (!entry?.id || PAIR_BLACKLIST.includes(entry.id)) return false
         if (!useTracked) return true
-        return !!entry.trackedReserveETH || !!entry.trackedReserveUSD
+        return entry.metrics?.hasWnova
       })
-      .sort((addressA, addressB) => {
-        const pairA = resolvedPairs[addressA]
-        const pairB = resolvedPairs[addressB]
-        if (!pairA || !pairB) return 0
-        if (sortedColumn === SORT_FIELD.APY) {
-          const base0 = getLiquidityValue(pairA)
-          const base1 = getLiquidityValue(pairB)
-          const vol0 = getVolumeValue(pairA)
-          const vol1 = getVolumeValue(pairB)
-          const apy0 = base0 ? (vol0 * 0.003 * 356 * 100) / base0 : 0
-          const apy1 = base1 ? (vol1 * 0.003 * 356 * 100) / base1 : 0
-          return apy0 > apy1 ? (sortDirection ? -1 : 1) * 1 : (sortDirection ? -1 : 1) * -1
-        }
-        return parseFloat(pairA[FIELD_TO_VALUE(sortedColumn, useTracked)]) >
-          parseFloat(pairB[FIELD_TO_VALUE(sortedColumn, useTracked)])
-          ? (sortDirection ? -1 : 1) * 1
-          : (sortDirection ? -1 : 1) * -1
+      .sort((a, b) => {
+        const metricsA = a.metrics || getPairMetrics(a.pairData)
+        const metricsB = b.metrics || getPairMetrics(b.pairData)
+        const valueA =
+          sortedColumn === SORT_FIELD.LIQ
+            ? metricsA.liquidity
+            : sortedColumn === SORT_FIELD.VOL
+            ? metricsA.volume24h
+            : sortedColumn === SORT_FIELD.VOL_7DAYS
+            ? metricsA.volume7d
+            : sortedColumn === SORT_FIELD.FEES
+            ? metricsA.fees24h
+            : sortedColumn === SORT_FIELD.APY
+            ? new BigNumber(metricsA.apy || 0)
+            : safeBig(a.pairData?.[FIELD_TO_VALUE(sortedColumn, useTracked)] ?? 0)
+        const valueB =
+          sortedColumn === SORT_FIELD.LIQ
+            ? metricsB.liquidity
+            : sortedColumn === SORT_FIELD.VOL
+            ? metricsB.volume24h
+            : sortedColumn === SORT_FIELD.VOL_7DAYS
+            ? metricsB.volume7d
+            : sortedColumn === SORT_FIELD.FEES
+            ? metricsB.fees24h
+            : sortedColumn === SORT_FIELD.APY
+            ? new BigNumber(metricsB.apy || 0)
+            : safeBig(b.pairData?.[FIELD_TO_VALUE(sortedColumn, useTracked)] ?? 0)
+
+        if (valueA.eq(valueB)) return 0
+        return valueA.gt(valueB) ? (sortDirection ? -1 : 1) * 1 : (sortDirection ? -1 : 1) * -1
       })
       .slice(ITEMS_PER_PAGE * (page - 1), page * ITEMS_PER_PAGE)
-      .map((pairAddress, index) => {
+      .map((entry, index) => {
+        const pairAddress = entry.id
         return (
           pairAddress && (
-            <div key={index} data-testid={`pair-row-${pairAddress}`}>
+            <div key={pairAddress} data-testid={`pair-row-${pairAddress}`}>
               <ListItem index={(page - 1) * ITEMS_PER_PAGE + index + 1} pairAddress={pairAddress} />
               <Divider />
             </div>

@@ -9,13 +9,14 @@ import { CustomLink } from '../Link'
 import Row from '../Row'
 import { Divider } from '..'
 
-import { formattedNum, formattedPercent } from '../../utils'
+import { formattedNum, formattedPercent, formatPrice } from '../../utils'
 import { useMedia } from 'react-use'
 import { withRouter } from 'react-router-dom'
 import { TOKEN_BLACKLIST } from '../../constants'
 import FormattedName from '../FormattedName'
 import { TYPE } from '../../Theme'
 import { WRAPPED_NATIVE_ADDRESS, TONY_ADDRESS } from '../../constants/urls'
+import BigNumber from 'bignumber.js'
 
 dayjs.extend(utc)
 
@@ -121,6 +122,40 @@ const SORT_FIELD = {
   CHANGE: 'priceChangeETH',
 }
 
+const safeBig = (value) => {
+  try {
+    return new BigNumber(value || 0)
+  } catch {
+    return new BigNumber(0)
+  }
+}
+
+const getTokenMetrics = (token) => {
+  if (!token) return { price: new BigNumber(0), liquidity: new BigNumber(0), volume: new BigNumber(0) }
+  const isWnova = token.id?.toLowerCase?.() === WRAPPED_NATIVE_ADDRESS
+  const price = safeBig(token.priceETH ?? token.derivedETH ?? (isWnova ? 1 : 0))
+  let liquidity = safeBig(token.totalLiquidityETH ?? 0)
+  if (liquidity.isZero()) {
+    const rawLiquidity = safeBig(token.totalLiquidity ?? 0)
+    if (rawLiquidity.gt(0) && price.gt(0)) {
+      liquidity = rawLiquidity.multipliedBy(price)
+    }
+  }
+
+  let volume = safeBig(token.oneDayVolumeETH ?? 0)
+  if (volume.isZero()) {
+    const tradeVolume = safeBig(token.tradeVolume ?? 0)
+    const oneDayVolume = token.oneDayData?.tradeVolume
+      ? tradeVolume.minus(safeBig(token.oneDayData.tradeVolume))
+      : new BigNumber(0)
+    if (oneDayVolume.gt(0) && price.gt(0)) {
+      volume = oneDayVolume.multipliedBy(price)
+    }
+  }
+
+  return { price, liquidity, volume }
+}
+
 // @TODO rework into virtualized list
 function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
   // page state
@@ -181,6 +216,13 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
     return fallback
   }, [tokens])
 
+  const tokensWithMetrics = useMemo(() => {
+    return (formattedTokens || []).map((token) => ({
+      ...token,
+      _metrics: getTokenMetrics(token),
+    }))
+  }, [formattedTokens])
+
   useEffect(() => {
     if (tokens && formattedTokens) {
       let extraPages = 1
@@ -193,21 +235,43 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
 
   const filteredList = useMemo(() => {
     return (
-      formattedTokens &&
-      formattedTokens
+      tokensWithMetrics &&
+      tokensWithMetrics
         .sort((a, b) => {
           if (sortedColumn === SORT_FIELD.SYMBOL || sortedColumn === SORT_FIELD.NAME) {
             return a[sortedColumn] > b[sortedColumn] ? (sortDirection ? -1 : 1) * 1 : (sortDirection ? -1 : 1) * -1
           }
-          return parseFloat(a[sortedColumn] ?? 0) > parseFloat(b[sortedColumn] ?? 0)
-            ? (sortDirection ? -1 : 1) * 1
-            : (sortDirection ? -1 : 1) * -1
+          const aMetrics = a._metrics || {}
+          const bMetrics = b._metrics || {}
+          const aValue =
+            sortedColumn === SORT_FIELD.PRICE
+              ? aMetrics.price
+              : sortedColumn === SORT_FIELD.LIQ
+              ? aMetrics.liquidity
+              : sortedColumn === SORT_FIELD.VOL || sortedColumn === SORT_FIELD.VOL_UT
+              ? aMetrics.volume
+              : safeBig(a[sortedColumn] ?? 0)
+          const bValue =
+            sortedColumn === SORT_FIELD.PRICE
+              ? bMetrics.price
+              : sortedColumn === SORT_FIELD.LIQ
+              ? bMetrics.liquidity
+              : sortedColumn === SORT_FIELD.VOL || sortedColumn === SORT_FIELD.VOL_UT
+              ? bMetrics.volume
+              : safeBig(b[sortedColumn] ?? 0)
+
+          if (aValue.eq(bValue)) return 0
+          return aValue.gt(bValue) ? (sortDirection ? -1 : 1) * 1 : (sortDirection ? -1 : 1) * -1
         })
         .slice(itemMax * (page - 1), page * itemMax)
     )
-  }, [formattedTokens, itemMax, page, sortDirection, sortedColumn])
+  }, [tokensWithMetrics, itemMax, page, sortDirection, sortedColumn])
 
   const ListItem = ({ item, index }) => {
+    const metrics = item._metrics || getTokenMetrics(item)
+    const liquidityValue = metrics.liquidity.gt(0) ? metrics.liquidity.toString() : null
+    const volumeValue = metrics.volume.gt(0) ? metrics.volume.toString() : null
+    const priceValue = metrics.price.gt(0) ? metrics.price.toString() : null
     return (
       <DashGrid style={{ height: '48px' }} focus={true}>
         <DataText area="name" fontWeight="500">
@@ -229,11 +293,11 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
             <FormattedName text={item.symbol} maxCharacters={5} />
           </DataText>
         )}
-        <DataText area="liq">{formattedNum(item.totalLiquidityETH ?? 0, false)}</DataText>
-        <DataText area="vol">{formattedNum(item.oneDayVolumeETH ?? 0, false)}</DataText>
+        <DataText area="liq">{liquidityValue ? formattedNum(liquidityValue, false) : '—'}</DataText>
+        <DataText area="vol">{volumeValue ? formattedNum(volumeValue, false) : '—'}</DataText>
         {!below1080 && (
           <DataText area="price" color="text" fontWeight="500">
-            {formattedNum(item.priceETH ?? item.derivedETH ?? 0, false)}
+            {priceValue ? formatPrice(priceValue) : '—'}
           </DataText>
         )}
         {!below1080 && <DataText area="change">{formattedPercent(item.priceChangeETH)}</DataText>}

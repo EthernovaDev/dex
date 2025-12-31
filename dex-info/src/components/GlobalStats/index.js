@@ -4,7 +4,7 @@ import { RowFixed, RowBetween } from '../Row'
 import { useMedia } from 'react-use'
 import { useGlobalData } from '../../contexts/GlobalData'
 import { useSpotPriceHistory } from '../../hooks/useSpotPriceHistory'
-import { formattedNum, localNumber } from '../../utils'
+import { formattedNum, localNumber, formatPrice } from '../../utils'
 
 import { TYPE } from '../../Theme'
 
@@ -31,7 +31,7 @@ export default function GlobalStats() {
   const wnovaAddress = process.env.REACT_APP_WNOVA_ADDRESS
   const tonyAddress = process.env.REACT_APP_TONY_ADDRESS
   const spotHistory = useSpotPriceHistory(rpcUrl, factoryAddress, wnovaAddress, tonyAddress)
-  const formattedSpot = spotHistory?.lastPrice ? formattedNum(spotHistory.lastPrice, false) : '—'
+  const formattedSpot = spotHistory?.lastPrice ? formatPrice(spotHistory.lastPrice) : '—'
   const oneDayFees = oneDayVolumeETH ? formattedNum(oneDayVolumeETH * 0.003, false) : '—'
 
   return (

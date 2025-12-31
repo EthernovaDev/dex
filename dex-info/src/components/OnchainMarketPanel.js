@@ -4,7 +4,7 @@ import CandleStickChart from './CandleChart'
 import LocalLoader from './LocalLoader'
 import Panel from './Panel'
 import { TYPE } from '../Theme'
-import { formattedNum } from '../utils'
+import { formattedNum, formatPrice } from '../utils'
 import { useOnchainSwapHistory } from '../hooks/useOnchainSwapHistory'
 import BigNumber from 'bignumber.js'
 
@@ -67,7 +67,7 @@ const TradeList = styled.div`
 
 const TradeRow = styled.div`
   display: grid;
-  grid-template-columns: 90px 1fr 1fr 1fr;
+  grid-template-columns: minmax(160px, 220px) 1fr 1fr 1fr;
   gap: 8px;
   font-size: 12px;
   color: rgba(255, 255, 255, 0.8);
@@ -84,6 +84,7 @@ const Badge = styled.span`
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  white-space: nowrap;
 `
 
 const Warning = styled.div`
@@ -201,10 +202,12 @@ export default function OnchainMarketPanel({
       candle.volume = candle.volume.plus(baseAmount)
       candlesMap.set(bucket, candle)
 
+      const sideLabel = side === 'sell' ? 'SELL WNOVA (BUY TONY)' : 'BUY WNOVA (SELL TONY)'
       trades.push({
         timestamp,
         price: price.toNumber(),
         side,
+        sideLabel,
         baseAmount: baseAmount.toNumber(),
         quoteAmount: quoteAmount.toNumber(),
         txHash: swap?.transaction?.id || swap?.id,
@@ -286,7 +289,7 @@ export default function OnchainMarketPanel({
       <StatsRow>
         <StatCard>
           Current price
-          <StatValue>{activeLastPrice ? `${formattedNum(activeLastPrice, false)} TONY/WNOVA` : '—'}</StatValue>
+          <StatValue>{activeLastPrice ? `${formatPrice(activeLastPrice)} TONY/WNOVA` : '—'}</StatValue>
         </StatCard>
         <StatCard>
           24h change
@@ -329,7 +332,7 @@ export default function OnchainMarketPanel({
         {activeTrades && activeTrades.length ? (
           activeTrades.map((trade) => (
             <TradeRow key={`${trade.txHash}-${trade.timestamp}`}>
-              <Badge $side={trade.side}>{trade.side}</Badge>
+              <Badge $side={trade.side}>{trade.sideLabel || trade.side}</Badge>
               <span>{formattedNum(trade.baseAmount)} WNOVA</span>
               <span>{formattedNum(trade.quoteAmount)} TONY</span>
               <span>{formattedNum(trade.price)} TONY/WNOVA</span>

@@ -15,7 +15,7 @@ import TxnList from '../components/TxnList'
 import TokenChart from '../components/TokenChart'
 import { BasicLink } from '../components/Link'
 import Search from '../components/Search'
-import { formattedNum, formattedPercent, getPoolLink, getSwapLink, localNumber } from '../utils'
+import { formattedNum, formattedPercent, formatPrice, getPoolLink, getSwapLink, localNumber } from '../utils'
 import { useTokenData, useTokenTransactions, useTokenPairs } from '../contexts/TokenData'
 import { TYPE, ThemedBackground } from '../Theme'
 import { transparentize } from 'polished'
@@ -149,7 +149,7 @@ function TokenPage({ address, history }) {
   const transactions = useTokenTransactions(address)
 
   // price
-  const price = priceETH ? formattedNum(priceETH, false) : isWrappedNative ? '1 WNOVA' : '—'
+  const price = priceETH ? formatPrice(priceETH) : isWrappedNative ? '1 WNOVA' : '—'
   const priceChange = formattedPercent(priceChangeETH)
 
   // volume

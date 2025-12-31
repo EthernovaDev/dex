@@ -240,10 +240,12 @@ export function useOnchainSwapHistory({
             candle.volume = candle.volume.plus(base)
             candlesMap.set(bucket, candle)
 
+            const sideLabel = side === 'sell' ? 'SELL WNOVA (BUY TONY)' : 'BUY WNOVA (SELL TONY)'
             trades.push({
               timestamp,
               price: price.toNumber(),
               side,
+              sideLabel,
               baseAmount: base.toNumber(),
               quoteAmount: quote.toNumber(),
               txHash: log.transactionHash,

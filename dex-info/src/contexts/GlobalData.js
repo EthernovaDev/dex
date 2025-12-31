@@ -496,8 +496,8 @@ const getEthPrice = async () => {
   const utcCurrentTime = dayjs()
   const utcOneDayBack = utcCurrentTime.subtract(1, 'day').startOf('minute').unix()
 
-  let ethPrice = 0
-  let ethPriceOneDay = 0
+  let ethPrice = 1
+  let ethPriceOneDay = 1
   let priceChangeETH = 0
 
   try {
@@ -510,11 +510,13 @@ const getEthPrice = async () => {
       query: ETH_PRICE(oneDayBlock),
       fetchPolicy: 'cache-first',
     })
-    const currentPrice = result?.data?.bundles[0]?.ethPrice
-    const oneDayBackPrice = resultOneDay?.data?.bundles[0]?.ethPrice
-    priceChangeETH = getPercentChange(currentPrice, oneDayBackPrice)
-    ethPrice = currentPrice
-    ethPriceOneDay = oneDayBackPrice
+    const currentRaw = result?.data?.bundles?.[0]?.ethPrice
+    const oneDayRaw = resultOneDay?.data?.bundles?.[0]?.ethPrice
+    const currentParsed = Number(currentRaw)
+    const oneDayParsed = Number(oneDayRaw)
+    ethPrice = Number.isFinite(currentParsed) && currentParsed > 0 ? currentParsed : 1
+    ethPriceOneDay = Number.isFinite(oneDayParsed) && oneDayParsed > 0 ? oneDayParsed : ethPrice
+    priceChangeETH = getPercentChange(ethPrice, ethPriceOneDay)
   } catch (e) {
     console.log(e)
   }

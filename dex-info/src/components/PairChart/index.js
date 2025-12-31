@@ -4,6 +4,7 @@ import { Area, XAxis, YAxis, ResponsiveContainer, Tooltip, AreaChart, BarChart, 
 import { RowBetween, AutoRow } from '../Row'
 
 import { toK, toNiceDate, toNiceDateYear, formattedNum, getTimeframe } from '../../utils'
+import BigNumber from 'bignumber.js'
 import { OptionButton } from '../ButtonStyled'
 import { darken } from 'polished'
 import { usePairChartData, useHourlyRateData, usePairData } from '../../contexts/PairData'
@@ -90,15 +91,44 @@ const PairChart = ({ address, color, base0, base1 }) => {
 
   const chartDataMapped = React.useMemo(() => {
     if (!chartData) return chartData
-    if (!isWnovaPair) return chartData
+    const reserve0 = new BigNumber(pairData?.reserve0 ?? 0)
+    const reserve1 = new BigNumber(pairData?.reserve1 ?? 0)
+    const token0Price = new BigNumber(pairData?.token0Price ?? 0)
+    const token1Price = new BigNumber(pairData?.token1Price ?? 0)
+    let liquidityWnova = new BigNumber(0)
+    if (isWnovaPair) {
+      if (token0Id === WRAPPED_NATIVE_ADDRESS) {
+        liquidityWnova = reserve0.plus(reserve1.multipliedBy(token1Price))
+      } else if (token1Id === WRAPPED_NATIVE_ADDRESS) {
+        liquidityWnova = reserve1.plus(reserve0.multipliedBy(token0Price))
+      }
+    }
+
     return chartData.map((entry) => {
-      const volume = token0Id === WRAPPED_NATIVE_ADDRESS ? entry.dailyVolumeToken0 : entry.dailyVolumeToken1
+      const volume = isWnovaPair
+        ? token0Id === WRAPPED_NATIVE_ADDRESS
+          ? entry.dailyVolumeToken0
+          : entry.dailyVolumeToken1
+        : entry.dailyVolumeETH
+      const reserveWnova =
+        isWnovaPair && liquidityWnova.gt(0)
+          ? parseFloat(liquidityWnova.toString())
+          : entry.reserveUSD
       return {
         ...entry,
         dailyVolumeETH: volume ? parseFloat(volume) : 0,
+        reserveWnova,
       }
     })
-  }, [chartData, isWnovaPair, token0Id])
+  }, [chartData, isWnovaPair, token0Id, pairData, token1Id])
+
+  if (!chartDataMapped) {
+    return (
+      <ChartWrapper>
+        <LocalLoader />
+      </ChartWrapper>
+    )
+  }
 
   if (chartDataMapped && chartDataMapped.length === 0) {
     return (
@@ -250,7 +280,7 @@ const PairChart = ({ address, color, base0, base1 }) => {
               dot={false}
               type="monotone"
               name={isWnovaPair ? 'Liquidity (WNOVA)' : 'Liquidity'}
-              dataKey={'reserveUSD'}
+              dataKey={isWnovaPair ? 'reserveWnova' : 'reserveUSD'}
               yAxisId={0}
               stroke={darken(0.12, color)}
               fill="url(#colorUv)"

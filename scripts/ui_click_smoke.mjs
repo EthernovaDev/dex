@@ -337,6 +337,11 @@ async function main() {
   if (/uniswap/i.test(currentUrl)) {
     addLiquidityFailures.push(`Analytics URL redirected to Uniswap: ${currentUrl}`)
   }
+  const tradeLabelCount = await page.locator('text=/SELL WNOVA|BUY WNOVA/i').count()
+  const noTradesLabel = await page.locator('text=No trades yet.').count()
+  if (!tradeLabelCount && !noTradesLabel) {
+    addLiquidityFailures.push('Recent trades missing BUY/SELL WNOVA labels')
+  }
 
   if (wnovaAddress) {
     const tokenUrl = `${BASE_URL}/info/#/token/${wnovaAddress}`

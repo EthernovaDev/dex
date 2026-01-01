@@ -15,6 +15,10 @@
 - Multicall2: `0x1e43D57fB3E86f81AC8C20b396Ab939FbEB3a545`
 - Factory: `0x80d81D354557A5acDda0a2e3f6c2D563b9Ca4E15`
 - Router02: `0xa295E35c8384C74588a9608743FB69a7e2cF64da`
+- NovaRouter (swap + treasury fee): `0x5473551e02954EF90B5F3c2201dBdE5bb0691612`
+- FeeCollector (fee-exempt): `0x8aE053d3E8DC5a53Aaa19379FB865f7cc6A30D21`
+- TokenFactory: `0xfAE9CEaDc547fE115af1DfE6A73f6f0386a878AA`
+- Treasury (fee recipient): `0x3a38560b66205bB6a31Decbcb245450B2f15d4fD`
 - TONY: `0x0840F3c4f2A2D4C43AfB8Ec2d8d14d18CD8d3955`
 - Pair (TONY/WNOVA): `0xcbcBFC021644d4e819eBF2dE40B0CAF4Dcb9E5d1`
 - startBlock (factory): `70636`
@@ -41,7 +45,19 @@
 4) Enter amounts and approve both tokens.
 5) Click “Supply” to create the pool or add liquidity.
 6) After confirmation, the pool should appear under Pool and swaps should quote.
-   - MAX on tokens respects pool ratio and your other token balance (Uniswap-style).
+- MAX on tokens respects pool ratio and your other token balance (Uniswap-style).
+
+## Treasury Fee (1% in WNOVA)
+- Swaps use **NovaRouter** and include a 1% protocol fee paid in WNOVA to the treasury.
+- Liquidity actions (add/remove) use **Router02** and do **not** pay the treasury fee.
+- If a user swaps directly against the Pair contract, the treasury fee is not applied (router-only).
+- UI shows “Treasury Fee (1%)” in the swap details and adjusts min-out accordingly.
+
+## Create Token (Launchpad MVP)
+- Route: `https://dex.ethnova.net/#/create`
+- Deploys an ERC-20 token via TokenFactory.
+- Optional: create a WNOVA pair + add initial liquidity in one flow.
+- Outputs token address, pair address, and explorer links; includes “Add to MetaMask”.
 
 ## Import Pool States
 - If factory.getPair returns zero: UI shows “Pool not found” with CTA “Create pool (add liquidity)”.
@@ -60,6 +76,7 @@
 - Chain-locked to 77777; wrong network shows “Switch to Ethernova” (wallet_switchEthereumChain + add chain).
 - Default token list is local-only (WNOVA + TONY); no remote lists enabled by default.
 - Labels use NOVA/WNOVA and links use the Ethernova explorer.
+- Swaps route through **NovaRouter** (treasury fee), liquidity uses **Router02**.
 - Dark mode enforced (no light mode toggle).
 - Runtime config is generated from deployments at build time:
   - `/opt/novadex/dex-ui/public/ethernova.config.json`

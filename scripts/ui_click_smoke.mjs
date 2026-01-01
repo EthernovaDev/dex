@@ -61,6 +61,16 @@ async function main() {
   let rpcConsecutive = 0
   let lastRpcErrorAt = 0
   let lastRpcSuccessAt = 0
+  const RPC_ERROR_WINDOW_MS = 15000
+
+  const recordRpcSoftError = () => {
+    const now = Date.now()
+    if (now - lastRpcErrorAt > RPC_ERROR_WINDOW_MS) {
+      rpcSoft503 += 1
+      rpcConsecutive += 1
+      lastRpcErrorAt = now
+    }
+  }
 
   let wnovaAddress = ''
   let tonyAddress = ''
@@ -337,7 +347,7 @@ async function main() {
   if (/uniswap/i.test(currentUrl)) {
     addLiquidityFailures.push(`Analytics URL redirected to Uniswap: ${currentUrl}`)
   }
-  const tradeLabelCount = await page.locator('text=/SELL WNOVA|BUY WNOVA/i').count()
+  const tradeLabelCount = await page.locator('text=/SELL TONY|BUY TONY/i').count()
   const noTradesLabel = await page.locator('text=No trades yet.').count()
   if (!tradeLabelCount && !noTradesLabel) {
     addLiquidityFailures.push('Recent trades missing BUY/SELL WNOVA labels')

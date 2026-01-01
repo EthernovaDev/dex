@@ -133,6 +133,7 @@ export default function Updater(): null {
   const { chainId } = useActiveWeb3React()
   const multicallContract = useMulticallContract()
   const cancellations = useRef<{ blockNumber: number; cancellations: (() => void)[] }>()
+  const pauseUntilRef = useRef<number>(0)
 
   const listeningKeys: { [callKey: string]: number } = useMemo(() => {
     return activeListeningKeys(debouncedListeners, chainId)
@@ -148,6 +149,9 @@ export default function Updater(): null {
 
   useEffect(() => {
     if (!latestBlockNumber || !chainId || !multicallContract) return
+    if (chainId === 77777 && pauseUntilRef.current && Date.now() < pauseUntilRef.current) {
+      return
+    }
 
     const outdatedCallKeys: string[] = JSON.parse(serializedOutdatedCallKeys)
     if (outdatedCallKeys.length === 0) return
@@ -202,6 +206,9 @@ export default function Updater(): null {
               return
             }
             console.error('Failed to fetch multicall chunk', chunk, chainId, error)
+            if (chainId === 77777) {
+              pauseUntilRef.current = Date.now() + 30000
+            }
             dispatch(
               errorFetchingMulticallResults({
                 calls: chunk,

@@ -186,11 +186,14 @@ async function main() {
       now - lastSoftIncidentAt > 1500 ||
       (url && url !== lastSoftIncidentUrl) ||
       (method && method !== lastSoftIncidentMethod)
-    if (isDistinct && (!lastRpcSoftIncrementAt || now - lastRpcSoftIncrementAt > rpcErrorWindowMs)) {
+    lastRpcErrorAt = now
+    if (!isDistinct) {
+      return
+    }
+    if (!lastRpcSoftIncrementAt || now - lastRpcSoftIncrementAt > rpcErrorWindowMs) {
       rpcSoft503 += 1
       lastRpcSoftIncrementAt = now
     }
-    lastRpcErrorAt = now
     if (!lastSoftIncidentAt || now - lastSoftIncidentAt < 4000) {
       rpcConsecutive += 1
     } else {
@@ -205,8 +208,8 @@ async function main() {
     }
     if (method) {
       lastSoftRpcMethod = method
+      recordRpcMethod(method)
     }
-    if (method) recordRpcMethod(method)
     pushRpcEvent({
       status,
       url: url || 'unknown',

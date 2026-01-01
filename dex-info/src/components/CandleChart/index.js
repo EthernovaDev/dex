@@ -121,25 +121,28 @@ const CandleStickChart = ({
       layout: {
         backgroundColor: 'transparent',
         textColor,
+        fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, sans-serif',
       },
       grid: {
-        vertLines: { color: 'rgba(148, 163, 184, 0.08)' },
-        horzLines: { color: 'rgba(148, 163, 184, 0.08)' },
+        vertLines: { color: 'rgba(148, 163, 184, 0.06)' },
+        horzLines: { color: 'rgba(148, 163, 184, 0.06)' },
       },
       crosshair: {
-        mode: CrosshairMode.Normal,
+        mode: CrosshairMode.Magnet,
         vertLine: { color: 'rgba(148, 163, 184, 0.35)', width: 1 },
         horzLine: { color: 'rgba(148, 163, 184, 0.35)' },
       },
       rightPriceScale: {
-        borderColor: 'rgba(148, 163, 184, 0.3)',
+        borderVisible: false,
         visible: true,
         scaleMargins: { top: 0.08, bottom: showVolume ? 0.22 : 0.08 },
       },
       timeScale: {
-        borderColor: 'rgba(148, 163, 184, 0.3)',
+        borderVisible: false,
         timeVisible: true,
         secondsVisible: false,
+        rightOffset: 6,
+        barSpacing: 10,
       },
       localization: { priceFormatter: (val) => valueFormatter(val) },
     })
@@ -174,7 +177,12 @@ const CandleStickChart = ({
     toolTip.style.display = 'block'
     toolTip.style.left = (margin ? 116 : 10) + 'px'
     toolTip.style.top = '12px'
-    toolTip.style.backgroundColor = 'transparent'
+    toolTip.style.backgroundColor = 'rgba(8, 12, 22, 0.65)'
+    toolTip.style.border = '1px solid rgba(255, 255, 255, 0.08)'
+    toolTip.style.borderRadius = '10px'
+    toolTip.style.padding = '8px 10px'
+    toolTip.style.position = 'absolute'
+    toolTip.style.pointerEvents = 'none'
 
     const setLastBarText = () => {
       toolTip.innerHTML = base

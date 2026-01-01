@@ -31,6 +31,7 @@ const StatCard = styled.div`
   color: rgba(255, 255, 255, 0.8);
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 4px;
   line-height: 1.3;
 `
@@ -50,6 +51,9 @@ const StatValue = styled.div`
   font-weight: 600;
   color: rgba(255, 255, 255, 0.95);
   line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 `
 
 const TimeframeRow = styled.div`

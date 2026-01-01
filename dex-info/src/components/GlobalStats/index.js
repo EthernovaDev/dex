@@ -74,12 +74,16 @@ export default function GlobalStats() {
     return sum
   }, 0)
   const txns24h = recentSwaps.length || oneDayTxns || 0
-  const pairCountWnova =
-    Object.values(allPairs || {}).filter((pair) => {
-      const t0 = pair?.token0?.id?.toLowerCase?.()
-      const t1 = pair?.token1?.id?.toLowerCase?.()
-      return t0 === wnovaLower || t1 === wnovaLower
-    }).length || pairCount || 0
+  const pairCountWnova = (() => {
+    const localCount =
+      Object.values(allPairs || {}).filter((pair) => {
+        const t0 = pair?.token0?.id?.toLowerCase?.()
+        const t1 = pair?.token1?.id?.toLowerCase?.()
+        return t0 === wnovaLower || t1 === wnovaLower
+      }).length || 0
+    const pinnedFallback = pairData?.id ? 1 : 0
+    return Math.max(localCount, pairCount || 0, pinnedFallback)
+  })()
   const volumeForFees = volumeWnova > 0 ? volumeWnova : oneDayVolumeETH || 0
   const oneDayFees = isFiniteNum(volumeForFees) ? formattedNum(volumeForFees * (FEE_BPS / 10000), false) : '—'
   const protocolFees = isFiniteNum(volumeForFees)

@@ -44,10 +44,20 @@ const Option = styled.div`
   opacity: ${({ activeText }) => (activeText ? 1 : 0.6)};
   color: ${({ theme }) => theme.white};
   display: flex;
+  padding: 4px 2px;
+  min-width: 56px;
   margin-left: 12px;
   :hover {
     opacity: 1;
   }
+`
+
+const NavRow = styled(RowFixed)`
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 4px;
+  z-index: 20;
+  pointer-events: auto;
 `
 
 export default function Title() {
@@ -55,7 +65,7 @@ export default function Title() {
   const below1080 = useMedia('(max-width: 1080px)')
 
   return (
-    <TitleWrapper onClick={() => history.push('/')}>
+    <TitleWrapper>
       <Flex alignItems="center" style={{ justifyContent: 'space-between' }}>
         <RowFixed>
           <BrandMark id="link" onClick={() => history.push('/')}>
@@ -66,11 +76,11 @@ export default function Title() {
           </BrandMark>
         </RowFixed>
         {below1080 && (
-          <RowFixed style={{ alignItems: 'flex-end' }}>
-            <BasicLink to="/home">
+          <NavRow onClick={(e) => e.stopPropagation()}>
+            <BasicLink to="/home" data-testid="nav-overview">
               <Option activeText={history.location.pathname === '/home' ?? undefined}>Overview</Option>
             </BasicLink>
-            <BasicLink to="/tokens">
+            <BasicLink to="/tokens" data-testid="nav-tokens">
               <Option
                 activeText={
                   (history.location.pathname.split('/')[1] === 'tokens' ||
@@ -81,7 +91,7 @@ export default function Title() {
                 Tokens
               </Option>
             </BasicLink>
-            <BasicLink to="/pairs">
+            <BasicLink to="/pairs" data-testid="nav-pairs">
               <Option
                 activeText={
                   (history.location.pathname.split('/')[1] === 'pairs' ||
@@ -93,7 +103,7 @@ export default function Title() {
               </Option>
             </BasicLink>
 
-            <BasicLink to="/accounts">
+            <BasicLink to="/accounts" data-testid="nav-accounts">
               <Option
                 activeText={
                   (history.location.pathname.split('/')[1] === 'accounts' ||
@@ -104,7 +114,7 @@ export default function Title() {
                 Accounts
               </Option>
             </BasicLink>
-          </RowFixed>
+          </NavRow>
         )}
       </Flex>
     </TitleWrapper>

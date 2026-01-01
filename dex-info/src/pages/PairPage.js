@@ -20,7 +20,7 @@ import TxnList from '../components/TxnList'
 import Loader from '../components/LocalLoader'
 import { BasicLink } from '../components/Link'
 import Search from '../components/Search'
-import { formattedNum, formattedPercent, getPoolLink, getSwapLink, shortenAddress, formatPrice } from '../utils'
+import { formattedNum, formattedPercent, getPoolLink, getSwapLink, shortenAddress, formatPrice, isFiniteNum } from '../utils'
 import { useColor } from '../hooks'
 import { usePairData, usePairTransactions } from '../contexts/PairData'
 import { TYPE, ThemedBackground } from '../Theme'
@@ -155,23 +155,26 @@ function PairPage({ pairAddress, history }) {
   const isToken0Wnova = token0Id === wnovaLower
   const isToken1Wnova = token1Id === wnovaLower
   const reserveWnova = isToken0Wnova ? reserve0 : isToken1Wnova ? reserve1 : null
-  const liquidityWnova =
-    reserveWnova && Number(reserveWnova) > 0 ? formattedNum(Number(reserveWnova), false) : null
-  const formattedLiquidity = liquidityWnova || (reserveETH ? formattedNum(reserveETH, false) : formattedNum(trackedReserveETH, false))
+  const liquidityWnova = isFiniteNum(reserveWnova) ? formattedNum(Number(reserveWnova), false) : null
+  const formattedLiquidity = liquidityWnova
+    ? liquidityWnova
+    : isFiniteNum(reserveETH)
+    ? formattedNum(reserveETH, false)
+    : formattedNum(trackedReserveETH, false)
   const liquidityChange = formattedPercent(liquidityChangeETH)
 
   // volume
-  const volume = oneDayVolumeETH ? formattedNum(oneDayVolumeETH, false) : '—'
+  const volume = isFiniteNum(oneDayVolumeETH) ? formattedNum(oneDayVolumeETH, false) : '—'
   const volumeChange = formattedPercent(volumeChangeETH)
 
   const showUSDWaning = false
 
   // get fees	  // get fees
-  const fees = oneDayVolumeETH || oneDayVolumeETH === 0 ? formattedNum(oneDayVolumeETH * 0.003, false) : '—'
+  const fees = isFiniteNum(oneDayVolumeETH) ? formattedNum(oneDayVolumeETH * 0.003, false) : '—'
 
   // rates
-  const token0Rate = reserve0 && reserve1 ? formatPrice(reserve1 / reserve0) : '-'
-  const token1Rate = reserve0 && reserve1 ? formatPrice(reserve0 / reserve1) : '-'
+  const token0Rate = isFiniteNum(reserve0) && isFiniteNum(reserve1) ? formatPrice(reserve1 / reserve0) : '-'
+  const token1Rate = isFiniteNum(reserve0) && isFiniteNum(reserve1) ? formatPrice(reserve0 / reserve1) : '-'
 
   // formatted symbols for overflow
   const formattedSymbol0 =

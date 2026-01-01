@@ -9,7 +9,7 @@ import styled from 'styled-components'
 import { CustomLink } from '../Link'
 import { Divider } from '../../components'
 import { withRouter } from 'react-router-dom'
-import { formattedNum, formattedPercent } from '../../utils'
+import { formattedNum, formattedPercent, isFiniteNum } from '../../utils'
 import DoubleTokenLogo from '../DoubleLogo'
 import FormattedName from '../FormattedName'
 import QuestionHelper from '../QuestionHelper'
@@ -278,20 +278,21 @@ function PairList({ pairs, color, disbaleLinks, maxItems = 10, useTracked = fals
   const ListItem = ({ pairAddress, index }) => {
     const pairData = resolvedPairs[pairAddress]
     const metrics = getPairMetrics(pairData)
+    const pairKey = pairAddress?.toLowerCase?.() || pairAddress
 
     if (pairData && pairData.token0 && pairData.token1) {
-      const liquidityValue = metrics.liquidity.gt(0) ? metrics.liquidity.toString() : null
-      const volumeValue = metrics.volume24h.gt(0) ? metrics.volume24h.toString() : null
-      const liquidity = liquidityValue ? formattedNum(liquidityValue, false) : '—'
-      const volume = volumeValue ? formattedNum(volumeValue, false) : '—'
+      const liquidityValue = metrics.liquidity?.isFinite?.() ? metrics.liquidity.toString() : null
+      const volumeValue = metrics.volume24h?.isFinite?.() ? metrics.volume24h.toString() : null
+      const liquidity = isFiniteNum(liquidityValue) ? formattedNum(liquidityValue, false) : '—'
+      const volume = isFiniteNum(volumeValue) ? formattedNum(volumeValue, false) : '—'
 
-      const weekVolumeValue = metrics.volume7d.gt(0) ? metrics.volume7d.toString() : null
-      const weekVolume = weekVolumeValue ? formattedNum(weekVolumeValue, false) : '—'
+      const weekVolumeValue = metrics.volume7d?.isFinite?.() ? metrics.volume7d.toString() : null
+      const weekVolume = isFiniteNum(weekVolumeValue) ? formattedNum(weekVolumeValue, false) : '—'
 
-      const feesValue = metrics.fees24h.gt(0) ? metrics.fees24h.toString() : null
-      const fees = feesValue ? formattedNum(feesValue, false) : '—'
+      const feesValue = metrics.fees24h?.isFinite?.() ? metrics.fees24h.toString() : null
+      const fees = isFiniteNum(feesValue) ? formattedNum(feesValue, false) : '—'
 
-      const apy = metrics.apy ? formattedPercent(metrics.apy) : '—'
+      const apy = Number.isFinite(metrics.apy) ? formattedPercent(metrics.apy) : '—'
 
       return (
         <DashGrid style={{ height: '48px' }} disbaleLinks={disbaleLinks} focus={true}>
@@ -312,11 +313,27 @@ function PairList({ pairs, color, disbaleLinks, maxItems = 10, useTracked = fals
               />
             </CustomLink>
           </DataText>
-          <DataText area="liq">{formatDataText(liquidity, metrics.hasWnova)}</DataText>
-          <DataText area="vol">{formatDataText(volume, metrics.hasWnova)}</DataText>
-          {!below1080 && <DataText area="volWeek">{formatDataText(weekVolume, metrics.hasWnova)}</DataText>}
-          {!below1080 && <DataText area="fees">{formatDataText(fees, metrics.hasWnova)}</DataText>}
-          {!below1080 && <DataText area="apy">{formatDataText(apy, metrics.hasWnova, true)}</DataText>}
+          <DataText area="liq" data-testid={`pair-liquidity-${pairKey}`}>
+            {formatDataText(liquidity, metrics.hasWnova)}
+          </DataText>
+          <DataText area="vol" data-testid={`pair-volume-${pairKey}`}>
+            {formatDataText(volume, metrics.hasWnova)}
+          </DataText>
+          {!below1080 && (
+            <DataText area="volWeek" data-testid={`pair-volume-7d-${pairKey}`}>
+              {formatDataText(weekVolume, metrics.hasWnova)}
+            </DataText>
+          )}
+          {!below1080 && (
+            <DataText area="fees" data-testid={`pair-fees-${pairKey}`}>
+              {formatDataText(fees, metrics.hasWnova)}
+            </DataText>
+          )}
+          {!below1080 && (
+            <DataText area="apy" data-testid={`pair-apy-${pairKey}`}>
+              {formatDataText(apy, metrics.hasWnova, true)}
+            </DataText>
+          )}
         </DashGrid>
       )
     } else {
@@ -366,13 +383,13 @@ function PairList({ pairs, color, disbaleLinks, maxItems = 10, useTracked = fals
       .slice(ITEMS_PER_PAGE * (page - 1), page * ITEMS_PER_PAGE)
       .map((entry, index) => {
         const pairAddress = entry.id
+        if (!pairAddress) return null
+        const pairKey = pairAddress?.toLowerCase?.() || pairAddress
         return (
-          pairAddress && (
-            <div key={pairAddress} data-testid={`pair-row-${pairAddress}`}>
-              <ListItem index={(page - 1) * ITEMS_PER_PAGE + index + 1} pairAddress={pairAddress} />
-              <Divider />
-            </div>
-          )
+          <div key={pairAddress} data-testid={`pair-row-${pairKey}`}>
+            <ListItem index={(page - 1) * ITEMS_PER_PAGE + index + 1} pairAddress={pairAddress} />
+            <Divider />
+          </div>
         )
       })
 
@@ -388,7 +405,7 @@ function PairList({ pairs, color, disbaleLinks, maxItems = 10, useTracked = fals
       ? pairList
       : fallbackPairKey && resolvedPairs?.[fallbackPairKey]
       ? [
-          <div key={fallbackPairKey} data-testid={`pair-row-${fallbackPairKey}`}>
+          <div key={fallbackPairKey} data-testid={`pair-row-${fallbackPairKey?.toLowerCase?.() || fallbackPairKey}`}>
             <ListItem index={1} pairAddress={fallbackPairKey} />
             <Divider />
           </div>,

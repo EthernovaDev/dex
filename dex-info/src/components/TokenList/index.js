@@ -9,7 +9,7 @@ import { CustomLink } from '../Link'
 import Row from '../Row'
 import { Divider } from '..'
 
-import { formattedNum, formattedPercent, formatPrice } from '../../utils'
+import { formattedNum, formattedPercent, formatPrice, isFiniteNum } from '../../utils'
 import { useMedia } from 'react-use'
 import { withRouter } from 'react-router-dom'
 import { TOKEN_BLACKLIST } from '../../constants'
@@ -286,9 +286,9 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
 
   const ListItem = ({ item, index }) => {
     const metrics = item._metrics || getTokenMetrics(item)
-    const liquidityValue = metrics.liquidity.gt(0) ? metrics.liquidity.toString() : null
-    const volumeValue = metrics.volume.gt(0) ? metrics.volume.toString() : null
-    const priceValue = metrics.price.gt(0) ? metrics.price.toString() : null
+    const liquidityValue = metrics.liquidity?.isFinite?.() ? metrics.liquidity.toString() : null
+    const volumeValue = metrics.volume?.isFinite?.() ? metrics.volume.toString() : null
+    const priceValue = metrics.price?.isFinite?.() ? metrics.price.toString() : null
     return (
       <DashGrid style={{ height: '48px' }} focus={true}>
         <DataText area="name" fontWeight="500">
@@ -310,11 +310,11 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
             <FormattedName text={item.symbol} maxCharacters={5} />
           </DataText>
         )}
-        <DataText area="liq">{liquidityValue ? formattedNum(liquidityValue, false) : '—'}</DataText>
-        <DataText area="vol">{volumeValue ? formattedNum(volumeValue, false) : '—'}</DataText>
+        <DataText area="liq">{isFiniteNum(liquidityValue) ? formattedNum(liquidityValue, false) : '—'}</DataText>
+        <DataText area="vol">{isFiniteNum(volumeValue) ? formattedNum(volumeValue, false) : '—'}</DataText>
         {!below1080 && (
           <DataText area="price" color="text" fontWeight="500">
-            {priceValue ? formatPrice(priceValue) : '—'}
+            {isFiniteNum(priceValue) ? formatPrice(priceValue) : '—'}
           </DataText>
         )}
         {!below1080 && <DataText area="change">{formattedPercent(item.priceChangeETH)}</DataText>}

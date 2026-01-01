@@ -15,7 +15,7 @@ import TxnList from '../components/TxnList'
 import TokenChart from '../components/TokenChart'
 import { BasicLink } from '../components/Link'
 import Search from '../components/Search'
-import { formattedNum, formattedPercent, formatPrice, getPoolLink, getSwapLink, localNumber } from '../utils'
+import { formattedNum, formattedPercent, formatPrice, getPoolLink, getSwapLink, localNumber, isFiniteNum } from '../utils'
 import { useTokenData, useTokenTransactions, useTokenPairs } from '../contexts/TokenData'
 import { TYPE, ThemedBackground } from '../Theme'
 import { transparentize } from 'polished'
@@ -159,17 +159,19 @@ function TokenPage({ address, history }) {
   const transactions = useTokenTransactions(address)
 
   // price
-  const price = priceETH ? formatPrice(priceETH) : isWrappedNative ? '1 WNOVA' : '—'
+  const hasPrice = isFiniteNum(priceETH) && Number(priceETH) > 0
+  const price = hasPrice ? formatPrice(priceETH) : isWrappedNative ? '1 WNOVA' : '—'
   const priceChange = formattedPercent(priceChangeETH)
 
   // volume
-  const volume = formattedNum(!!oneDayVolumeETH ? oneDayVolumeETH : oneDayVolumeUT, false)
+  const volumeSource = isFiniteNum(oneDayVolumeETH) ? oneDayVolumeETH : oneDayVolumeUT || 0
+  const volume = formattedNum(volumeSource, false)
 
-  const usingUtVolume = oneDayVolumeETH === 0 && !!oneDayVolumeUT
+  const usingUtVolume = isFiniteNum(oneDayVolumeETH) && Number(oneDayVolumeETH) === 0 && !!oneDayVolumeUT
   const volumeChange = formattedPercent(!usingUtVolume ? volumeChangeETH : volumeChangeUT)
 
   // liquidity
-  const liquidity = totalLiquidityETH ? formattedNum(totalLiquidityETH, false) : '—'
+  const liquidity = isFiniteNum(totalLiquidityETH) ? formattedNum(totalLiquidityETH, false) : '—'
   const liquidityChange = formattedPercent(liquidityChangeETH)
 
   // transactions

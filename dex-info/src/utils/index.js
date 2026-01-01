@@ -346,6 +346,14 @@ export const formatNumber = (num) => {
   return num.toString().replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1,')
 }
 
+export const isFiniteNum = (value) => {
+  if (value === null || value === undefined) return false
+  if (typeof value === 'number') return Number.isFinite(value)
+  if (typeof value === 'string') return Number.isFinite(Number(value))
+  if (typeof value === 'object' && typeof value.isFinite === 'function') return value.isFinite()
+  return false
+}
+
 // using a currency library here in case we want to add more in future
 const USD_ENABLED = false
 

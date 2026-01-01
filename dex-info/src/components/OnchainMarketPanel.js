@@ -4,7 +4,7 @@ import CandleStickChart from './CandleChart'
 import LocalLoader from './LocalLoader'
 import Panel from './Panel'
 import { TYPE } from '../Theme'
-import { formattedNum, formatPrice } from '../utils'
+import { formattedNum, formatPrice, isFiniteNum } from '../utils'
 import { useOnchainSwapHistory } from '../hooks/useOnchainSwapHistory'
 import BigNumber from 'bignumber.js'
 
@@ -29,13 +29,27 @@ const StatCard = styled.div`
   background: rgba(255, 255, 255, 0.03);
   font-size: 12px;
   color: rgba(255, 255, 255, 0.8);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  line-height: 1.3;
+`
+
+const StatLabel = styled.div`
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.72);
+`
+
+const StatSubLabel = styled.div`
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
 `
 
 const StatValue = styled.div`
-  margin-top: 6px;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.95);
+  line-height: 1.25;
 `
 
 const TimeframeRow = styled.div`
@@ -298,6 +312,10 @@ export default function OnchainMarketPanel({
     0
   )
   const isUp = change24h !== null && change24h >= 0
+  const priceValue = isFiniteNum(activeLastPrice) ? `${formatPrice(activeLastPrice)} TONY/WNOVA` : '—'
+  const changeValue = isFiniteNum(change24h) ? `${change24h.toFixed(2)}%` : '—'
+  const volumeValue = isFiniteNum(volume24h) ? `${formattedNum(volume24h, false)} WNOVA` : '—'
+  const tradesValue = Number.isFinite(trades24h.length) ? trades24h.length : '—'
 
   return (
     <Panel style={{ marginBottom: '1.5rem' }}>
@@ -316,23 +334,27 @@ export default function OnchainMarketPanel({
         </TimeframeRow>
       </HeaderRow>
       <StatsRow>
-        <StatCard>
-          Pool price (TONY/WNOVA)
-          <StatValue>{activeLastPrice ? `${formatPrice(activeLastPrice)} TONY/WNOVA` : '—'}</StatValue>
+        <StatCard data-testid="market-pool-price">
+          <StatLabel data-testid="market-pool-price-label">Pool price</StatLabel>
+          <StatValue data-testid="market-pool-price-value">{priceValue}</StatValue>
+          <StatSubLabel>TONY/WNOVA</StatSubLabel>
         </StatCard>
-        <StatCard>
-          24h change
-          <StatValue style={{ color: change24h === null ? undefined : isUp ? '#22c55e' : '#ef4444' }}>
-            {change24h === null ? '—' : `${change24h.toFixed(2)}%`}
+        <StatCard data-testid="market-24h-change">
+          <StatLabel data-testid="market-24h-change-label">24h change</StatLabel>
+          <StatValue
+            data-testid="market-24h-change-value"
+            style={{ color: !isFiniteNum(change24h) ? undefined : isUp ? '#22c55e' : '#ef4444' }}
+          >
+            {changeValue}
           </StatValue>
         </StatCard>
-        <StatCard>
-          24h volume
-          <StatValue>{volume24h ? `${formattedNum(volume24h, false)} WNOVA` : '—'}</StatValue>
+        <StatCard data-testid="market-24h-volume">
+          <StatLabel data-testid="market-24h-volume-label">24h volume</StatLabel>
+          <StatValue data-testid="market-24h-volume-value">{volumeValue}</StatValue>
         </StatCard>
-        <StatCard>
-          24h trades
-          <StatValue>{trades24h.length || '—'}</StatValue>
+        <StatCard data-testid="market-24h-trades">
+          <StatLabel data-testid="market-24h-trades-label">24h trades</StatLabel>
+          <StatValue data-testid="market-24h-trades-value">{tradesValue}</StatValue>
         </StatCard>
       </StatsRow>
       <div id="novadex-candle-chart" ref={ref} style={{ marginTop: '12px' }} data-testid="market-candle-chart">

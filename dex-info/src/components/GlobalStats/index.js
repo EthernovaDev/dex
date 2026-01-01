@@ -6,7 +6,7 @@ import { useGlobalData, useGlobalTransactions } from '../../contexts/GlobalData'
 import { useLatestBlocks } from '../../contexts/Application'
 import { usePairData, useAllPairData } from '../../contexts/PairData'
 import { useSpotPriceHistory } from '../../hooks/useSpotPriceHistory'
-import { formattedNum, localNumber, formatPrice } from '../../utils'
+import { formattedNum, localNumber, formatPrice, isFiniteNum } from '../../utils'
 import { PAIR_ADDRESS, WRAPPED_NATIVE_ADDRESS } from '../../constants/urls'
 import { FEE_BPS } from '../../constants/base'
 
@@ -81,7 +81,7 @@ export default function GlobalStats() {
       return t0 === wnovaLower || t1 === wnovaLower
     }).length || pairCount || 0
   const volumeForFees = volumeWnova > 0 ? volumeWnova : oneDayVolumeETH || 0
-  const oneDayFees = volumeForFees ? formattedNum(volumeForFees * (FEE_BPS / 10000), false) : '—'
+  const oneDayFees = isFiniteNum(volumeForFees) ? formattedNum(volumeForFees * (FEE_BPS / 10000), false) : '—'
 
   return (
     <Header>

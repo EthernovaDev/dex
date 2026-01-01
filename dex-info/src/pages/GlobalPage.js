@@ -13,13 +13,13 @@ import Search from '../components/Search'
 import GlobalStats from '../components/GlobalStats'
 import OnchainMarketPanel from '../components/OnchainMarketPanel'
 
-import { useGlobalData, useGlobalTransactions } from '../contexts/GlobalData'
+import { useGlobalData, useGlobalTransactions, useGlobalChartData } from '../contexts/GlobalData'
 import { useAllPairData, usePairData } from '../contexts/PairData'
 import { useLatestBlocks } from '../contexts/Application'
 import { useMedia } from 'react-use'
 import Panel from '../components/Panel'
 import { useAllTokenData } from '../contexts/TokenData'
-import { formattedNum, formattedPercent, getReserveWnova } from '../utils'
+import { formattedNum, formattedPercent, getReserveWnova, isFiniteNum } from '../utils'
 import { TYPE, ThemedBackground } from '../Theme'
 import { transparentize } from 'polished'
 import { CustomLink } from '../components/Link'
@@ -63,6 +63,7 @@ function GlobalPage() {
   const [latestBlock] = useLatestBlocks()
   const subgraphReady = Boolean(latestBlock)
   const { totalLiquidityETH, oneDayVolumeETH, volumeChangeETH, liquidityChangeETH } = useGlobalData()
+  const [dailyData] = useGlobalChartData()
 
   // breakpoints
   const below800 = useMedia('(max-width: 800px)')
@@ -110,8 +111,19 @@ function GlobalPage() {
   }, [pairSwaps, wnovaLower])
 
   const reserveWnova = useMemo(() => getReserveWnova(pinnedPair, WNOVA_ADDRESS) || 0, [pinnedPair])
-  const headlineVolume = volumeWnova24h > 0 ? volumeWnova24h : oneDayVolumeETH || 0
-  const headlineLiquidity = reserveWnova > 0 ? reserveWnova : totalLiquidityETH || 0
+  const lastDaily = dailyData && dailyData.length ? dailyData[dailyData.length - 1] : null
+  const chartVolume = Number(lastDaily?.dailyVolumeETH ?? lastDaily?.totalVolumeETH ?? NaN)
+  const chartLiquidity = Number(lastDaily?.totalLiquidityETH ?? NaN)
+  const headlineVolume = isFiniteNum(chartVolume)
+    ? chartVolume
+    : volumeWnova24h > 0
+    ? volumeWnova24h
+    : oneDayVolumeETH || 0
+  const headlineLiquidity = isFiniteNum(chartLiquidity)
+    ? chartLiquidity
+    : reserveWnova > 0
+    ? reserveWnova
+    : totalLiquidityETH || 0
 
   return (
     <PageWrapper>
@@ -148,7 +160,7 @@ function GlobalPage() {
                       </RowBetween>
                       <RowBetween align="flex-end">
                         <TYPE.main fontSize={'1.5rem'} lineHeight={1} fontWeight={600}>
-                          {headlineVolume ? formattedNum(headlineVolume, false) : '-'}
+                          {isFiniteNum(headlineVolume) ? formattedNum(headlineVolume, false) : '-'}
                         </TYPE.main>
                         <TYPE.main fontSize={12}>{formattedPercent(volumeChangeETH)}</TYPE.main>
                       </RowBetween>
@@ -160,7 +172,7 @@ function GlobalPage() {
                       </RowBetween>
                       <RowBetween align="flex-end">
                         <TYPE.main fontSize={'1.5rem'} lineHeight={1} fontWeight={600}>
-                          {headlineLiquidity ? formattedNum(headlineLiquidity, false) : '-'}
+                          {isFiniteNum(headlineLiquidity) ? formattedNum(headlineLiquidity, false) : '-'}
                         </TYPE.main>
                         <TYPE.main fontSize={12}>
                           {formattedPercent(liquidityChangeETH)}

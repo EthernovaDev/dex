@@ -22,6 +22,7 @@ import GoogleAnalyticsReporter from './components/analytics/GoogleAnalyticsRepor
 import { PAIR_BLACKLIST, TOKEN_BLACKLIST } from './constants'
 import { DEX_URL } from './constants/urls'
 import { useSpotPriceHistory } from './hooks/useSpotPriceHistory'
+import { formatPrice } from './utils'
 
 const AppWrapper = styled.div`
   position: relative;
@@ -173,12 +174,11 @@ function App() {
   const [savedOpen, setSavedOpen] = useState(false)
 
   const [latestBlock, headBlock] = useLatestBlocks()
-  const spotHistory = useSpotPriceHistory(RPC_URL, FACTORY_ADDRESS, WNOVA_ADDRESS, TONY_ADDRESS)
+  const subgraphReady = Boolean(latestBlock)
+  const spotHistory = useSpotPriceHistory(subgraphReady ? null : RPC_URL, FACTORY_ADDRESS, WNOVA_ADDRESS, TONY_ADDRESS)
 
   // show warning
   const showWarning = headBlock && latestBlock ? headBlock - latestBlock > BLOCK_DIFFERENCE_THRESHOLD : false
-  const subgraphReady = Boolean(latestBlock)
-
   return (
     <ApolloProvider client={client}>
       <AppWrapper>
@@ -208,7 +208,9 @@ function App() {
                 </FallbackText>
                 {spotHistory.status === 'ok' && spotHistory.lastPrice ? (
                   <>
-                    <FallbackText>Current spot price: {spotHistory.lastPrice.toFixed(6)} TONY per WNOVA</FallbackText>
+                    <FallbackText>
+                      Current spot price: {formatPrice(spotHistory.lastPrice)} WNOVA per TONY
+                    </FallbackText>
                     <MiniChart values={spotHistory.prices} />
                   </>
                 ) : spotHistory.status === 'loading' ? (

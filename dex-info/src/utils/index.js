@@ -42,36 +42,52 @@ const wrappedNative = WRAPPED_NATIVE_ADDRESS || ''
 const dexBase = `${DEX_URL.replace(/\/+$/, '')}/#/`
 
 export function getPoolLink(token0Address, token1Address = null, remove = false) {
-  const token0 = token0Address?.toLowerCase() === wrappedNative ? 'ETH' : token0Address
+  const token0 = token0Address?.toLowerCase() === wrappedNative ? wrappedNative : token0Address
   if (!token1Address) {
-    return `${dexBase}${remove ? 'remove' : 'add'}/${token0}/ETH`
+    return `${dexBase}${remove ? 'remove' : 'add'}/${token0}/${wrappedNative}`
   }
-  const token1 = token1Address?.toLowerCase() === wrappedNative ? 'ETH' : token1Address
+  const token1 = token1Address?.toLowerCase() === wrappedNative ? wrappedNative : token1Address
   return `${dexBase}${remove ? 'remove' : 'add'}/${token0}/${token1}`
 }
 
 export function getSwapLink(token0Address, token1Address = null) {
-  const token0 = token0Address?.toLowerCase() === wrappedNative ? 'ETH' : token0Address
+  const token0 = token0Address?.toLowerCase() === wrappedNative ? wrappedNative : token0Address
   if (!token1Address) {
     return `${dexBase}swap?inputCurrency=${token0}`
   }
-  const token1 = token1Address?.toLowerCase() === wrappedNative ? 'ETH' : token1Address
+  const token1 = token1Address?.toLowerCase() === wrappedNative ? wrappedNative : token1Address
   return `${dexBase}swap?inputCurrency=${token0}&outputCurrency=${token1}`
 }
 
 export function getMiningPoolLink(token0Address) {
-  const token0 = token0Address?.toLowerCase() === wrappedNative ? 'ETH' : token0Address
-  return `${dexBase}uni/ETH/${token0}`
+  const token0 = token0Address?.toLowerCase() === wrappedNative ? wrappedNative : token0Address
+  return `${dexBase}uni/${wrappedNative}/${token0}`
 }
 
 export function getUniswapAppLink(linkVariable) {
   const base = `${DEX_URL.replace(/\/+$/, '')}/#/uni`
   if (!linkVariable) return base
-  return `${base}/ETH/${linkVariable}`
+  return `${base}/${wrappedNative}/${linkVariable}`
 }
 
 export function localNumber(val) {
   return Numeral(val).format('0,0')
+}
+
+export function getReserveWnova(pair, wnovaAddress = WRAPPED_NATIVE_ADDRESS) {
+  const wnovaLower = wnovaAddress?.toLowerCase?.()
+  const token0Id = pair?.token0?.id?.toLowerCase?.()
+  const token1Id = pair?.token1?.id?.toLowerCase?.()
+  if (!wnovaLower || !token0Id || !token1Id) return null
+  if (token0Id === wnovaLower) return Number(pair?.reserve0 || 0)
+  if (token1Id === wnovaLower) return Number(pair?.reserve1 || 0)
+  return null
+}
+
+export function getLiquidityWnova(pair, wnovaAddress = WRAPPED_NATIVE_ADDRESS) {
+  const reserveWnova = getReserveWnova(pair, wnovaAddress)
+  if (!Number.isFinite(reserveWnova) || reserveWnova <= 0) return null
+  return reserveWnova * 2
 }
 
 export const toNiceDate = (date) => {
@@ -227,15 +243,18 @@ export async function getShareValueOverTime(pairAddress, timestamps) {
   let values = []
   for (var row in result?.data) {
     let timestamp = row.split('t')[1]
-    let sharePriceUsd = parseFloat(result.data[row]?.reserveUSD) / parseFloat(result.data[row]?.totalSupply)
+    const reserveWnova = parseFloat(result.data[row]?.reserveETH ?? result.data[row]?.reserveUSD ?? 0)
+    let sharePriceUsd = reserveWnova / parseFloat(result.data[row]?.totalSupply)
     if (timestamp) {
       values.push({
         timestamp,
         sharePriceUsd,
+        sharePriceWnova: sharePriceUsd,
         totalSupply: result.data[row].totalSupply,
         reserve0: result.data[row].reserve0,
         reserve1: result.data[row].reserve1,
         reserveUSD: result.data[row].reserveUSD,
+        reserveETH: result.data[row].reserveETH,
         token0DerivedETH: result.data[row].token0.derivedETH,
         token1DerivedETH: result.data[row].token1.derivedETH,
         roiUsd: values && values[0] ? sharePriceUsd / values[0]['sharePriceUsd'] : 1,
@@ -251,9 +270,9 @@ export async function getShareValueOverTime(pairAddress, timestamps) {
   for (var brow in result?.data) {
     let timestamp = brow.split('b')[1]
     if (timestamp) {
-      values[index].ethPrice = result.data[brow].ethPrice
-      values[index].token0PriceUSD = result.data[brow].ethPrice * values[index].token0DerivedETH
-      values[index].token1PriceUSD = result.data[brow].ethPrice * values[index].token1DerivedETH
+      values[index].ethPrice = result.data[brow]?.ethPrice ?? 1
+      values[index].token0PriceUSD = values[index].token0DerivedETH
+      values[index].token1PriceUSD = values[index].token1DerivedETH
       index += 1
     }
   }

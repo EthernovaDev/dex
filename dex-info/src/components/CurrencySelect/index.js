@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React from 'react'
 import styled from 'styled-components'
 
 import { useCurrentCurrency } from '../../contexts/Application'
@@ -35,39 +35,15 @@ const ArrowStyled = styled(Arrow)`
   margin-left: 6px;
 `
 
-const Option = styled(Row)`
-  position: absolute;
-  top: 40px;
-`
-
 const CurrencySelect = () => {
-  const [showDropdown, toggleDropdown] = useState(false)
-  const [currency, toggleCurrency] = useCurrentCurrency()
-
-  const getOther = () => {
-    if (currency === 'USD') {
-      return 'NOVA'
-    } else {
-      return 'USD'
-    }
-  }
+  const [currency] = useCurrentCurrency()
 
   return (
     <>
       <Select>
-        <Row onClick={() => toggleDropdown(!showDropdown)}>
+        <Row>
           {currency} <ArrowStyled />
         </Row>
-        {showDropdown && (
-          <Option
-            onClick={() => {
-              toggleDropdown(!showDropdown)
-              toggleCurrency()
-            }}
-          >
-            {getOther()}
-          </Option>
-        )}
       </Select>
     </>
   )

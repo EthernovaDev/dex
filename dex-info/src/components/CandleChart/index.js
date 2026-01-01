@@ -30,8 +30,9 @@ const CandleStickChart = ({
   height = 300,
   base,
   margin = true,
-  valueFormatter = (val) => formattedNum(val, true),
+  valueFormatter = (val) => formattedNum(val, false),
   showVolume = true,
+  markers = [],
 }) => {
   const ref = useRef(null)
   const chartRef = useRef(null)
@@ -138,6 +139,7 @@ const CandleStickChart = ({
     })
 
     candleSeries.setData(derivedData)
+    candleSeries.setMarkers(markers || [])
 
     let volumeSeries
     if (showVolume && volumeData?.length) {
@@ -179,16 +181,23 @@ const CandleStickChart = ({
       ) {
         setLastBarText()
       } else {
-        const price = param.seriesPrices.get(candleSeries).close
+        const priceData = param.seriesPrices.get(candleSeries)
+        const close = priceData?.close
+        const open = priceData?.open
+        const high = priceData?.high
+        const low = priceData?.low
         const time = dayjs.unix(param.time).format('MM/DD h:mm A')
         toolTip.innerHTML =
           `<div style="font-size: 22px; margin: 4px 0px; color: ${textColor}">` +
-          valueFormatter(price) +
+          valueFormatter(close) +
           `<span style="font-size: 12px; margin: 4px 6px; color: ${textColor}">` +
           time +
           ' UTC' +
           '</span>' +
-          '</div>'
+          '</div>' +
+          `<div style="font-size: 12px; color: ${textColor}">O: ${valueFormatter(open)} H: ${valueFormatter(
+            high
+          )} L: ${valueFormatter(low)} C: ${valueFormatter(close)}</div>`
       }
     })
 
@@ -202,11 +211,12 @@ const CandleStickChart = ({
   useEffect(() => {
     if (candleSeriesRef.current) {
       candleSeriesRef.current.setData(derivedData)
+      candleSeriesRef.current.setMarkers(markers || [])
     }
     if (volumeSeriesRef.current && showVolume) {
       volumeSeriesRef.current.setData(volumeData)
     }
-  }, [derivedData, volumeData, showVolume])
+  }, [derivedData, volumeData, showVolume, markers])
 
   useEffect(() => {
     if (width && chartRef.current) {

@@ -9,12 +9,13 @@ import Link, { CustomLink } from '../Link'
 import { Divider } from '..'
 import DoubleTokenLogo from '../DoubleLogo'
 import { withRouter } from 'react-router-dom'
-import { formattedNum, getUniswapAppLink } from '../../utils'
+import { formattedNum, getReserveWnova, getUniswapAppLink } from '../../utils'
 import { AutoColumn } from '../Column'
 import { RowFixed } from '../Row'
 import { ButtonLight } from '../ButtonStyled'
 import { TYPE } from '../../Theme'
 import FormattedName from '../FormattedName'
+import { WRAPPED_NATIVE_ADDRESS } from '../../constants/urls'
 
 dayjs.extend(utc)
 
@@ -137,7 +138,9 @@ function MiningPositionList({ miningPositions }) {
   const ListItem = ({ miningPosition, index }) => {
     if (!miningPosition.pairData) return null
     const pairPercentage = miningPosition.balance / miningPosition.pairData.totalSupply
-    const valueUSD = miningPosition.pairData.reserveUSD
+    const wnovaLower = WRAPPED_NATIVE_ADDRESS?.toLowerCase?.() || ''
+    const reserveWnova = getReserveWnova(miningPosition.pairData, wnovaLower)
+    const valueWnova = reserveWnova ? reserveWnova * 2 : null
     const valueFirstPair = miningPosition.pairData.reserve0
     const valueSecondPair = miningPosition.pairData.reserve1
     const firstPairName = miningPosition.miningPool.pair.token0
@@ -173,7 +176,9 @@ function MiningPositionList({ miningPositions }) {
         </DataText>
         <DataText area="uniswap">
           <AutoColumn gap="12px" justify="flex-end">
-            <TYPE.main>{formattedNum(pairPercentage * valueUSD, true, true)}</TYPE.main>
+            <TYPE.main>
+              {valueWnova ? `WNOVA ${formattedNum(pairPercentage * valueWnova, false, true)}` : '—'}
+            </TYPE.main>
             <AutoColumn gap="4px" justify="flex-end">
               <RowFixed>
                 <TYPE.small fontWeight={400}>{formattedNum(pairPercentage * parseFloat(valueFirstPair))} </TYPE.small>
@@ -206,8 +211,10 @@ function MiningPositionList({ miningPositions }) {
 
       .sort((p0, p1) => {
         if (sortedColumn === SORT_FIELD.VALUE) {
-          const bal0 = (p0.balance / p0.pairData?.totalSupply) * p0.pairData?.reserveUSD
-          const bal1 = (p0.balance / p0.pairData?.totalSupply) * p1.pairData?.reserveUSD
+          const reserveWnova0 = getReserveWnova(p0.pairData, WRAPPED_NATIVE_ADDRESS)
+          const reserveWnova1 = getReserveWnova(p1.pairData, WRAPPED_NATIVE_ADDRESS)
+          const bal0 = reserveWnova0 ? (p0.balance / p0.pairData?.totalSupply) * reserveWnova0 * 2 : 0
+          const bal1 = reserveWnova1 ? (p1.balance / p1.pairData?.totalSupply) * reserveWnova1 * 2 : 0
           return bal0 > bal1 ? (sortDirection ? -1 : 1) : sortDirection ? 1 : -1
         }
         return 1

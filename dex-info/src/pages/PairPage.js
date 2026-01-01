@@ -20,7 +20,7 @@ import TxnList from '../components/TxnList'
 import Loader from '../components/LocalLoader'
 import { BasicLink } from '../components/Link'
 import Search from '../components/Search'
-import { formattedNum, formattedPercent, getPoolLink, getSwapLink, shortenAddress } from '../utils'
+import { formattedNum, formattedPercent, getPoolLink, getSwapLink, shortenAddress, formatPrice } from '../utils'
 import { useColor } from '../hooks'
 import { usePairData, usePairTransactions } from '../contexts/PairData'
 import { TYPE, ThemedBackground } from '../Theme'
@@ -30,9 +30,9 @@ import { useMedia } from 'react-use'
 import DoubleTokenLogo from '../components/DoubleLogo'
 import TokenLogo from '../components/TokenLogo'
 import { Hover } from '../components'
-import { useEthPrice } from '../contexts/GlobalData'
 import Warning from '../components/Warning'
 import { usePathDismissed, useSavedPairs } from '../contexts/LocalStorage'
+import { useLatestBlocks } from '../contexts/Application'
 
 import { Bookmark, PlusCircle, AlertCircle } from 'react-feather'
 import FormattedName from '../components/FormattedName'
@@ -149,13 +149,19 @@ function PairPage({ pairAddress, history }) {
   const transactions = usePairTransactions(pairAddress)
   const backgroundColor = useColor(pairAddress)
 
-  const formattedLiquidity = reserveETH ? formattedNum(reserveETH, false) : formattedNum(trackedReserveETH, false)
-  const usingUntrackedLiquidity = !trackedReserveETH && !!reserveETH
+  const wnovaLower = WNOVA_ADDRESS?.toLowerCase?.() || ''
+  const token0Id = token0?.id?.toLowerCase?.()
+  const token1Id = token1?.id?.toLowerCase?.()
+  const isToken0Wnova = token0Id === wnovaLower
+  const isToken1Wnova = token1Id === wnovaLower
+  const reserveWnova = isToken0Wnova ? reserve0 : isToken1Wnova ? reserve1 : null
+  const liquidityWnova =
+    reserveWnova && Number(reserveWnova) > 0 ? formattedNum(Number(reserveWnova) * 2, false) : null
+  const formattedLiquidity = liquidityWnova || (reserveETH ? formattedNum(reserveETH, false) : formattedNum(trackedReserveETH, false))
   const liquidityChange = formattedPercent(liquidityChangeETH)
 
   // volume
   const volume = oneDayVolumeETH ? formattedNum(oneDayVolumeETH, false) : '—'
-  const usingUtVolume = oneDayVolumeETH === 0
   const volumeChange = formattedPercent(volumeChangeETH)
 
   const showUSDWaning = false
@@ -164,8 +170,8 @@ function PairPage({ pairAddress, history }) {
   const fees = oneDayVolumeETH || oneDayVolumeETH === 0 ? formattedNum(oneDayVolumeETH * 0.003, false) : '—'
 
   // rates
-  const token0Rate = reserve0 && reserve1 ? formattedNum(reserve1 / reserve0) : '-'
-  const token1Rate = reserve0 && reserve1 ? formattedNum(reserve0 / reserve1) : '-'
+  const token0Rate = reserve0 && reserve1 ? formatPrice(reserve1 / reserve0) : '-'
+  const token1Rate = reserve0 && reserve1 ? formatPrice(reserve0 / reserve1) : '-'
 
   // formatted symbols for overflow
   const formattedSymbol0 =
@@ -178,6 +184,8 @@ function PairPage({ pairAddress, history }) {
   const below600 = useMedia('(max-width: 600px)')
 
   const [dismissed, markAsDismissed] = usePathDismissed(history.location.pathname)
+  const [latestBlock] = useLatestBlocks()
+  const subgraphReady = Boolean(latestBlock)
 
   useEffect(() => {
     window.scrollTo({
@@ -235,6 +243,8 @@ function PairPage({ pairAddress, history }) {
             wnovaAddress={WNOVA_ADDRESS}
             tonyAddress={TONY_ADDRESS}
             pairAddress={pairAddress}
+            swaps={transactions?.swaps || []}
+            allowOnchain={!subgraphReady}
           />
           <DashboardWrapper>
             <AutoColumn gap="40px" style={{ marginBottom: '1.5rem' }}>

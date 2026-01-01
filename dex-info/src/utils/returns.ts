@@ -2,6 +2,7 @@ import { USER_MINTS_BUNRS_PER_PAIR } from '../apollo/queries'
 import { client } from '../apollo/client'
 import dayjs from 'dayjs'
 import { getShareValueOverTime } from '.'
+import { WRAPPED_NATIVE_ADDRESS } from '../constants/urls'
 
 export const priceOverrides = [
   '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', // USDC
@@ -53,6 +54,7 @@ async function getPrincipalForUserPerPair(user: string, pairAddress: string) {
   let usd = 0
   let amount0 = 0
   let amount1 = 0
+  const wnovaLower = WRAPPED_NATIVE_ADDRESS?.toLowerCase?.() || ''
   // get all minst and burns to get principal amounts
   const results = await client.query({
     query: USER_MINTS_BUNRS_PER_PAIR,
@@ -66,8 +68,11 @@ async function getPrincipalForUserPerPair(user: string, pairAddress: string) {
     const mintToken0 = mint.pair.token0.id
     const mintToken1 = mint.pair.token1.id
 
-    // if trackign before prices were discovered (pre-launch days), hardcode stablecoins
-    if (priceOverrides.includes(mintToken0) && mint.timestamp < PRICE_DISCOVERY_START_TIMESTAMP) {
+    if (mintToken0 === wnovaLower) {
+      usd += parseFloat(mint.amount0)
+    } else if (mintToken1 === wnovaLower) {
+      usd += parseFloat(mint.amount1)
+    } else if (priceOverrides.includes(mintToken0) && mint.timestamp < PRICE_DISCOVERY_START_TIMESTAMP) {
       usd += parseFloat(mint.amount0) * 2
     } else if (priceOverrides.includes(mintToken1) && mint.timestamp < PRICE_DISCOVERY_START_TIMESTAMP) {
       usd += parseFloat(mint.amount1) * 2
@@ -83,8 +88,11 @@ async function getPrincipalForUserPerPair(user: string, pairAddress: string) {
     const burnToken0 = burn.pair.token0.id
     const burnToken1 = burn.pair.token1.id
 
-    // if trackign before prices were discovered (pre-launch days), hardcode stablecoins
-    if (priceOverrides.includes(burnToken0) && burn.timestamp < PRICE_DISCOVERY_START_TIMESTAMP) {
+    if (burnToken0 === wnovaLower) {
+      usd -= parseFloat(burn.amount0)
+    } else if (burnToken1 === wnovaLower) {
+      usd -= parseFloat(burn.amount1)
+    } else if (priceOverrides.includes(burnToken0) && burn.timestamp < PRICE_DISCOVERY_START_TIMESTAMP) {
       usd += parseFloat(burn.amount0) * 2
     } else if (priceOverrides.includes(burnToken1) && burn.timestamp < PRICE_DISCOVERY_START_TIMESTAMP) {
       usd += parseFloat(burn.amount1) * 2
@@ -223,23 +231,26 @@ export async function getHistoricalPairReturns(startDateTimestamp, currentPairDa
         totalSupply: currentPairData.totalSupply,
         reserve0: currentPairData.reserve0,
         reserve1: currentPairData.reserve1,
-        reserveUSD: currentPairData.reserveUSD,
-        token0PriceUSD: currentPairData.token0.derivedETH * currentETHPrice,
-        token1PriceUSD: currentPairData.token1.derivedETH * currentETHPrice,
+        reserveUSD: currentPairData.reserveETH ?? currentPairData.reserveUSD,
+        token0PriceUSD: currentPairData.token0.derivedETH,
+        token1PriceUSD: currentPairData.token1.derivedETH,
       }
     }
 
     if (positionT1) {
       positionT1.liquidityTokenTotalSupply = positionT1.totalSupply
       positionT1.liquidityTokenBalance = positionT0.liquidityTokenBalance
+      const reserveWnova = parseFloat(positionT1.reserveETH ?? positionT1.reserveUSD ?? 0)
       const currentLiquidityValue =
         (parseFloat(positionT1.liquidityTokenBalance) / parseFloat(positionT1.liquidityTokenTotalSupply)) *
-        parseFloat(positionT1.reserveUSD)
+        reserveWnova
       const localReturns = getMetricsForPositionWindow(positionT0, positionT1)
       const localFees = netFees + localReturns.fees
 
       formattedHistory.push({
         date: dayTimestamp,
+        valueWnova: currentLiquidityValue,
+        feesWnova: localFees,
         usdValue: currentLiquidityValue,
         fees: localFees,
       })
@@ -274,9 +285,9 @@ export async function getLPReturnsOnPair(user: string, pair, ethPrice: number, s
     liquidityTokenTotalSupply: pair.totalSupply,
     reserve0: pair.reserve0,
     reserve1: pair.reserve1,
-    reserveUSD: pair.reserveUSD,
-    token0PriceUSD: pair.token0.derivedETH * ethPrice,
-    token1PriceUSD: pair.token1.derivedETH * ethPrice,
+    reserveUSD: pair.reserveETH ?? pair.reserveUSD,
+    token0PriceUSD: pair.token0.derivedETH,
+    token1PriceUSD: pair.token1.derivedETH,
   }
 
   for (const index in snapshots) {

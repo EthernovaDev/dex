@@ -82,7 +82,7 @@ function reducer(state, { type, payload }) {
 }
 
 const INITIAL_STATE = {
-  CURRENCY: 'USD',
+  CURRENCY: 'WNOVA',
   TIME_KEY: timeframeOptions.ALL_TIME,
 }
 
@@ -200,12 +200,8 @@ export function useLatestBlocks() {
 export function useCurrentCurrency() {
   const [state, { update }] = useApplicationContext()
   const toggleCurrency = useCallback(() => {
-    if (state.currency === 'NOVA') {
-      update('USD')
-    } else {
-      update('NOVA')
-    }
-  }, [state, update])
+    update('WNOVA')
+  }, [update])
   return [state[CURRENCY], toggleCurrency]
 }
 

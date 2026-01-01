@@ -11,8 +11,6 @@ import {
   TOKENS_HISTORICAL_BULK,
 } from '../apollo/queries'
 
-import { useEthPrice } from './GlobalData'
-
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 
@@ -27,6 +25,7 @@ import {
 import { timeframeOptions } from '../constants'
 import { useLatestBlocks } from './Application'
 import { updateNameData } from '../utils/data'
+import { WRAPPED_NATIVE_ADDRESS, PAIR_ADDRESS } from '../constants/urls'
 
 const UPDATE = 'UPDATE'
 const UPDATE_TOKEN_TXNS = 'UPDATE_TOKEN_TXNS'
@@ -37,6 +36,75 @@ const UPDATE_ALL_PAIRS = 'UPDATE_ALL_PAIRS'
 const UPDATE_COMBINED = 'UPDATE_COMBINED'
 
 const TOKEN_PAIRS_KEY = 'TOKEN_PAIRS_KEY'
+
+const WNOVA_LOWER = WRAPPED_NATIVE_ADDRESS?.toLowerCase?.() || ''
+const PAIR_LOWER = PAIR_ADDRESS?.toLowerCase?.() || ''
+
+const safeNumber = (value) => {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+let pinnedPairPromise
+async function getPinnedPairData() {
+  if (!PAIR_LOWER) return null
+  if (!pinnedPairPromise) {
+    pinnedPairPromise = client
+      .query({
+        query: PAIR_DATA(PAIR_ADDRESS),
+        fetchPolicy: 'cache-first',
+      })
+      .then((result) => result?.data?.pairs?.[0] ?? null)
+      .catch(() => null)
+  }
+  return pinnedPairPromise
+}
+
+function getReserveWnovaFromPair(pair) {
+  if (!pair) return 0
+  const token0Id = pair.token0?.id?.toLowerCase?.()
+  const token1Id = pair.token1?.id?.toLowerCase?.()
+  if (token0Id === WNOVA_LOWER) return safeNumber(pair.reserve0)
+  if (token1Id === WNOVA_LOWER) return safeNumber(pair.reserve1)
+  return 0
+}
+
+function getPriceInWnovaFromPair(tokenId, pair) {
+  if (!tokenId || !pair) return 0
+  const token0Id = pair.token0?.id?.toLowerCase?.()
+  const token1Id = pair.token1?.id?.toLowerCase?.()
+  if (!token0Id || !token1Id) return 0
+  if (token0Id === tokenId && token1Id === WNOVA_LOWER) return safeNumber(pair.token0Price)
+  if (token1Id === tokenId && token0Id === WNOVA_LOWER) return safeNumber(pair.token1Price)
+  return 0
+}
+
+function applyPinnedPairFallback(data, pair) {
+  if (!data || !pair) return data
+  const tokenId = data.id?.toLowerCase?.()
+  if (!tokenId) return data
+
+  if (tokenId === WNOVA_LOWER) {
+    data.derivedETH = 1
+    data.priceETH = 1
+    const reserveWnova = getReserveWnovaFromPair(pair)
+    if (reserveWnova > 0) {
+      data.totalLiquidityETH = reserveWnova * 2
+    }
+    return data
+  }
+
+  const price = getPriceInWnovaFromPair(tokenId, pair)
+  if (price > 0) {
+    data.derivedETH = price
+    data.priceETH = price
+    const reserveWnova = getReserveWnovaFromPair(pair)
+    if (reserveWnova > 0) {
+      data.totalLiquidityETH = reserveWnova * 2
+    }
+  }
+  return data
+}
 
 dayjs.extend(utc)
 
@@ -220,12 +288,13 @@ export default function Provider({ children }) {
   )
 }
 
-const getTopTokens = async (ethPrice, ethPriceOld) => {
+const getTopTokens = async () => {
   const utcCurrentTime = dayjs()
   const utcOneDayBack = utcCurrentTime.subtract(1, 'day').unix()
   const utcTwoDaysBack = utcCurrentTime.subtract(2, 'day').unix()
   let oneDayBlock = await getBlockFromTimestamp(utcOneDayBack)
   let twoDayBlock = await getBlockFromTimestamp(utcTwoDaysBack)
+  const pinnedPair = await getPinnedPairData()
 
   try {
     // need to get the top tokens by liquidity by need token day datas
@@ -292,15 +361,22 @@ const getTopTokens = async (ethPrice, ethPriceOld) => {
             twoDayHistory = twoDayResult.data.tokens[0]
           }
 
-          // calculate percentage changes and daily changes
-          const [oneDayVolumeUSD, volumeChangeUSD] = get2DayPercentChange(
-            data.tradeVolumeUSD,
-            oneDayHistory?.tradeVolumeUSD ?? 0,
-            twoDayHistory?.tradeVolumeUSD ?? 0
-          )
-          const derivedEthTwo = parseFloat(twoDayHistory?.derivedETH ?? 0)
+          let derivedEthNow = parseFloat(data?.derivedETH ?? 0)
+          let derivedEthOld = parseFloat(oneDayHistory?.derivedETH ?? 0)
+          let derivedEthTwo = parseFloat(twoDayHistory?.derivedETH ?? 0)
+
+          if ((!derivedEthNow || derivedEthNow <= 0) && pinnedPair) {
+            const fallbackPrice = getPriceInWnovaFromPair(data?.id?.toLowerCase?.(), pinnedPair)
+            if (fallbackPrice > 0) {
+              derivedEthNow = fallbackPrice
+              if (!derivedEthOld || derivedEthOld <= 0) derivedEthOld = fallbackPrice
+              if (!derivedEthTwo || derivedEthTwo <= 0) derivedEthTwo = fallbackPrice
+            }
+          }
+
+          // calculate percentage changes and daily changes (WNOVA-based)
           const [oneDayVolumeETH, volumeChangeETH] = get2DayPercentChange(
-            data.tradeVolume * derivedEthNow,
+            data.tradeVolume ? data.tradeVolume * derivedEthNow : 0,
             oneDayHistory?.tradeVolume ? oneDayHistory.tradeVolume * derivedEthOld : 0,
             twoDayHistory?.tradeVolume ? twoDayHistory.tradeVolume * derivedEthTwo : 0
           )
@@ -309,41 +385,27 @@ const getTopTokens = async (ethPrice, ethPriceOld) => {
             oneDayHistory?.txCount ?? 0,
             twoDayHistory?.txCount ?? 0
           )
-
-          const derivedEthNow = parseFloat(data?.derivedETH ?? 0)
-          const derivedEthOld = parseFloat(oneDayHistory?.derivedETH ?? 0)
-          const currentLiquidityUSD = data?.totalLiquidity * ethPrice * data?.derivedETH
-          const oldLiquidityUSD = oneDayHistory?.totalLiquidity * ethPriceOld * oneDayHistory?.derivedETH
           const currentLiquidityETH = data?.totalLiquidity ? data.totalLiquidity * derivedEthNow : 0
           const oldLiquidityETH = oneDayHistory?.totalLiquidity ? oneDayHistory.totalLiquidity * derivedEthOld : 0
 
           // percent changes
-          const priceChangeUSD = getPercentChange(
-            data?.derivedETH * ethPrice,
-            oneDayHistory?.derivedETH ? oneDayHistory?.derivedETH * ethPriceOld : 0
-          )
           const priceChangeETH = getPercentChange(derivedEthNow, derivedEthOld)
 
           // set data
-          data.priceUSD = data?.derivedETH * ethPrice
           data.priceETH = derivedEthNow
-          data.totalLiquidityUSD = currentLiquidityUSD
           data.totalLiquidityETH = currentLiquidityETH
-          data.oneDayVolumeUSD = parseFloat(oneDayVolumeUSD)
           data.oneDayVolumeETH = parseFloat(oneDayVolumeETH)
-          data.volumeChangeUSD = volumeChangeUSD
           data.volumeChangeETH = volumeChangeETH
-          data.priceChangeUSD = priceChangeUSD
           data.priceChangeETH = priceChangeETH
-          data.liquidityChangeUSD = getPercentChange(currentLiquidityUSD ?? 0, oldLiquidityUSD ?? 0)
           data.liquidityChangeETH = getPercentChange(currentLiquidityETH ?? 0, oldLiquidityETH ?? 0)
           data.oneDayTxns = oneDayTxns
           data.txnChange = txnChange
 
+          applyPinnedPairFallback(data, pinnedPair)
+
           // new tokens
           if (!oneDayHistory && data) {
-            data.oneDayVolumeUSD = data.tradeVolumeUSD
-            data.oneDayVolumeETH = data.tradeVolume * data.derivedETH
+            data.oneDayVolumeETH = data.tradeVolume * derivedEthNow
             data.oneDayTxns = data.txCount
           }
 
@@ -351,18 +413,6 @@ const getTopTokens = async (ethPrice, ethPriceOld) => {
           updateNameData({
             token0: data,
           })
-
-          // HOTFIX for Aave
-          if (data.id === '0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9') {
-            const aaveData = await client.query({
-              query: PAIR_DATA('0xdfc14d2af169b0d36c4eff567ada9b2e0cae044f'),
-              fetchPolicy: 'cache-first',
-            })
-            const result = aaveData.data.pairs[0]
-            data.totalLiquidityUSD = parseFloat(result.reserveUSD) / 2
-            data.liquidityChangeUSD = 0
-            data.priceChangeUSD = 0
-          }
 
           // used for custom adjustments
           data.oneDayData = oneDayHistory
@@ -380,12 +430,13 @@ const getTopTokens = async (ethPrice, ethPriceOld) => {
   }
 }
 
-const getTokenData = async (address, ethPrice, ethPriceOld) => {
+const getTokenData = async (address) => {
   const utcCurrentTime = dayjs()
   const utcOneDayBack = utcCurrentTime.subtract(1, 'day').startOf('minute').unix()
   const utcTwoDaysBack = utcCurrentTime.subtract(2, 'day').startOf('minute').unix()
   let oneDayBlock = await getBlockFromTimestamp(utcOneDayBack)
   let twoDayBlock = await getBlockFromTimestamp(utcTwoDaysBack)
+  const pinnedPair = await getPinnedPairData()
 
   // initialize data arrays
   let data = {}
@@ -430,64 +481,48 @@ const getTokenData = async (address, ethPrice, ethPriceOld) => {
       twoDayData = twoDayResult.data.tokens[0]
     }
 
-    // calculate percentage changes and daily changes
-    const [oneDayVolumeUSD, volumeChangeUSD] = get2DayPercentChange(
-      data.tradeVolumeUSD,
-      oneDayData?.tradeVolumeUSD ?? 0,
-      twoDayData?.tradeVolumeUSD ?? 0
-    )
-    const derivedEthTwo = parseFloat(twoDayData?.derivedETH ?? 0)
+    let derivedEthNow = parseFloat(data?.derivedETH ?? 0)
+    let derivedEthOld = parseFloat(oneDayData?.derivedETH ?? 0)
+    let derivedEthTwo = parseFloat(twoDayData?.derivedETH ?? 0)
+
+    if ((!derivedEthNow || derivedEthNow <= 0) && pinnedPair) {
+      const fallbackPrice = getPriceInWnovaFromPair(data?.id?.toLowerCase?.(), pinnedPair)
+      if (fallbackPrice > 0) {
+        derivedEthNow = fallbackPrice
+        if (!derivedEthOld || derivedEthOld <= 0) derivedEthOld = fallbackPrice
+        if (!derivedEthTwo || derivedEthTwo <= 0) derivedEthTwo = fallbackPrice
+      }
+    }
+
+    // calculate percentage changes and daily changes (WNOVA-based)
     const [oneDayVolumeETH, volumeChangeETH] = get2DayPercentChange(
-      data.tradeVolume * derivedEthNow,
+      data.tradeVolume ? data.tradeVolume * derivedEthNow : 0,
       oneDayData?.tradeVolume ? oneDayData.tradeVolume * derivedEthOld : 0,
       twoDayData?.tradeVolume ? twoDayData.tradeVolume * derivedEthTwo : 0
     )
 
-    // calculate percentage changes and daily changes
-    const [oneDayVolumeUT, volumeChangeUT] = get2DayPercentChange(
-      data.untrackedVolumeUSD,
-      oneDayData?.untrackedVolumeUSD ?? 0,
-      twoDayData?.untrackedVolumeUSD ?? 0
-    )
-
-    // calculate percentage changes and daily changes
     const [oneDayTxns, txnChange] = get2DayPercentChange(
       data.txCount,
       oneDayData?.txCount ?? 0,
       twoDayData?.txCount ?? 0
     )
 
-    const derivedEthNow = parseFloat(data?.derivedETH ?? 0)
-    const derivedEthOld = parseFloat(oneDayData?.derivedETH ?? 0)
-    const priceChangeUSD = getPercentChange(
-      data?.derivedETH * ethPrice,
-      parseFloat(oneDayData?.derivedETH ?? 0) * ethPriceOld
-    )
-    const priceChangeETH = getPercentChange(derivedEthNow, derivedEthOld)
-
-    const currentLiquidityUSD = data?.totalLiquidity * ethPrice * data?.derivedETH
-    const oldLiquidityUSD = oneDayData?.totalLiquidity * ethPriceOld * oneDayData?.derivedETH
     const currentLiquidityETH = data?.totalLiquidity ? data.totalLiquidity * derivedEthNow : 0
     const oldLiquidityETH = oneDayData?.totalLiquidity ? oneDayData.totalLiquidity * derivedEthOld : 0
 
     // set data
-    data.priceUSD = data?.derivedETH * ethPrice
     data.priceETH = derivedEthNow
-    data.totalLiquidityUSD = currentLiquidityUSD
     data.totalLiquidityETH = currentLiquidityETH
-    data.oneDayVolumeUSD = oneDayVolumeUSD
     data.oneDayVolumeETH = parseFloat(oneDayVolumeETH)
-    data.volumeChangeUSD = volumeChangeUSD
     data.volumeChangeETH = volumeChangeETH
-    data.priceChangeUSD = priceChangeUSD
-    data.priceChangeETH = priceChangeETH
-    data.oneDayVolumeUT = oneDayVolumeUT
-    data.volumeChangeUT = volumeChangeUT
-    const liquidityChangeUSD = getPercentChange(currentLiquidityUSD ?? 0, oldLiquidityUSD ?? 0)
-    data.liquidityChangeUSD = liquidityChangeUSD
+    data.priceChangeETH = getPercentChange(derivedEthNow, derivedEthOld)
+    data.oneDayVolumeUT = parseFloat(oneDayVolumeETH)
+    data.volumeChangeUT = volumeChangeETH
     data.liquidityChangeETH = getPercentChange(currentLiquidityETH ?? 0, oldLiquidityETH ?? 0)
     data.oneDayTxns = oneDayTxns
     data.txnChange = txnChange
+
+    applyPinnedPairFallback(data, pinnedPair)
 
     // used for custom adjustments
     data.oneDayData = oneDayData?.[address]
@@ -495,8 +530,8 @@ const getTokenData = async (address, ethPrice, ethPriceOld) => {
 
     // new tokens
     if (!oneDayData && data) {
-      data.oneDayVolumeUSD = data.tradeVolumeUSD
-      data.oneDayVolumeETH = data.tradeVolume * data.derivedETH
+      data.oneDayVolumeETH = data.tradeVolume * derivedEthNow
+      data.oneDayVolumeUT = data.oneDayVolumeETH
       data.oneDayTxns = data.txCount
     }
 
@@ -504,18 +539,6 @@ const getTokenData = async (address, ethPrice, ethPriceOld) => {
     updateNameData({
       token0: data,
     })
-
-    // HOTFIX for Aave
-    if (data.id === '0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9') {
-      const aaveData = await client.query({
-        query: PAIR_DATA('0xdfc14d2af169b0d36c4eff567ada9b2e0cae044f'),
-        fetchPolicy: 'cache-first',
-      })
-      const result = aaveData.data.pairs[0]
-      data.totalLiquidityUSD = parseFloat(result.reserveUSD) / 2
-      data.liquidityChangeUSD = 0
-      data.priceChangeUSD = 0
-    }
   } catch (e) {
     console.log(e)
   }
@@ -607,7 +630,7 @@ const getIntervalTokenData = async (tokenAddress, startTime, interval = 3600, la
     for (var brow in result) {
       let timestamp = brow.split('b')[1]
       if (timestamp) {
-        values[index].priceUSD = result[brow].ethPrice * values[index].derivedETH
+        values[index].priceETH = values[index].derivedETH
         index += 1
       }
     }
@@ -618,8 +641,8 @@ const getIntervalTokenData = async (tokenAddress, startTime, interval = 3600, la
     for (let i = 0; i < values.length - 1; i++) {
       formattedHistory.push({
         timestamp: values[i].timestamp,
-        open: parseFloat(values[i].priceUSD),
-        close: parseFloat(values[i + 1].priceUSD),
+        open: parseFloat(values[i].priceETH),
+        close: parseFloat(values[i + 1].priceETH),
       })
     }
 
@@ -663,7 +686,6 @@ const getTokenChartData = async (tokenAddress) => {
       // add the day index to the set of days
       dayIndexSet.add((data[i].date / oneDay).toFixed(0))
       dayIndexArray.push(data[i])
-      dayData.dailyVolumeUSD = parseFloat(dayData.dailyVolumeUSD)
       dayData.dailyVolumeETH = parseFloat(dayData.dailyVolumeETH)
       dayData.totalLiquidityETH = parseFloat(dayData.totalLiquidityETH)
       if (dayData.totalLiquidityToken && dayData.totalLiquidityETH) {
@@ -675,9 +697,7 @@ const getTokenChartData = async (tokenAddress) => {
 
     // fill in empty days
     let timestamp = data[0] && data[0].date ? data[0].date : startTime
-    let latestLiquidityUSD = data[0] && data[0].totalLiquidityUSD
     let latestLiquidityETH = data[0] && data[0].totalLiquidityETH
-    let latestPriceUSD = data[0] && data[0].priceUSD
     let latestPriceETH = data[0] && data[0].priceETH
     let latestPairDatas = data[0] && data[0].mostLiquidPairs
     let index = 1
@@ -688,18 +708,13 @@ const getTokenChartData = async (tokenAddress) => {
         data.push({
           date: nextDay,
           dayString: nextDay,
-          dailyVolumeUSD: 0,
           dailyVolumeETH: 0,
-          priceUSD: latestPriceUSD,
           priceETH: latestPriceETH,
-          totalLiquidityUSD: latestLiquidityUSD,
           totalLiquidityETH: latestLiquidityETH,
           mostLiquidPairs: latestPairDatas,
         })
       } else {
-        latestLiquidityUSD = dayIndexArray[index].totalLiquidityUSD
         latestLiquidityETH = dayIndexArray[index].totalLiquidityETH
-        latestPriceUSD = dayIndexArray[index].priceUSD
         latestPriceETH = dayIndexArray[index].priceETH
         latestPairDatas = dayIndexArray[index].mostLiquidPairs
         index = index + 1
@@ -715,26 +730,24 @@ const getTokenChartData = async (tokenAddress) => {
 
 export function Updater() {
   const [, { updateTopTokens }] = useTokenDataContext()
-  const [ethPrice, ethPriceOld] = useEthPrice()
   useEffect(() => {
     async function getData() {
       // get top pairs for overview list
-      let topTokens = await getTopTokens(ethPrice, ethPriceOld)
+      let topTokens = await getTopTokens()
       topTokens && updateTopTokens(topTokens)
     }
-    ethPrice && ethPriceOld && getData()
-  }, [ethPrice, ethPriceOld, updateTopTokens])
+    getData()
+  }, [updateTopTokens])
   return null
 }
 
 export function useTokenData(tokenAddress) {
   const [state, { update }] = useTokenDataContext()
-  const [ethPrice, ethPriceOld] = useEthPrice()
   const tokenData = state?.[tokenAddress]
 
   useEffect(() => {
-    if (!tokenData && ethPrice && ethPriceOld && isAddress(tokenAddress)) {
-      getTokenData(tokenAddress, ethPrice, ethPriceOld).then((data) => {
+    if (!tokenData && isAddress(tokenAddress)) {
+      getTokenData(tokenAddress).then((data) => {
         update(tokenAddress, data)
         if (typeof window !== 'undefined') {
           window.__NOVADEX_INFO_LAST_QUERY__ = {
@@ -746,7 +759,7 @@ export function useTokenData(tokenAddress) {
         }
       })
     }
-  }, [ethPrice, ethPriceOld, tokenAddress, tokenData, update])
+  }, [tokenAddress, tokenData, update])
 
   return tokenData || {}
 }
@@ -794,7 +807,6 @@ export function useTokenPairs(tokenAddress) {
 
 export function useTokenDataCombined(tokenAddresses) {
   const [state, { updateCombinedVolume }] = useTokenDataContext()
-  const [ethPrice, ethPriceOld] = useEthPrice()
 
   const volume = state?.combinedVol
 
@@ -802,14 +814,14 @@ export function useTokenDataCombined(tokenAddresses) {
     async function fetchDatas() {
       Promise.all(
         tokenAddresses.map(async (address) => {
-          return await getTokenData(address, ethPrice, ethPriceOld)
+          return await getTokenData(address)
         })
       )
         .then((res) => {
           if (res) {
             const newVolume = res
               ? res?.reduce(function (acc, entry) {
-                  acc = acc + parseFloat(entry.oneDayVolumeUSD)
+                  acc = acc + parseFloat(entry.oneDayVolumeETH)
                   return acc
                 }, 0)
               : 0
@@ -820,10 +832,10 @@ export function useTokenDataCombined(tokenAddresses) {
           console.log('error fetching combined data')
         })
     }
-    if (!volume && ethPrice && ethPriceOld) {
+    if (!volume) {
       fetchDatas()
     }
-  }, [tokenAddresses, ethPrice, ethPriceOld, volume, updateCombinedVolume])
+  }, [tokenAddresses, volume, updateCombinedVolume])
 
   return volume
 }

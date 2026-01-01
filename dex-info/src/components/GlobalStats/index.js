@@ -3,8 +3,11 @@ import styled from 'styled-components'
 import { RowFixed, RowBetween } from '../Row'
 import { useMedia } from 'react-use'
 import { useGlobalData } from '../../contexts/GlobalData'
+import { useLatestBlocks } from '../../contexts/Application'
+import { usePairData } from '../../contexts/PairData'
 import { useSpotPriceHistory } from '../../hooks/useSpotPriceHistory'
 import { formattedNum, localNumber, formatPrice } from '../../utils'
+import { PAIR_ADDRESS, WRAPPED_NATIVE_ADDRESS } from '../../constants/urls'
 
 import { TYPE } from '../../Theme'
 
@@ -26,12 +29,30 @@ export default function GlobalStats() {
   const below816 = useMedia('(max-width: 816px)')
 
   const { oneDayVolumeETH, oneDayTxns, pairCount } = useGlobalData()
+  const [latestBlock] = useLatestBlocks()
+  const subgraphReady = Boolean(latestBlock)
   const rpcUrl = process.env.REACT_APP_RPC_URL
   const factoryAddress = process.env.REACT_APP_FACTORY_ADDRESS
   const wnovaAddress = process.env.REACT_APP_WNOVA_ADDRESS
   const tonyAddress = process.env.REACT_APP_TONY_ADDRESS
-  const spotHistory = useSpotPriceHistory(rpcUrl, factoryAddress, wnovaAddress, tonyAddress)
-  const formattedSpot = spotHistory?.lastPrice ? formatPrice(spotHistory.lastPrice) : '—'
+  const pairAddress = PAIR_ADDRESS || process.env.REACT_APP_PAIR_ADDRESS
+  const pairData = usePairData(pairAddress)
+  const wnovaLower = WRAPPED_NATIVE_ADDRESS || wnovaAddress?.toLowerCase?.() || ''
+  const token0Id = pairData?.token0?.id?.toLowerCase?.()
+  const token1Id = pairData?.token1?.id?.toLowerCase?.()
+  const reserve0 = Number(pairData?.reserve0 || 0)
+  const reserve1 = Number(pairData?.reserve1 || 0)
+  let spotFromPair = null
+  if (wnovaLower && token0Id && token1Id && reserve0 > 0 && reserve1 > 0) {
+    if (token0Id === wnovaLower) {
+      spotFromPair = reserve0 / reserve1
+    } else if (token1Id === wnovaLower) {
+      spotFromPair = reserve1 / reserve0
+    }
+  }
+  const spotHistory = useSpotPriceHistory(subgraphReady ? null : rpcUrl, factoryAddress, wnovaAddress, tonyAddress)
+  const spotValue = Number.isFinite(spotFromPair) ? spotFromPair : spotHistory?.lastPrice
+  const formattedSpot = spotValue ? formatPrice(spotValue) : '—'
   const oneDayFees = oneDayVolumeETH ? formattedNum(oneDayVolumeETH * 0.003, false) : '—'
 
   return (
@@ -40,7 +61,7 @@ export default function GlobalStats() {
         <RowFixed>
           {!below400 && (
             <TYPE.main mr={'1rem'} style={{ position: 'relative' }}>
-              Pool price (TONY/WNOVA): <Medium>{formattedSpot}</Medium>
+              TONY price (WNOVA): <Medium>{formattedSpot}</Medium>
             </TYPE.main>
           )}
 

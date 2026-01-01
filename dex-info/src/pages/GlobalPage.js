@@ -15,6 +15,7 @@ import OnchainMarketPanel from '../components/OnchainMarketPanel'
 
 import { useGlobalData, useGlobalTransactions } from '../contexts/GlobalData'
 import { useAllPairData } from '../contexts/PairData'
+import { useLatestBlocks } from '../contexts/Application'
 import { useMedia } from 'react-use'
 import Panel from '../components/Panel'
 import { useAllTokenData } from '../contexts/TokenData'
@@ -58,6 +59,8 @@ function GlobalPage() {
   const allPairs = useAllPairData()
   const allTokens = useAllTokenData()
   const transactions = useGlobalTransactions()
+  const [latestBlock] = useLatestBlocks()
+  const subgraphReady = Boolean(latestBlock)
   const { totalLiquidityETH, oneDayVolumeETH, volumeChangeETH, liquidityChangeETH } = useGlobalData()
 
   // breakpoints
@@ -97,7 +100,7 @@ function GlobalPage() {
             <Search />
             <GlobalStats />
             <TYPE.light fontSize={12} color="text2">
-              No USD oracle on Ethernova yet — values shown in WNOVA where possible.
+              No fiat oracle on Ethernova yet — values shown in WNOVA where possible.
             </TYPE.light>
           </AutoColumn>
           <OnchainMarketPanel
@@ -108,6 +111,7 @@ function GlobalPage() {
             pairAddress={PAIR_ADDRESS}
             swaps={pairSwaps}
             showVolume={false}
+            allowOnchain={!subgraphReady}
           />
           {below800 && ( // mobile card
             <Box mb={20}>

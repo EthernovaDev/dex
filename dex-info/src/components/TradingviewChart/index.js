@@ -118,7 +118,7 @@ const TradingViewChart = ({
         },
       },
       localization: {
-        priceFormatter: (val) => formattedNum(val, true),
+        priceFormatter: (val) => formattedNum(val, false),
       },
     })
 
@@ -176,7 +176,7 @@ const TradingViewChart = ({
       toolTip.innerHTML =
         `<div style="font-size: 16px; margin: 4px 0px; color: ${textColor};">${title}</div>` +
         `<div style="font-size: 22px; margin: 4px 0px; color: ${textColor}">` +
-        formattedNum(price, true) +
+        formattedNum(price, false) +
         '</div>' +
         '<div>' +
         dateStr +
@@ -204,7 +204,7 @@ const TradingViewChart = ({
         `<div style="font-size: 16px; margin: 4px 0px; color: ${textColor};">${title} ` +
         `${type === CHART_TYPES.BAR && !useWeekly ? '(24hr)' : ''}</div>` +
         `<div style="font-size: 22px; margin: 4px 0px; color:${textColor}">` +
-        formattedNum(base ?? 0, true) +
+        formattedNum(base ?? 0, false) +
         `<span style="margin-left: 10px; font-size: 16px; color: ${color};">${formattedPercentChange}</span>` +
         '</div>'
     },

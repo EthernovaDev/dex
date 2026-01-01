@@ -102,6 +102,9 @@ export function useSpotPriceHistory(rpcUrl, factoryAddress, wnovaAddress, tonyAd
         if (cached && !cancelled) {
           setState({ status: 'ok', prices: cached.prices, lastPrice: cached.prices[cached.prices.length - 1] })
         }
+        if (cached?.updatedAt && Date.now() - cached.updatedAt < 120000 && cached.prices?.length) {
+          return
+        }
 
         const latestHex = await rpcCallWithRetry(rpcUrl, 'eth_blockNumber', [], 3)
         const latestBlock = Number.parseInt(latestHex, 16)
@@ -111,8 +114,20 @@ export function useSpotPriceHistory(rpcUrl, factoryAddress, wnovaAddress, tonyAd
           { to: pairAddress, data: '0x0dfe1681' },
           'latest'
         ])
+        const token1Raw = await rpcCallWithRetry(rpcUrl, 'eth_call', [
+          { to: pairAddress, data: '0xd21220a7' },
+          'latest'
+        ])
         const token0 = `0x${token0Raw.slice(-40)}`.toLowerCase()
+        const token1 = `0x${token1Raw.slice(-40)}`.toLowerCase()
         const wnovaLower = wnovaAddress.toLowerCase()
+        const tonyLower = tonyAddress.toLowerCase()
+        const isToken0Wnova = token0 === wnovaLower
+        const isToken1Wnova = token1 === wnovaLower
+        const isToken0Tony = token0 === tonyLower
+        const isToken1Tony = token1 === tonyLower
+        const isTargetPair =
+          (isToken0Wnova && isToken1Tony) || (isToken1Wnova && isToken0Tony)
 
         const logs = await rpcCallWithRetry(rpcUrl, 'eth_getLogs', [
           {
@@ -129,9 +144,8 @@ export function useSpotPriceHistory(rpcUrl, factoryAddress, wnovaAddress, tonyAd
             const parsed = SYNC_INTERFACE.parseLog(log)
             const reserve0 = new BigNumber(parsed.args.reserve0.toString())
             const reserve1 = new BigNumber(parsed.args.reserve1.toString())
-            if (reserve0.isZero() || reserve1.isZero()) continue
-            const price =
-              token0 === wnovaLower ? reserve1.div(reserve0).toNumber() : reserve0.div(reserve1).toNumber()
+            if (!isTargetPair || reserve0.isZero() || reserve1.isZero()) continue
+            const price = isToken0Wnova ? reserve0.div(reserve1).toNumber() : reserve1.div(reserve0).toNumber()
             if (Number.isFinite(price)) nextPrices.push(price)
           } catch {
             // ignore bad log

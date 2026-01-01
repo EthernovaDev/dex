@@ -95,7 +95,7 @@ function LPList({ lps, disbaleLinks, maxItems = 10 }) {
       if (Object.keys(lps).length % ITEMS_PER_PAGE === 0) {
         extraPages = 0
       }
-      setMaxPage(Math.floor(Object.keys(lps).length / ITEMS_PER_PAGE) + extraPages)
+      setMaxPage(Math.max(1, Math.floor(Object.keys(lps).length / ITEMS_PER_PAGE) + extraPages))
     }
   }, [ITEMS_PER_PAGE, lps])
 
@@ -127,7 +127,7 @@ function LPList({ lps, disbaleLinks, maxItems = 10 }) {
             </RowFixed>
           </CustomLink>
         </DataText>
-        <DataText area="value">{formattedNum(lp.usd, true)}</DataText>
+        <DataText area="value">{formattedNum(lp.wnova ?? 0, false)}</DataText>
       </DashGrid>
     )
   }
@@ -163,7 +163,7 @@ function LPList({ lps, disbaleLinks, maxItems = 10 }) {
           <TYPE.main area="pair">Pair</TYPE.main>
         </Flex>
         <Flex alignItems="center" justifyContent="flexEnd">
-          <TYPE.main area="value">Value</TYPE.main>
+          <TYPE.main area="value">Value (WNOVA)</TYPE.main>
         </Flex>
       </DashGrid>
       <Divider />

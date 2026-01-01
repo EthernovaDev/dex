@@ -93,14 +93,12 @@ const PairChart = ({ address, color, base0, base1 }) => {
     if (!chartData) return chartData
     const reserve0 = new BigNumber(pairData?.reserve0 ?? 0)
     const reserve1 = new BigNumber(pairData?.reserve1 ?? 0)
-    const token0Price = new BigNumber(pairData?.token0Price ?? 0)
-    const token1Price = new BigNumber(pairData?.token1Price ?? 0)
     let liquidityWnova = new BigNumber(0)
     if (isWnovaPair) {
       if (token0Id === WRAPPED_NATIVE_ADDRESS) {
-        liquidityWnova = reserve0.plus(reserve1.multipliedBy(token1Price))
+        liquidityWnova = reserve0.multipliedBy(2)
       } else if (token1Id === WRAPPED_NATIVE_ADDRESS) {
-        liquidityWnova = reserve1.plus(reserve0.multipliedBy(token0Price))
+        liquidityWnova = reserve1.multipliedBy(2)
       }
     }
 
@@ -110,10 +108,7 @@ const PairChart = ({ address, color, base0, base1 }) => {
           ? entry.dailyVolumeToken0
           : entry.dailyVolumeToken1
         : entry.dailyVolumeETH
-      const reserveWnova =
-        isWnovaPair && liquidityWnova.gt(0)
-          ? parseFloat(liquidityWnova.toString())
-          : entry.reserveUSD
+      const reserveWnova = isWnovaPair && liquidityWnova.gt(0) ? parseFloat(liquidityWnova.toString()) : 0
       return {
         ...entry,
         dailyVolumeETH: volume ? parseFloat(volume) : 0,

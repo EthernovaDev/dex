@@ -48,7 +48,7 @@ const UserChart = ({ account }) => {
       ) : (
         <RowBetween mb={40}>
           <AutoRow gap="10px">
-            <TYPE.main>Liquidity Value</TYPE.main>
+            <TYPE.main>Liquidity Value (WNOVA)</TYPE.main>
           </AutoRow>
           <AutoRow justify="flex-end" gap="4px">
             <OptionButton
@@ -119,12 +119,12 @@ const UserChart = ({ account }) => {
             />
             <Area
               key={'other'}
-              dataKey={'valueUSD'}
+              dataKey={'valueWnova'}
               stackId="2"
               strokeWidth={2}
               dot={false}
               type="monotone"
-              name={'Liquidity'}
+              name={'Liquidity (WNOVA)'}
               yAxisId={0}
               stroke={darken(0.12, '#ff007a')}
               fill="url(#colorUv)"

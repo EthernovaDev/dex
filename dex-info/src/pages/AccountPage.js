@@ -3,7 +3,7 @@ import styled from 'styled-components'
 import { useUserTransactions, useUserPositions, useMiningPositions } from '../contexts/User'
 import TxnList from '../components/TxnList'
 import Panel from '../components/Panel'
-import { formattedNum } from '../utils'
+import { formattedNum, getReserveWnova } from '../utils'
 import Row, { AutoRow, RowFixed, RowBetween } from '../components/Row'
 import { AutoColumn } from '../components/Column'
 import UserChart from '../components/UserChart'
@@ -22,6 +22,7 @@ import { useMedia } from 'react-use'
 import Search from '../components/Search'
 import { useSavedAccounts } from '../contexts/LocalStorage'
 import { EXPLORER_URL } from '../constants/urls'
+import { WRAPPED_NATIVE_ADDRESS } from '../constants/urls'
 
 const explorerBase = EXPLORER_URL.replace(/\/+$/, '')
 
@@ -100,14 +101,26 @@ function AccountPage({ account }) {
   // get data for user stats
   const transactionCount = transactions?.swaps?.length + transactions?.burns?.length + transactions?.mints?.length
 
-  // get derived totals
-  let totalSwappedUSD = useMemo(() => {
+  const wnovaLower = WRAPPED_NATIVE_ADDRESS?.toLowerCase?.() || ''
+
+  // get derived totals (WNOVA-based)
+  let totalSwappedWnova = useMemo(() => {
     return transactions?.swaps
       ? transactions?.swaps.reduce((total, swap) => {
-          return total + parseFloat(swap.amountUSD)
+          const token0Id = swap?.pair?.token0?.id?.toLowerCase?.()
+          const token1Id = swap?.pair?.token1?.id?.toLowerCase?.()
+          if (token0Id === wnovaLower) {
+            const amount = parseFloat(swap.amount0In) > 0 ? parseFloat(swap.amount0In) : parseFloat(swap.amount0Out)
+            return total + (Number.isFinite(amount) ? amount : 0)
+          }
+          if (token1Id === wnovaLower) {
+            const amount = parseFloat(swap.amount1In) > 0 ? parseFloat(swap.amount1In) : parseFloat(swap.amount1Out)
+            return total + (Number.isFinite(amount) ? amount : 0)
+          }
+          return total
         }, 0)
       : 0
-  }, [transactions])
+  }, [transactions, wnovaLower])
 
   // if any position has token from fee warning list, show warning
   const [showWarning, setShowWarning] = useState(false)
@@ -138,14 +151,15 @@ function AccountPage({ account }) {
   const positionValue = useMemo(() => {
     return dynamicPositions
       ? dynamicPositions.reduce((total, position) => {
+          const reserveWnova = getReserveWnova(position?.pair, wnovaLower)
+          if (!reserveWnova) return total
           return (
             total +
-            (parseFloat(position?.liquidityTokenBalance) / parseFloat(position?.pair?.totalSupply)) *
-              position?.pair?.reserveUSD
+            (parseFloat(position?.liquidityTokenBalance) / parseFloat(position?.pair?.totalSupply)) * reserveWnova * 2
           )
         }, 0)
       : null
-  }, [dynamicPositions])
+  }, [dynamicPositions, wnovaLower])
 
   useEffect(() => {
     window.scrollTo({
@@ -274,10 +288,10 @@ function AccountPage({ account }) {
                   <RowFixed align="flex-end">
                     <TYPE.header fontSize={'24px'} lineHeight={1}>
                       {positionValue
-                        ? formattedNum(positionValue, true)
+                        ? `WNOVA ${formattedNum(positionValue, false)}`
                         : positionValue === 0
-                        ? formattedNum(0, true)
-                        : '-'}
+                        ? `WNOVA ${formattedNum(0, false)}`
+                        : '—'}
                     </TYPE.header>
                   </RowFixed>
                 </AutoColumn>
@@ -288,7 +302,7 @@ function AccountPage({ account }) {
                   </RowBetween>
                   <RowFixed align="flex-end">
                     <TYPE.header fontSize={'24px'} lineHeight={1} color={aggregateFees && 'green'}>
-                      {aggregateFees ? formattedNum(aggregateFees, true, true) : '-'}
+                      {aggregateFees ? `WNOVA ${formattedNum(aggregateFees, false, true)}` : '—'}
                     </TYPE.header>
                   </RowFixed>
                 </AutoColumn>
@@ -354,14 +368,16 @@ function AccountPage({ account }) {
           >
             <AutoRow gap="20px">
               <AutoColumn gap="8px">
-                <TYPE.header fontSize={24}>{totalSwappedUSD ? formattedNum(totalSwappedUSD, true) : '-'}</TYPE.header>
-                <TYPE.main>Total Value Swapped</TYPE.main>
+                <TYPE.header fontSize={24}>
+                  {totalSwappedWnova ? `WNOVA ${formattedNum(totalSwappedWnova, false)}` : '—'}
+                </TYPE.header>
+                <TYPE.main>Total Value Swapped (WNOVA)</TYPE.main>
               </AutoColumn>
               <AutoColumn gap="8px">
                 <TYPE.header fontSize={24}>
-                  {totalSwappedUSD ? formattedNum(totalSwappedUSD * 0.003, true) : '-'}
+                  {totalSwappedWnova ? `WNOVA ${formattedNum(totalSwappedWnova * 0.003, false)}` : '—'}
                 </TYPE.header>
-                <TYPE.main>Total Fees Paid</TYPE.main>
+                <TYPE.main>Total Fees Paid (WNOVA)</TYPE.main>
               </AutoColumn>
               <AutoColumn gap="8px">
                 <TYPE.header fontSize={24}>{transactionCount ? transactionCount : '-'}</TYPE.header>

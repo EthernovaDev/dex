@@ -32,7 +32,7 @@ function AllTokensPage() {
         </RowBetween>
         {/* <AutoRow gap="4px">
           <CheckBox checked={useTracked} setChecked={() => setUseTracked(!useTracked)} text={'Hide untracked tokens'} />
-          <QuestionHelper text="USD amounts may be inaccurate in low liquidity pairs or pairs without NOVA or stablecoins." />
+          <QuestionHelper text="Values are shown in WNOVA; pairs without WNOVA may have limited price data." />
         </AutoRow> */}
         <Panel style={{ marginTop: '6px', padding: below600 && '1rem 0 0 0 ' }}>
           <TopTokenList tokens={allTokens} itemMax={50} />

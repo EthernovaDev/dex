@@ -104,6 +104,9 @@ export function useOnchainTokenInfo(address, rpcUrl) {
         if (cached && !cancelled) {
           setState({ status: 'ok', info: cached, error: null })
         }
+        if (cached?.updatedAt && Date.now() - cached.updatedAt < 120000) {
+          return
+        }
 
         const nameData = await rpcCallWithRetry(rpcUrl, 'eth_call', [
           { to: address, data: ERC20_INTERFACE.functions['name()'].encode([]) },

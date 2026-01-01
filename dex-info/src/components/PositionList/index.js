@@ -9,13 +9,13 @@ import Link, { CustomLink } from '../Link'
 import { Divider } from '../../components'
 import DoubleTokenLogo from '../DoubleLogo'
 import { withRouter } from 'react-router-dom'
-import { formattedNum, getPoolLink } from '../../utils'
+import { formattedNum, getPoolLink, getReserveWnova } from '../../utils'
 import { AutoColumn } from '../Column'
-import { useEthPrice } from '../../contexts/GlobalData'
 import { RowFixed } from '../Row'
 import { ButtonLight } from '../ButtonStyled'
 import { TYPE } from '../../Theme'
 import FormattedName from '../FormattedName'
+import { WRAPPED_NATIVE_ADDRESS } from '../../constants/urls'
 
 dayjs.extend(utc)
 
@@ -135,11 +135,12 @@ function PositionList({ positions }) {
     }
   }, [positions])
 
-  const [ethPrice] = useEthPrice()
+  const wnovaLower = WRAPPED_NATIVE_ADDRESS?.toLowerCase?.() || ''
 
   const ListItem = ({ position, index }) => {
     const poolOwnership = position.liquidityTokenBalance / position.pair.totalSupply
-    const valueUSD = poolOwnership * position.pair.reserveUSD
+    const reserveWnova = getReserveWnova(position.pair, wnovaLower)
+    const valueWnova = reserveWnova ? poolOwnership * reserveWnova * 2 : null
 
     return (
       <DashGrid style={{ opacity: poolOwnership > 0 ? 1 : 0.6 }} focus={true}>
@@ -176,7 +177,7 @@ function PositionList({ positions }) {
         </DataText>
         <DataText area="uniswap">
           <AutoColumn gap="12px" justify="flex-end">
-            <TYPE.main>{formattedNum(valueUSD, true, true)}</TYPE.main>
+            <TYPE.main>{valueWnova ? `WNOVA ${formattedNum(valueWnova, false, true)}` : '—'}</TYPE.main>
             <AutoColumn gap="4px" justify="flex-end">
               <RowFixed>
                 <TYPE.small fontWeight={400}>
@@ -207,18 +208,18 @@ function PositionList({ positions }) {
           <DataText area="return">
             <AutoColumn gap="12px" justify="flex-end">
               <TYPE.main color={'green'}>
-                <RowFixed>{formattedNum(position?.fees.sum, true, true)}</RowFixed>
+                <RowFixed>
+                  {Number.isFinite(Number(position?.fees?.sum))
+                    ? `WNOVA ${formattedNum(position?.fees.sum, false, true)}`
+                    : '—'}
+                </RowFixed>
               </TYPE.main>
               <AutoColumn gap="4px" justify="flex-end">
                 <RowFixed>
                   <TYPE.small fontWeight={400}>
                     {parseFloat(position.pair.token0.derivedETH)
-                      ? formattedNum(
-                          position?.fees.sum / (parseFloat(position.pair.token0.derivedETH) * ethPrice) / 2,
-                          false,
-                          true
-                        )
-                      : 0}{' '}
+                      ? formattedNum(position?.fees.sum / parseFloat(position.pair.token0.derivedETH) / 2, false, true)
+                      : '—'}{' '}
                   </TYPE.small>
                   <FormattedName
                     text={position.pair.token0.symbol}
@@ -230,12 +231,8 @@ function PositionList({ positions }) {
                 <RowFixed>
                   <TYPE.small fontWeight={400}>
                     {parseFloat(position.pair.token1.derivedETH)
-                      ? formattedNum(
-                          position?.fees.sum / (parseFloat(position.pair.token1.derivedETH) * ethPrice) / 2,
-                          false,
-                          true
-                        )
-                      : 0}{' '}
+                      ? formattedNum(position?.fees.sum / parseFloat(position.pair.token1.derivedETH) / 2, false, true)
+                      : '—'}{' '}
                   </TYPE.small>
                   <FormattedName
                     text={position.pair.token1.symbol}
@@ -267,8 +264,10 @@ function PositionList({ positions }) {
           return p0?.uniswap?.return > p1?.uniswap?.return ? (sortDirection ? -1 : 1) : sortDirection ? 1 : -1
         }
         if (sortedColumn === SORT_FIELD.VALUE) {
-          const bal0 = (p0.liquidityTokenBalance / p0.pair.totalSupply) * p0.pair.reserveUSD
-          const bal1 = (p1.liquidityTokenBalance / p1.pair.totalSupply) * p1.pair.reserveUSD
+          const bal0Reserve = getReserveWnova(p0.pair, wnovaLower)
+          const bal1Reserve = getReserveWnova(p1.pair, wnovaLower)
+          const bal0 = bal0Reserve ? (p0.liquidityTokenBalance / p0.pair.totalSupply) * bal0Reserve * 2 : 0
+          const bal1 = bal1Reserve ? (p1.liquidityTokenBalance / p1.pair.totalSupply) * bal1Reserve * 2 : 0
           return bal0 > bal1 ? (sortDirection ? -1 : 1) : sortDirection ? 1 : -1
         }
         return 1

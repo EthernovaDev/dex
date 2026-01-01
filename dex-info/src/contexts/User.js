@@ -302,8 +302,8 @@ export function useUserPositionChart(position, account) {
 
 /**
  * For each day starting with min(first position timestamp, beginning of time window),
- * get total liquidity supplied by user in USD. Format in array with date timestamps
- * and usd liquidity value.
+ * get total liquidity supplied by user in WNOVA. Format in array with date timestamps
+ * and WNOVA liquidity value.
  */
 export function useUserLiquidityChart(account) {
   const history = useUserSnapshots(account)
@@ -413,23 +413,24 @@ export function useUserLiquidityChart(account) {
           return mostRecent
         })
 
-        // now cycle through pair day datas, for each one find usd value = ownership[address] * reserveUSD
-        const dailyUSD = relavantDayDatas.reduce((totalUSD, dayData) => {
+        // now cycle through pair day datas, for each one find WNOVA value = ownership[address] * reserveETH
+        const dailyWnova = relavantDayDatas.reduce((totalWnova, dayData) => {
           if (dayData) {
-            return (totalUSD =
-              totalUSD +
+            const reserveWnova = parseFloat(dayData.reserveETH ?? dayData.reserveUSD ?? 0)
+            return (totalWnova =
+              totalWnova +
               (ownershipPerPair[dayData.pairAddress]
                 ? (parseFloat(ownershipPerPair[dayData.pairAddress].lpTokenBalance) / parseFloat(dayData.totalSupply)) *
-                  parseFloat(dayData.reserveUSD)
+                  reserveWnova
                 : 0))
           } else {
-            return totalUSD
+            return totalWnova
           }
         }, 0)
 
         formattedHistory.push({
           date: dayTimestamp,
-          valueUSD: dailyUSD,
+          valueWnova: dailyWnova,
         })
       }
 

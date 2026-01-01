@@ -5,7 +5,7 @@ import utc from 'dayjs/plugin/utc'
 
 import { formatTime, formattedNum, urls } from '../../utils'
 import { useMedia } from 'react-use'
-import { useCurrentCurrency } from '../../contexts/Application'
+import { WRAPPED_NATIVE_ADDRESS } from '../../constants/urls'
 import { RowFixed, RowBetween } from '../Row'
 
 import LocalLoader from '../LocalLoader'
@@ -131,7 +131,7 @@ const SortText = styled.button`
 `
 
 const SORT_FIELD = {
-  VALUE: 'amountUSD',
+  VALUE: 'valueWnova',
   AMOUNT0: 'token0Amount',
   AMOUNT1: 'token1Amount',
   TIMESTAMP: 'timestamp',
@@ -173,7 +173,7 @@ function TxnList({ transactions, symbol0Override, symbol1Override, color }) {
   const [filteredItems, setFilteredItems] = useState()
   const [txFilter, setTxFilter] = useState(TXN_TYPE.ALL)
 
-  const [currency] = useCurrentCurrency()
+  const wnovaLower = WRAPPED_NATIVE_ADDRESS?.toLowerCase?.() || ''
 
   useEffect(() => {
     setMaxPage(1) // edit this to do modular
@@ -195,7 +195,14 @@ function TxnList({ transactions, symbol0Override, symbol1Override, color }) {
           newTxn.account = mint.to
           newTxn.token0Symbol = updateNameData(mint.pair).token0.symbol
           newTxn.token1Symbol = updateNameData(mint.pair).token1.symbol
-          newTxn.amountUSD = mint.amountUSD
+          const token0Id = mint.pair?.token0?.id?.toLowerCase?.()
+          const token1Id = mint.pair?.token1?.id?.toLowerCase?.()
+          newTxn.valueWnova =
+            token0Id === wnovaLower
+              ? parseFloat(mint.amount0)
+              : token1Id === wnovaLower
+              ? parseFloat(mint.amount1)
+              : null
           return newTxns.push(newTxn)
         })
       }
@@ -210,7 +217,14 @@ function TxnList({ transactions, symbol0Override, symbol1Override, color }) {
           newTxn.account = burn.sender
           newTxn.token0Symbol = updateNameData(burn.pair).token0.symbol
           newTxn.token1Symbol = updateNameData(burn.pair).token1.symbol
-          newTxn.amountUSD = burn.amountUSD
+          const token0Id = burn.pair?.token0?.id?.toLowerCase?.()
+          const token1Id = burn.pair?.token1?.id?.toLowerCase?.()
+          newTxn.valueWnova =
+            token0Id === wnovaLower
+              ? parseFloat(burn.amount0)
+              : token1Id === wnovaLower
+              ? parseFloat(burn.amount1)
+              : null
           return newTxns.push(newTxn)
         })
       }
@@ -237,7 +251,19 @@ function TxnList({ transactions, symbol0Override, symbol1Override, color }) {
           newTxn.timestamp = swap.transaction.timestamp
           newTxn.type = TXN_TYPE.SWAP
 
-          newTxn.amountUSD = swap.amountUSD
+          const token0Id = swap.pair?.token0?.id?.toLowerCase?.()
+          const token1Id = swap.pair?.token1?.id?.toLowerCase?.()
+          const amount0In = parseFloat(swap.amount0In)
+          const amount0Out = parseFloat(swap.amount0Out)
+          const amount1In = parseFloat(swap.amount1In)
+          const amount1Out = parseFloat(swap.amount1Out)
+          let valueWnova = null
+          if (token0Id === wnovaLower) {
+            valueWnova = amount0In > 0 ? amount0In : amount0Out
+          } else if (token1Id === wnovaLower) {
+            valueWnova = amount1In > 0 ? amount1In : amount1Out
+          }
+          newTxn.valueWnova = valueWnova
           newTxn.account = swap.to
           return newTxns.push(newTxn)
         })
@@ -288,7 +314,9 @@ function TxnList({ transactions, symbol0Override, symbol1Override, color }) {
           </Link>
         </DataText>
         <DataText area="value">
-          {currency === 'NOVA' ? 'NOVA ' + formattedNum(item.valueETH) : formattedNum(item.amountUSD, true)}
+          {item.valueWnova !== null && item.valueWnova !== undefined
+            ? `WNOVA ${formattedNum(item.valueWnova)}`
+            : '—'}
         </DataText>
         {!below780 && (
           <>

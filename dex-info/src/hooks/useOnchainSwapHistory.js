@@ -146,6 +146,9 @@ export function useOnchainSwapHistory({
             readPath: 'cache',
           })
         }
+        if (cached?.updatedAt && Date.now() - cached.updatedAt < 120000 && cached.candles?.length) {
+          return
+        }
 
         const latestHex = await rpcCallWithRetry(rpcUrl, 'eth_blockNumber', [])
         const latestBlock = Number.parseInt(latestHex, 16)
@@ -155,13 +158,20 @@ export function useOnchainSwapHistory({
           { to: pairAddress, data: '0x0dfe1681' },
           'latest',
         ])
-        await rpcCallWithRetry(rpcUrl, 'eth_call', [
+        const token1Raw = await rpcCallWithRetry(rpcUrl, 'eth_call', [
           { to: pairAddress, data: '0xd21220a7' },
           'latest',
         ])
         const token0 = `0x${token0Raw.slice(-40)}`.toLowerCase()
+        const token1 = `0x${token1Raw.slice(-40)}`.toLowerCase()
         const wnovaLower = wnovaAddress.toLowerCase()
-        const baseIsToken0 = token0 === wnovaLower
+        const tonyLower = tonyAddress.toLowerCase()
+        const isToken0Wnova = token0 === wnovaLower
+        const isToken1Wnova = token1 === wnovaLower
+        const isToken0Tony = token0 === tonyLower
+        const isToken1Tony = token1 === tonyLower
+        const isTargetPair =
+          (isToken0Wnova && isToken1Tony) || (isToken1Wnova && isToken0Tony)
 
         const logs = await rpcCallWithRetry(rpcUrl, 'eth_getLogs', [
           {
@@ -191,36 +201,49 @@ export function useOnchainSwapHistory({
             const amount0Out = new BigNumber(parsed.args.amount0Out.toString())
             const amount1Out = new BigNumber(parsed.args.amount1Out.toString())
 
-            let baseAmount = new BigNumber(0)
-            let quoteAmount = new BigNumber(0)
-            let side = 'buy'
-            if (baseIsToken0) {
-              if (amount0In.gt(0) && amount1Out.gt(0)) {
-                baseAmount = amount0In
-                quoteAmount = amount1Out
-                side = 'sell'
-              } else if (amount1In.gt(0) && amount0Out.gt(0)) {
-                baseAmount = amount0Out
-                quoteAmount = amount1In
-                side = 'buy'
-              }
-            } else {
-              if (amount1In.gt(0) && amount0Out.gt(0)) {
-                baseAmount = amount1In
-                quoteAmount = amount0Out
-                side = 'sell'
-              } else if (amount0In.gt(0) && amount1Out.gt(0)) {
-                baseAmount = amount1Out
-                quoteAmount = amount0In
-                side = 'buy'
-              }
-            }
-            if (baseAmount.isZero() || quoteAmount.isZero()) continue
+            if (!isTargetPair) continue
 
-            const base = parseAmount(baseAmount, 18)
-            const quote = parseAmount(quoteAmount, 18)
-            if (!base.gt(0)) continue
-            const price = quote.div(base)
+            let amountWnovaIn = new BigNumber(0)
+            let amountWnovaOut = new BigNumber(0)
+            let amountTonyIn = new BigNumber(0)
+            let amountTonyOut = new BigNumber(0)
+
+            if (isToken0Wnova) {
+              amountWnovaIn = amount0In
+              amountWnovaOut = amount0Out
+            } else if (isToken1Wnova) {
+              amountWnovaIn = amount1In
+              amountWnovaOut = amount1Out
+            }
+
+            if (isToken0Tony) {
+              amountTonyIn = amount0In
+              amountTonyOut = amount0Out
+            } else if (isToken1Tony) {
+              amountTonyIn = amount1In
+              amountTonyOut = amount1Out
+            }
+
+            const wnovaIn = parseAmount(amountWnovaIn, 18)
+            const wnovaOut = parseAmount(amountWnovaOut, 18)
+            const tonyIn = parseAmount(amountTonyIn, 18)
+            const tonyOut = parseAmount(amountTonyOut, 18)
+
+            let side = null
+            let wnovaAmount = new BigNumber(0)
+            let tonyAmount = new BigNumber(0)
+            if (wnovaIn.gt(0) && tonyOut.gt(0)) {
+              side = 'buy'
+              wnovaAmount = wnovaIn
+              tonyAmount = tonyOut
+            } else if (tonyIn.gt(0) && wnovaOut.gt(0)) {
+              side = 'sell'
+              wnovaAmount = wnovaOut
+              tonyAmount = tonyIn
+            }
+            if (!side || !wnovaAmount.gt(0) || !tonyAmount.gt(0)) continue
+
+            const price = wnovaAmount.div(tonyAmount)
             if (!price.isFinite()) continue
 
             const timestamp = await getTimestamp(log.blockNumber)
@@ -237,17 +260,17 @@ export function useOnchainSwapHistory({
             candle.close = price.toNumber()
             candle.high = Math.max(candle.high, price.toNumber())
             candle.low = Math.min(candle.low, price.toNumber())
-            candle.volume = candle.volume.plus(base)
+            candle.volume = candle.volume.plus(wnovaAmount)
             candlesMap.set(bucket, candle)
 
-            const sideLabel = side === 'sell' ? 'SELL WNOVA (BUY TONY)' : 'BUY WNOVA (SELL TONY)'
+            const sideLabel = side === 'sell' ? 'SELL TONY' : 'BUY TONY'
             trades.push({
               timestamp,
               price: price.toNumber(),
               side,
               sideLabel,
-              baseAmount: base.toNumber(),
-              quoteAmount: quote.toNumber(),
+              wnovaAmount: wnovaAmount.toNumber(),
+              tonyAmount: tonyAmount.toNumber(),
               txHash: log.transactionHash,
             })
           } catch {

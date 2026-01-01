@@ -51,7 +51,7 @@ export const BLOCKED_WARNINGS = {
  */
 export const FEE_WARNING_TOKENS = ['0xd46ba6d942050d489dbd938a2c909a5d5039a161']
 
-export const UNTRACKED_COPY = 'Derived USD values may be inaccurate without liquid stablecoin or NOVA pairings.'
+export const UNTRACKED_COPY = 'Values are shown in WNOVA; pairs without WNOVA may have limited price data.'
 
 // pairs that should be tracked but arent due to lag in subgraph
 export const TRACKED_OVERRIDES_PAIRS = [

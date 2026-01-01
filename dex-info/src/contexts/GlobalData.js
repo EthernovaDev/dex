@@ -9,6 +9,7 @@ import {
   getBlocksFromTimestamps,
   get2DayPercentChange,
   getTimeframe,
+  getReserveWnova,
 } from '../utils'
 import {
   GLOBAL_DATA,
@@ -22,6 +23,7 @@ import {
 import weekOfYear from 'dayjs/plugin/weekOfYear'
 import { useAllPairData } from './PairData'
 import { useTokenChartDataCombined } from './TokenData'
+import { WRAPPED_NATIVE_ADDRESS } from '../constants/urls'
 const UPDATE = 'UPDATE'
 const UPDATE_TXNS = 'UPDATE_TXNS'
 const UPDATE_CHART = 'UPDATE_CHART'
@@ -686,7 +688,7 @@ export function useEthPrice() {
     checkForEthPrice()
   }, [ethPrice, updateEthPrice])
 
-  return [ethPrice, ethPriceOld]
+  return [ethPrice || 1, ethPriceOld || ethPrice || 1]
 }
 
 export function useAllPairsInUniswap() {
@@ -704,7 +706,7 @@ export function useAllTokensInUniswap() {
 }
 
 /**
- * Get the top liquidity positions based on USD size
+ * Get the top liquidity positions based on WNOVA size.
  * @TODO Not a perfect lookup needs improvement
  */
 export function useTopLps() {
@@ -712,12 +714,23 @@ export function useTopLps() {
   let topLps = state?.topLps
 
   const allPairs = useAllPairData()
+  const wnovaLower = WRAPPED_NATIVE_ADDRESS?.toLowerCase?.() || ''
 
   useEffect(() => {
     async function fetchData() {
       // get top 20 by reserves
+      const safeNum = (value) => {
+        const parsed = parseFloat(value)
+        return Number.isFinite(parsed) ? parsed : 0
+      }
       let topPairs = Object.keys(allPairs)
-        ?.sort((a, b) => parseFloat(allPairs[a].reserveUSD > allPairs[b].reserveUSD ? -1 : 1))
+        ?.sort((a, b) => {
+          const reserveA = getReserveWnova(allPairs[a], wnovaLower)
+          const reserveB = getReserveWnova(allPairs[b], wnovaLower)
+          const valueA = reserveA ? safeNum(reserveA) : 0
+          const valueB = reserveB ? safeNum(reserveB) : 0
+          return valueA > valueB ? -1 : 1
+        })
         ?.slice(0, 99)
         .map((pair) => pair)
 
@@ -746,20 +759,24 @@ export function useTopLps() {
         .map((list) => {
           return list.map((entry) => {
             const pairData = allPairs[entry.pair.id]
+            const reserveWnova = getReserveWnova(pairData, wnovaLower)
+            const reserveWnovaNum = reserveWnova ? safeNum(reserveWnova) : 0
+            const totalSupply = safeNum(pairData.totalSupply)
+            const lpBalance = safeNum(entry.liquidityTokenBalance)
+            const wnova =
+              totalSupply > 0 && reserveWnovaNum > 0 ? (lpBalance / totalSupply) * reserveWnovaNum * 2 : 0
             return topLps.push({
               user: entry.user,
               pairName: pairData.token0.symbol + '-' + pairData.token1.symbol,
               pairAddress: entry.pair.id,
               token0: pairData.token0.id,
               token1: pairData.token1.id,
-              usd:
-                (parseFloat(entry.liquidityTokenBalance) / parseFloat(pairData.totalSupply)) *
-                parseFloat(pairData.reserveUSD),
+              wnova,
             })
           })
         })
 
-      const sorted = topLps.sort((a, b) => (a.usd > b.usd ? -1 : 1))
+      const sorted = topLps.sort((a, b) => (a.wnova > b.wnova ? -1 : 1))
       const shorter = sorted.splice(0, 100)
       updateTopLps(shorter)
     }

@@ -162,24 +162,27 @@ const getPairMetrics = (pairData) => {
 
   if (isToken0Wnova || isToken1Wnova) {
     const reserveWnova = isToken0Wnova ? reserve0 : reserve1
-    const reserveOther = isToken0Wnova ? reserve1 : reserve0
-    const otherPrice = safeBig(isToken0Wnova ? pairData.token1Price : pairData.token0Price)
     if (reserveWnova.gt(0)) {
-      const otherValue = otherPrice.gt(0) ? reserveOther.multipliedBy(otherPrice) : new BigNumber(0)
-      liquidity = reserveWnova.plus(otherValue)
+      liquidity = reserveWnova.multipliedBy(2)
     }
   }
 
-  let volume24h = safeBig(pairData.oneDayVolumeETH ?? 0)
-  if (volume24h.isZero()) {
-    if (isToken0Wnova) volume24h = safeBig(pairData.oneDayVolumeToken0 ?? 0)
-    if (isToken1Wnova) volume24h = safeBig(pairData.oneDayVolumeToken1 ?? 0)
+  let volume24h = new BigNumber(0)
+  if (isToken0Wnova) {
+    volume24h = safeBig(pairData.oneDayVolumeToken0 ?? pairData.oneDayVolumeETH ?? 0)
+  } else if (isToken1Wnova) {
+    volume24h = safeBig(pairData.oneDayVolumeToken1 ?? pairData.oneDayVolumeETH ?? 0)
+  } else {
+    volume24h = safeBig(pairData.oneDayVolumeETH ?? 0)
   }
 
-  let volume7d = safeBig(pairData.oneWeekVolumeETH ?? 0)
-  if (volume7d.isZero()) {
-    if (isToken0Wnova) volume7d = safeBig(pairData.oneWeekVolumeToken0 ?? 0)
-    if (isToken1Wnova) volume7d = safeBig(pairData.oneWeekVolumeToken1 ?? 0)
+  let volume7d = new BigNumber(0)
+  if (isToken0Wnova) {
+    volume7d = safeBig(pairData.oneWeekVolumeToken0 ?? pairData.oneWeekVolumeETH ?? 0)
+  } else if (isToken1Wnova) {
+    volume7d = safeBig(pairData.oneWeekVolumeToken1 ?? pairData.oneWeekVolumeETH ?? 0)
+  } else {
+    volume7d = safeBig(pairData.oneWeekVolumeETH ?? 0)
   }
 
   const fees24h = volume24h.gt(0) ? volume24h.multipliedBy(0.003) : new BigNumber(0)

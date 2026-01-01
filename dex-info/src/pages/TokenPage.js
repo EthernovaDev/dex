@@ -26,6 +26,7 @@ import { useDataForList } from '../contexts/PairData'
 import { useEffect } from 'react'
 import Warning from '../components/Warning'
 import { usePathDismissed, useSavedTokens } from '../contexts/LocalStorage'
+import { useLatestBlocks } from '../contexts/Application'
 import { Hover, PageWrapper, ContentWrapper, StyledIcon, BlockedWrapper, BlockedMessageWrapper } from '../components'
 import { PlusCircle, Bookmark, AlertCircle } from 'react-feather'
 import FormattedName from '../components/FormattedName'
@@ -110,25 +111,22 @@ function TokenPage({ address, history }) {
     id,
     name,
     symbol,
-    priceUSD,
     priceETH,
-    oneDayVolumeUSD,
     oneDayVolumeETH,
-    totalLiquidityUSD,
     totalLiquidityETH,
-    volumeChangeUSD,
     volumeChangeETH,
     oneDayVolumeUT,
     volumeChangeUT,
-    priceChangeUSD,
     priceChangeETH,
-    liquidityChangeUSD,
     liquidityChangeETH,
     oneDayTxns,
     txnChange,
   } = tokenData || {}
   const rpcUrl = process.env.REACT_APP_RPC_URL || 'https://rpc.ethnova.net'
-  const onchainInfo = useOnchainTokenInfo(address, rpcUrl)
+  const [latestBlock] = useLatestBlocks()
+  const subgraphReady = Boolean(latestBlock)
+  const shouldUseOnchain = !subgraphReady || !tokenData
+  const onchainInfo = useOnchainTokenInfo(address, shouldUseOnchain ? rpcUrl : null)
   const isWrappedNative = address?.toLowerCase() === WRAPPED_NATIVE_ADDRESS
   const safeSymbol = symbol || onchainInfo.info?.symbol || (isWrappedNative ? 'WNOVA' : 'UNKNOWN')
   const safeName = name || onchainInfo.info?.name || (isWrappedNative ? 'Wrapped NOVA' : 'Unknown Token')
@@ -159,8 +157,8 @@ function TokenPage({ address, history }) {
   const volumeChange = formattedPercent(!usingUtVolume ? volumeChangeETH : volumeChangeUT)
 
   // liquidity
-  const liquidity = formattedNum(totalLiquidityETH ?? totalLiquidityUSD, false)
-  const liquidityChange = formattedPercent(liquidityChangeETH ?? liquidityChangeUSD)
+  const liquidity = totalLiquidityETH ? formattedNum(totalLiquidityETH, false) : '—'
+  const liquidityChange = formattedPercent(liquidityChangeETH)
 
   // transactions
   const txnChangeFormatted = formattedPercent(txnChange)

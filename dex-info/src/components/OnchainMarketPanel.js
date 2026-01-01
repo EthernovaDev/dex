@@ -11,7 +11,8 @@ import BigNumber from 'bignumber.js'
 const HeaderRow = styled.div`
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  flex-wrap: wrap;
   gap: 12px;
 `
 
@@ -34,6 +35,7 @@ const StatCard = styled.div`
   align-items: flex-start;
   gap: 4px;
   line-height: 1.3;
+  min-height: 78px;
 `
 
 const StatLabel = styled.div`
@@ -285,8 +287,9 @@ export default function OnchainMarketPanel({
       time: trade.timestamp,
       position: trade.side === 'buy' ? 'belowBar' : 'aboveBar',
       color: trade.side === 'buy' ? '#22c55e' : '#ef4444',
-      shape: trade.side === 'buy' ? 'arrowUp' : 'arrowDown',
-      text: trade.side === 'buy' ? 'BUY' : 'SELL',
+      shape: trade.side === 'buy' ? 'circle' : 'circle',
+      size: 1,
+      text: '',
     }))
   }, [activeTrades])
 

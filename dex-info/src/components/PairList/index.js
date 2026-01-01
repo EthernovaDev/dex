@@ -9,17 +9,18 @@ import styled from 'styled-components'
 import { CustomLink } from '../Link'
 import { Divider } from '../../components'
 import { withRouter } from 'react-router-dom'
-import { formattedNum, formattedPercent, isFiniteNum } from '../../utils'
+import { formattedNum, formattedPercent, isFiniteNum, toNum } from '../../utils'
 import DoubleTokenLogo from '../DoubleLogo'
 import FormattedName from '../FormattedName'
 import QuestionHelper from '../QuestionHelper'
 import { TYPE } from '../../Theme'
 import { PAIR_BLACKLIST } from '../../constants'
 import { AutoColumn } from '../Column'
-import { WRAPPED_NATIVE_ADDRESS, TONY_ADDRESS, PAIR_ADDRESS } from '../../constants/urls'
+import { WRAPPED_NATIVE_ADDRESS, PAIR_ADDRESS } from '../../constants/urls'
 import { usePairData } from '../../contexts/PairData'
+import { client } from '../../apollo/client'
+import { PAIRS_BULK } from '../../apollo/queries'
 import { FEE_BPS, TREASURY_FEE_BPS } from '../../constants/base'
-import BigNumber from 'bignumber.js'
 
 dayjs.extend(utc)
 
@@ -131,80 +132,70 @@ const FIELD_TO_VALUE = (field, useTracked) => {
   }
 }
 
-const safeBig = (value) => {
-  try {
-    const next = new BigNumber(value || 0)
-    return next.isFinite() ? next : new BigNumber(0)
-  } catch {
-    return new BigNumber(0)
-  }
-}
-
 const getPairMetrics = (pairData) => {
   if (!pairData) {
     return {
-      liquidity: new BigNumber(0),
-      volume24h: new BigNumber(0),
-      volume7d: new BigNumber(0),
-      fees24h: new BigNumber(0),
-      protocolFees24h: new BigNumber(0),
-      apy: 0,
-      hasWnova: false,
+      liquidity: null,
+      volume24h: null,
+      volume7d: null,
+      fees24h: null,
+      protocolFees24h: null,
+      apy: null,
+      hasWnova: false
     }
   }
   const token0Id = pairData.token0?.id?.toLowerCase?.() || ''
   const token1Id = pairData.token1?.id?.toLowerCase?.() || ''
   const isToken0Wnova = token0Id === WRAPPED_NATIVE_ADDRESS
   const isToken1Wnova = token1Id === WRAPPED_NATIVE_ADDRESS
-  const reserve0 = safeBig(pairData.reserve0 ?? 0)
-  const reserve1 = safeBig(pairData.reserve1 ?? 0)
+  const reserve0 = toNum(pairData.reserve0, NaN)
+  const reserve1 = toNum(pairData.reserve1, NaN)
+  const reserveWnova = isToken0Wnova ? reserve0 : isToken1Wnova ? reserve1 : NaN
 
-  let liquidity = safeBig(pairData.trackedReserveETH ?? 0)
-  if (liquidity.isZero()) {
-    liquidity = safeBig(pairData.reserveETH ?? 0)
-  }
+  const oneDayVol0 = toNum(pairData.oneDayVolumeToken0, NaN)
+  const oneDayVol1 = toNum(pairData.oneDayVolumeToken1, NaN)
+  const oneWeekVol0 = toNum(pairData.oneWeekVolumeToken0, NaN)
+  const oneWeekVol1 = toNum(pairData.oneWeekVolumeToken1, NaN)
+  const totalVol0 = toNum(pairData.volumeToken0, NaN)
+  const totalVol1 = toNum(pairData.volumeToken1, NaN)
 
-  if (isToken0Wnova || isToken1Wnova) {
-    const reserveWnova = isToken0Wnova ? reserve0 : reserve1
-    if (reserveWnova.gt(0)) {
-      liquidity = reserveWnova
-    }
-  }
+  const liquidity = Number.isFinite(reserveWnova) && reserveWnova > 0 ? reserveWnova : null
 
-  let volume24h = new BigNumber(0)
-  if (isToken0Wnova) {
-    volume24h = safeBig(
-      pairData.oneDayVolumeToken0 ?? pairData.oneDayVolumeETH ?? pairData.volumeToken0 ?? 0
-    )
-  } else if (isToken1Wnova) {
-    volume24h = safeBig(
-      pairData.oneDayVolumeToken1 ?? pairData.oneDayVolumeETH ?? pairData.volumeToken1 ?? 0
-    )
-  } else {
-    volume24h = safeBig(pairData.oneDayVolumeETH ?? pairData.volumeToken0 ?? pairData.volumeToken1 ?? 0)
-  }
+  const volume24h = isToken0Wnova
+    ? Number.isFinite(oneDayVol0) && oneDayVol0 > 0
+      ? oneDayVol0
+      : Number.isFinite(totalVol0) && totalVol0 > 0
+      ? totalVol0
+      : 0
+    : isToken1Wnova
+    ? Number.isFinite(oneDayVol1) && oneDayVol1 > 0
+      ? oneDayVol1
+      : Number.isFinite(totalVol1) && totalVol1 > 0
+      ? totalVol1
+      : 0
+    : null
 
-  let volume7d = new BigNumber(0)
-  if (isToken0Wnova) {
-    volume7d = safeBig(
-      pairData.oneWeekVolumeToken0 ?? pairData.oneWeekVolumeETH ?? pairData.volumeToken0 ?? 0
-    )
-  } else if (isToken1Wnova) {
-    volume7d = safeBig(
-      pairData.oneWeekVolumeToken1 ?? pairData.oneWeekVolumeETH ?? pairData.volumeToken1 ?? 0
-    )
-  } else {
-    volume7d = safeBig(pairData.oneWeekVolumeETH ?? pairData.volumeToken0 ?? pairData.volumeToken1 ?? 0)
-  }
+  const volume7d = isToken0Wnova
+    ? Number.isFinite(oneWeekVol0) && oneWeekVol0 > 0
+      ? oneWeekVol0
+      : Number.isFinite(totalVol0) && totalVol0 > 0
+      ? totalVol0
+      : 0
+    : isToken1Wnova
+    ? Number.isFinite(oneWeekVol1) && oneWeekVol1 > 0
+      ? oneWeekVol1
+      : Number.isFinite(totalVol1) && totalVol1 > 0
+      ? totalVol1
+      : 0
+    : null
 
-  const fees24h = volume24h.gt(0) ? volume24h.multipliedBy(FEE_BPS / 10000) : new BigNumber(0)
+  const fees24h = Number.isFinite(volume24h) ? volume24h * (FEE_BPS / 10000) : null
   const protocolFees24h =
-    volume24h.gt(0) && TREASURY_FEE_BPS > 0
-      ? volume24h.multipliedBy(TREASURY_FEE_BPS / 10000)
-      : new BigNumber(0)
-  const apy = liquidity.gt(0)
-    ? fees24h.multipliedBy(365).multipliedBy(100).dividedBy(liquidity).toNumber()
-    : 0
+    Number.isFinite(volume24h) && TREASURY_FEE_BPS > 0 ? volume24h * (TREASURY_FEE_BPS / 10000) : null
+  const apy =
+    Number.isFinite(liquidity) && liquidity > 0 && Number.isFinite(fees24h)
+      ? (fees24h * 365 * 100) / liquidity
+      : null
 
   return {
     liquidity,
@@ -213,7 +204,7 @@ const getPairMetrics = (pairData) => {
     fees24h,
     protocolFees24h,
     apy,
-    hasWnova: isToken0Wnova || isToken1Wnova,
+    hasWnova: isToken0Wnova || isToken1Wnova
   }
 }
 
@@ -239,27 +230,12 @@ function PairList({ pairs, color, disbaleLinks, maxItems = 10, useTracked = fals
 
   const resolvedPairs = React.useMemo(() => {
     if (pairs && Object.keys(pairs).length) return pairs
-    if (!PAIR_ADDRESS || !WRAPPED_NATIVE_ADDRESS || !TONY_ADDRESS) return pairs
     if (pinnedPair && pinnedPair.id) {
       return {
-        [PAIR_ADDRESS]: pinnedPair,
+        [pinnedPair.id]: pinnedPair,
       }
     }
-    return {
-      [PAIR_ADDRESS]: {
-        id: PAIR_ADDRESS,
-        token0: { id: TONY_ADDRESS, symbol: 'TONY', name: 'STARK - IRON MAN' },
-        token1: { id: WRAPPED_NATIVE_ADDRESS, symbol: 'WNOVA', name: 'Wrapped NOVA' },
-        trackedReserveETH: 0,
-        reserveETH: 0,
-        reserve0: 0,
-        reserve1: 0,
-        oneDayVolumeETH: 0,
-        oneWeekVolumeETH: 0,
-        oneDayVolumeToken0: 0,
-        oneDayVolumeToken1: 0,
-      },
-    }
+    return null
   }, [pairs, pinnedPair])
 
   // pagination
@@ -270,6 +246,33 @@ function PairList({ pairs, color, disbaleLinks, maxItems = 10, useTracked = fals
   // sorting
   const [sortDirection, setSortDirection] = useState(true)
   const [sortedColumn, setSortedColumn] = useState(SORT_FIELD.LIQ)
+  const [fallbackPairs, setFallbackPairs] = useState(null)
+
+  useEffect(() => {
+    let active = true
+    async function fetchFallback() {
+      if (resolvedPairs || fallbackPairs || !PAIR_ADDRESS) return
+      try {
+        const result = await client.query({
+          query: PAIRS_BULK,
+          variables: { allPairs: [PAIR_ADDRESS] },
+          fetchPolicy: 'network-only',
+        })
+        const pair = result?.data?.pairs?.[0]
+        if (active && pair?.id) {
+          setFallbackPairs({ [pair.id]: pair })
+        }
+      } catch (err) {
+        if (debug) {
+          console.log('PairList fallback query failed', err?.message || err)
+        }
+      }
+    }
+    fetchFallback()
+    return () => {
+      active = false
+    }
+  }, [debug, fallbackPairs, resolvedPairs])
 
   useEffect(() => {
     setMaxPage(1) // edit this to do modular
@@ -286,33 +289,27 @@ function PairList({ pairs, color, disbaleLinks, maxItems = 10, useTracked = fals
     }
   }, [ITEMS_PER_PAGE, resolvedPairs])
 
+  const effectivePairs = resolvedPairs || fallbackPairs
+
   const pairEntries = React.useMemo(() => {
-    if (!resolvedPairs) return []
-    return Object.keys(resolvedPairs).map((id) => {
-      const pairData = resolvedPairs[id]
+    if (!effectivePairs) return []
+    return Object.keys(effectivePairs).map((id) => {
+      const pairData = effectivePairs[id]
       return { id, pairData, metrics: getPairMetrics(pairData) }
     })
-  }, [resolvedPairs])
+  }, [effectivePairs])
 
   const ListItem = ({ pairAddress, index }) => {
-    const pairData = resolvedPairs[pairAddress]
+    const pairData = effectivePairs[pairAddress]
     const metrics = getPairMetrics(pairData)
     const pairKey = pairAddress?.toLowerCase?.() || pairAddress
 
     if (pairData && pairData.token0 && pairData.token1) {
-      const liquidityValue = metrics.liquidity?.isFinite?.() ? metrics.liquidity.toString() : null
-      const volumeValue = metrics.volume24h?.isFinite?.() ? metrics.volume24h.toString() : null
-      const liquidity = isFiniteNum(liquidityValue) ? formattedNum(liquidityValue, false) : '—'
-      const volume = isFiniteNum(volumeValue) ? formattedNum(volumeValue, false) : '—'
-
-      const weekVolumeValue = metrics.volume7d?.isFinite?.() ? metrics.volume7d.toString() : null
-      const weekVolume = isFiniteNum(weekVolumeValue) ? formattedNum(weekVolumeValue, false) : '—'
-
-      const feesValue = metrics.fees24h?.isFinite?.() ? metrics.fees24h.toString() : null
-      const fees = isFiniteNum(feesValue) ? formattedNum(feesValue, false) : '—'
-      const protocolValue = metrics.protocolFees24h?.isFinite?.() ? metrics.protocolFees24h.toString() : null
-      const protocolFees = isFiniteNum(protocolValue) ? formattedNum(protocolValue, false) : '—'
-
+      const liquidity = isFiniteNum(metrics.liquidity) ? formattedNum(metrics.liquidity, false) : '—'
+      const volume = isFiniteNum(metrics.volume24h) ? formattedNum(metrics.volume24h, false) : '—'
+      const weekVolume = isFiniteNum(metrics.volume7d) ? formattedNum(metrics.volume7d, false) : '—'
+      const fees = isFiniteNum(metrics.fees24h) ? formattedNum(metrics.fees24h, false) : '—'
+      const protocolFees = isFiniteNum(metrics.protocolFees24h) ? formattedNum(metrics.protocolFees24h, false) : '—'
       const apy = Number.isFinite(metrics.apy) ? formattedPercent(metrics.apy) : '—'
 
       return (
@@ -388,8 +385,8 @@ function PairList({ pairs, color, disbaleLinks, maxItems = 10, useTracked = fals
             : sortedColumn === SORT_FIELD.FEES
             ? metricsA.fees24h
             : sortedColumn === SORT_FIELD.APY
-            ? new BigNumber(metricsA.apy || 0)
-            : safeBig(a.pairData?.[FIELD_TO_VALUE(sortedColumn, useTracked)] ?? 0)
+            ? metricsA.apy
+            : toNum(a.pairData?.[FIELD_TO_VALUE(sortedColumn, useTracked)] ?? 0, 0)
         const valueB =
           sortedColumn === SORT_FIELD.LIQ
             ? metricsB.liquidity
@@ -400,11 +397,13 @@ function PairList({ pairs, color, disbaleLinks, maxItems = 10, useTracked = fals
             : sortedColumn === SORT_FIELD.FEES
             ? metricsB.fees24h
             : sortedColumn === SORT_FIELD.APY
-            ? new BigNumber(metricsB.apy || 0)
-            : safeBig(b.pairData?.[FIELD_TO_VALUE(sortedColumn, useTracked)] ?? 0)
+            ? metricsB.apy
+            : toNum(b.pairData?.[FIELD_TO_VALUE(sortedColumn, useTracked)] ?? 0, 0)
 
-        if (valueA.eq(valueB)) return 0
-        return valueA.gt(valueB) ? (sortDirection ? -1 : 1) * 1 : (sortDirection ? -1 : 1) * -1
+        const safeA = Number.isFinite(valueA) ? valueA : -Infinity
+        const safeB = Number.isFinite(valueB) ? valueB : -Infinity
+        if (safeA === safeB) return 0
+        return safeA > safeB ? (sortDirection ? -1 : 1) * 1 : (sortDirection ? -1 : 1) * -1
       })
       .slice(ITEMS_PER_PAGE * (page - 1), page * ITEMS_PER_PAGE)
       .map((entry, index) => {
@@ -420,16 +419,18 @@ function PairList({ pairs, color, disbaleLinks, maxItems = 10, useTracked = fals
       })
 
   const fallbackPairKey = React.useMemo(() => {
-    if (!resolvedPairs || !PAIR_ADDRESS) return null
+    if (!effectivePairs || !PAIR_ADDRESS) return null
     return (
-      Object.keys(resolvedPairs).find((key) => key?.toLowerCase?.() === PAIR_ADDRESS) || PAIR_ADDRESS
+      Object.keys(effectivePairs).find((key) => key?.toLowerCase?.() === PAIR_ADDRESS) || PAIR_ADDRESS
     )
-  }, [resolvedPairs])
+  }, [effectivePairs])
 
   const safePairList =
-    pairList && pairList.length
+    effectivePairs === null
+      ? null
+      : pairList && pairList.length
       ? pairList
-      : fallbackPairKey && resolvedPairs?.[fallbackPairKey]
+      : fallbackPairKey && effectivePairs?.[fallbackPairKey]
       ? [
           <div key={fallbackPairKey} data-testid={`pair-row-${fallbackPairKey?.toLowerCase?.() || fallbackPairKey}`}>
             <ListItem index={1} pairAddress={fallbackPairKey} />
@@ -440,18 +441,18 @@ function PairList({ pairs, color, disbaleLinks, maxItems = 10, useTracked = fals
 
   const debugInfo = React.useMemo(() => {
     if (!debug) return null
-    const pair = (PAIR_ADDRESS && resolvedPairs?.[PAIR_ADDRESS]) || pinnedPair
+    const pair = (PAIR_ADDRESS && effectivePairs?.[PAIR_ADDRESS]) || pinnedPair
     if (!pair) return null
     const metrics = getPairMetrics(pair)
     return {
       pair: pair?.id || PAIR_ADDRESS,
       reserve0: pair?.reserve0 ?? null,
       reserve1: pair?.reserve1 ?? null,
-      volume24h: metrics.volume24h?.toString?.() ?? null,
-      liquidityWnova: metrics.liquidity?.toString?.() ?? null,
+      volume24h: Number.isFinite(metrics.volume24h) ? metrics.volume24h : null,
+      liquidityWnova: Number.isFinite(metrics.liquidity) ? metrics.liquidity : null,
       readSource: pair?.id ? 'subgraph' : 'fallback',
     }
-  }, [debug, resolvedPairs, pinnedPair])
+  }, [debug, effectivePairs, pinnedPair])
 
   return (
     <ListWrapper>

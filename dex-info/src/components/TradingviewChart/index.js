@@ -83,37 +83,43 @@ const TradingViewChart = ({
       layout: {
         backgroundColor: 'transparent',
         textColor,
+        fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, sans-serif',
       },
       rightPriceScale: {
         scaleMargins: {
-          top: type === CHART_TYPES.AREA ? 0.32 : 0.2,
+          top: type === CHART_TYPES.AREA ? 0.32 : 0.24,
           bottom: 0,
         },
         borderVisible: false,
+        ticksVisible: false,
       },
       timeScale: {
         borderVisible: false,
+        rightOffset: 6,
+        fixLeftEdge: true,
+        fixRightEdge: true,
       },
       grid: {
         horzLines: {
-          color: 'rgba(197, 203, 206, 0.5)',
-          visible: false,
+          color: 'rgba(148, 163, 184, 0.08)',
+          visible: true,
         },
         vertLines: {
-          color: 'rgba(197, 203, 206, 0.5)',
-          visible: false,
+          color: 'rgba(148, 163, 184, 0.08)',
+          visible: true,
         },
       },
       crosshair: {
         horzLine: {
-          visible: false,
+          visible: true,
           labelVisible: false,
+          color: 'rgba(148, 163, 184, 0.35)',
         },
         vertLine: {
           visible: true,
           style: 0,
           width: 2,
-          color: 'rgba(32, 38, 46, 0.1)',
+          color: 'rgba(148, 163, 184, 0.35)',
           labelVisible: false,
         },
       },
@@ -125,17 +131,17 @@ const TradingViewChart = ({
     const series =
       type === CHART_TYPES.BAR
         ? chart.addHistogramSeries({
-            color: '#ff007a',
+            color: 'rgba(139, 92, 246, 0.55)',
             priceFormat: { type: 'volume' },
             scaleMargins: { top: 0.32, bottom: 0 },
-            lineColor: '#ff007a',
-            lineWidth: 3,
+            lineColor: 'rgba(139, 92, 246, 0.65)',
+            lineWidth: 2,
           })
         : chart.addAreaSeries({
-            topColor: '#ff007a',
-            bottomColor: 'rgba(255, 0, 122, 0)',
-            lineColor: '#ff007a',
-            lineWidth: 3,
+            topColor: 'rgba(139, 92, 246, 0.35)',
+            bottomColor: 'rgba(139, 92, 246, 0)',
+            lineColor: 'rgba(139, 92, 246, 0.9)',
+            lineWidth: 2,
           })
 
     series.setData(formattedData)
@@ -146,9 +152,12 @@ const TradingViewChart = ({
     tooltipRef.current = toolTip
     toolTip.style.display = 'block'
     toolTip.style.fontWeight = '500'
-    toolTip.style.left = '-4px'
-    toolTip.style.top = '-8px'
-    toolTip.style.backgroundColor = 'transparent'
+    toolTip.style.left = '10px'
+    toolTip.style.top = '8px'
+    toolTip.style.backgroundColor = 'rgba(8, 12, 22, 0.75)'
+    toolTip.style.border = '1px solid rgba(255, 255, 255, 0.12)'
+    toolTip.style.padding = '6px 8px'
+    toolTip.style.borderRadius = '10px'
 
     chart.subscribeCrosshairMove((param) => {
       if (

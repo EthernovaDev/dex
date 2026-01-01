@@ -9,7 +9,7 @@ import { CustomLink } from '../Link'
 import Row from '../Row'
 import { Divider } from '..'
 
-import { formattedNum, formattedPercent, formatPrice, isFiniteNum } from '../../utils'
+import { formattedNum, formattedPercent, formatPrice, isFiniteNum, toNum } from '../../utils'
 import { useMedia } from 'react-use'
 import { withRouter } from 'react-router-dom'
 import { TOKEN_BLACKLIST } from '../../constants'
@@ -17,7 +17,6 @@ import FormattedName from '../FormattedName'
 import { TYPE } from '../../Theme'
 import { WRAPPED_NATIVE_ADDRESS, TONY_ADDRESS, PAIR_ADDRESS } from '../../constants/urls'
 import { usePairData } from '../../contexts/PairData'
-import BigNumber from 'bignumber.js'
 
 dayjs.extend(utc)
 
@@ -123,35 +122,25 @@ const SORT_FIELD = {
   CHANGE: 'priceChangeETH',
 }
 
-const safeBig = (value) => {
-  try {
-    const next = new BigNumber(value || 0)
-    return next.isFinite() ? next : new BigNumber(0)
-  } catch {
-    return new BigNumber(0)
-  }
-}
-
 const getTokenMetrics = (token) => {
-  if (!token) return { price: new BigNumber(0), liquidity: new BigNumber(0), volume: new BigNumber(0) }
+  if (!token) return { price: null, liquidity: null, volume: null }
   const isWnova = token.id?.toLowerCase?.() === WRAPPED_NATIVE_ADDRESS
-  const price = safeBig(token.priceETH ?? token.derivedETH ?? (isWnova ? 1 : 0))
-  let liquidity = safeBig(token.totalLiquidityETH ?? 0)
-  if (liquidity.isZero()) {
-    const rawLiquidity = safeBig(token.totalLiquidity ?? 0)
-    if (rawLiquidity.gt(0) && price.gt(0)) {
-      liquidity = rawLiquidity.multipliedBy(price)
+  const price = toNum(token.priceETH ?? token.derivedETH ?? (isWnova ? 1 : null), null)
+  let liquidity = toNum(token.totalLiquidityETH ?? null, null)
+  if (!Number.isFinite(liquidity) || liquidity === 0) {
+    const rawLiquidity = toNum(token.totalLiquidity ?? null, null)
+    if (Number.isFinite(rawLiquidity) && rawLiquidity > 0 && Number.isFinite(price) && price > 0) {
+      liquidity = rawLiquidity * price
     }
   }
 
-  let volume = safeBig(token.oneDayVolumeETH ?? 0)
-  if (volume.isZero()) {
-    const tradeVolume = safeBig(token.tradeVolume ?? 0)
-    const oneDayVolume = token.oneDayData?.tradeVolume
-      ? tradeVolume.minus(safeBig(token.oneDayData.tradeVolume))
-      : new BigNumber(0)
-    if (oneDayVolume.gt(0) && price.gt(0)) {
-      volume = oneDayVolume.multipliedBy(price)
+  let volume = toNum(token.oneDayVolumeETH ?? null, null)
+  if (!Number.isFinite(volume) || volume === 0) {
+    const tradeVolume = toNum(token.tradeVolume ?? null, null)
+    const priorTrade = toNum(token.oneDayData?.tradeVolume ?? null, 0)
+    const oneDayVolume = Number.isFinite(tradeVolume) ? tradeVolume - priorTrade : null
+    if (Number.isFinite(oneDayVolume) && oneDayVolume > 0 && Number.isFinite(price) && price > 0) {
+      volume = oneDayVolume * price
     }
   }
 
@@ -174,19 +163,25 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
   const pinnedPair = usePairData(PAIR_ADDRESS)
   const pinnedToken0 = pinnedPair?.token0?.id?.toLowerCase?.()
   const pinnedToken1 = pinnedPair?.token1?.id?.toLowerCase?.()
-  const reserve0 = safeBig(pinnedPair?.reserve0 ?? 0)
-  const reserve1 = safeBig(pinnedPair?.reserve1 ?? 0)
+  const reserve0 = toNum(pinnedPair?.reserve0 ?? null, 0)
+  const reserve1 = toNum(pinnedPair?.reserve1 ?? null, 0)
   const isToken0Wnova = pinnedToken0 === WRAPPED_NATIVE_ADDRESS
   const isToken1Wnova = pinnedToken1 === WRAPPED_NATIVE_ADDRESS
-  const reserveWnova = isToken0Wnova ? reserve0 : isToken1Wnova ? reserve1 : new BigNumber(0)
-  const reserveTony = isToken0Wnova ? reserve1 : isToken1Wnova ? reserve0 : new BigNumber(0)
-  const tonyPriceWnova =
-    reserveWnova.gt(0) && reserveTony.gt(0) ? reserveWnova.div(reserveTony).toNumber() : 0
-  const pairVolumeWnova = isToken0Wnova
-    ? safeBig(pinnedPair?.oneDayVolumeToken0 ?? pinnedPair?.oneDayVolumeETH ?? pinnedPair?.volumeToken0 ?? 0)
-    : isToken1Wnova
-    ? safeBig(pinnedPair?.oneDayVolumeToken1 ?? pinnedPair?.oneDayVolumeETH ?? pinnedPair?.volumeToken1 ?? 0)
-    : new BigNumber(0)
+  const reserveWnova = isToken0Wnova ? reserve0 : isToken1Wnova ? reserve1 : 0
+  const reserveTony = isToken0Wnova ? reserve1 : isToken1Wnova ? reserve0 : 0
+  const tonyPriceWnova = reserveWnova > 0 && reserveTony > 0 ? reserveWnova / reserveTony : 0
+  let pairVolumeWnova = 0
+  if (isToken0Wnova) {
+    pairVolumeWnova = toNum(
+      pinnedPair?.oneDayVolumeToken0 ?? pinnedPair?.oneDayVolumeETH ?? pinnedPair?.volumeToken0 ?? null,
+      0
+    )
+  } else if (isToken1Wnova) {
+    pairVolumeWnova = toNum(
+      pinnedPair?.oneDayVolumeToken1 ?? pinnedPair?.oneDayVolumeETH ?? pinnedPair?.volumeToken1 ?? null,
+      0
+    )
+  }
   const debug =
     typeof window !== 'undefined' && window.location && window.location.search && window.location.search.includes('debug=1')
 
@@ -212,8 +207,8 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
           ...token,
           derivedETH: 1,
           priceETH: 1,
-          totalLiquidityETH: reserveWnova.gt(0) ? reserveWnova.toNumber() : token.totalLiquidityETH ?? 0,
-          oneDayVolumeETH: pairVolumeWnova.gt(0) ? pairVolumeWnova.toNumber() : token.oneDayVolumeETH ?? 0,
+          totalLiquidityETH: reserveWnova > 0 ? reserveWnova : token.totalLiquidityETH ?? 0,
+          oneDayVolumeETH: pairVolumeWnova > 0 ? pairVolumeWnova : token.oneDayVolumeETH ?? 0,
           priceChangeETH: token.priceChangeETH ?? 0,
         }
       }
@@ -222,8 +217,8 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
           ...token,
           derivedETH: tonyPriceWnova || token.derivedETH || 0,
           priceETH: tonyPriceWnova || token.priceETH || 0,
-          totalLiquidityETH: reserveWnova.gt(0) ? reserveWnova.toNumber() : token.totalLiquidityETH ?? 0,
-          oneDayVolumeETH: pairVolumeWnova.gt(0) ? pairVolumeWnova.toNumber() : token.oneDayVolumeETH ?? 0,
+          totalLiquidityETH: reserveWnova > 0 ? reserveWnova : token.totalLiquidityETH ?? 0,
+          oneDayVolumeETH: pairVolumeWnova > 0 ? pairVolumeWnova : token.oneDayVolumeETH ?? 0,
           priceChangeETH: token.priceChangeETH ?? 0,
         }
       }
@@ -244,8 +239,8 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
           derivedETH: 1,
           priceETH: 1,
           totalLiquidity: 0,
-          totalLiquidityETH: reserveWnova.gt(0) ? reserveWnova.toNumber() : 0,
-          oneDayVolumeETH: pairVolumeWnova.gt(0) ? pairVolumeWnova.toNumber() : 0,
+          totalLiquidityETH: reserveWnova > 0 ? reserveWnova : 0,
+          oneDayVolumeETH: pairVolumeWnova > 0 ? pairVolumeWnova : 0,
           priceChangeETH: 0,
         })
       )
@@ -259,8 +254,8 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
           derivedETH: tonyPriceWnova || 0,
           priceETH: tonyPriceWnova || 0,
           totalLiquidity: 0,
-          totalLiquidityETH: reserveWnova.gt(0) ? reserveWnova.toNumber() : 0,
-          oneDayVolumeETH: pairVolumeWnova.gt(0) ? pairVolumeWnova.toNumber() : 0,
+          totalLiquidityETH: reserveWnova > 0 ? reserveWnova : 0,
+          oneDayVolumeETH: pairVolumeWnova > 0 ? pairVolumeWnova : 0,
           priceChangeETH: 0,
         })
       )
@@ -302,7 +297,7 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
               ? aMetrics.liquidity
               : sortedColumn === SORT_FIELD.VOL || sortedColumn === SORT_FIELD.VOL_UT
               ? aMetrics.volume
-              : safeBig(a[sortedColumn] ?? 0)
+              : toNum(a[sortedColumn] ?? 0, 0)
           const bValue =
             sortedColumn === SORT_FIELD.PRICE
               ? bMetrics.price
@@ -310,10 +305,12 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
               ? bMetrics.liquidity
               : sortedColumn === SORT_FIELD.VOL || sortedColumn === SORT_FIELD.VOL_UT
               ? bMetrics.volume
-              : safeBig(b[sortedColumn] ?? 0)
+              : toNum(b[sortedColumn] ?? 0, 0)
 
-          if (aValue.eq(bValue)) return 0
-          return aValue.gt(bValue) ? (sortDirection ? -1 : 1) * 1 : (sortDirection ? -1 : 1) * -1
+          const safeA = Number.isFinite(aValue) ? aValue : -Infinity
+          const safeB = Number.isFinite(bValue) ? bValue : -Infinity
+          if (safeA === safeB) return 0
+          return safeA > safeB ? (sortDirection ? -1 : 1) * 1 : (sortDirection ? -1 : 1) * -1
         })
         .slice(itemMax * (page - 1), page * itemMax)
     )
@@ -321,9 +318,9 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
 
   const ListItem = ({ item, index }) => {
     const metrics = item._metrics || getTokenMetrics(item)
-    const liquidityValue = metrics.liquidity?.isFinite?.() ? metrics.liquidity.toString() : null
-    const volumeValue = metrics.volume?.isFinite?.() ? metrics.volume.toString() : null
-    const priceValue = metrics.price?.isFinite?.() ? metrics.price.toString() : null
+    const liquidityValue = metrics.liquidity
+    const volumeValue = metrics.volume
+    const priceValue = metrics.price
     return (
       <DashGrid style={{ height: '48px' }} focus={true}>
         <DataText area="name" fontWeight="500">
@@ -345,10 +342,14 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
             <FormattedName text={item.symbol} maxCharacters={5} />
           </DataText>
         )}
-        <DataText area="liq">{isFiniteNum(liquidityValue) ? formattedNum(liquidityValue, false) : '—'}</DataText>
-        <DataText area="vol">{isFiniteNum(volumeValue) ? formattedNum(volumeValue, false) : '—'}</DataText>
+        <DataText area="liq" data-testid={`token-liquidity-${item.id?.toLowerCase?.() || item.id}`}>
+          {isFiniteNum(liquidityValue) ? formattedNum(liquidityValue, false) : '—'}
+        </DataText>
+        <DataText area="vol" data-testid={`token-volume-${item.id?.toLowerCase?.() || item.id}`}>
+          {isFiniteNum(volumeValue) ? formattedNum(volumeValue, false) : '—'}
+        </DataText>
         {!below1080 && (
-          <DataText area="price" color="text" fontWeight="500">
+          <DataText area="price" color="text" fontWeight="500" data-testid={`token-price-${item.id?.toLowerCase?.() || item.id}`}>
             {isFiniteNum(priceValue) ? formatPrice(priceValue) : '—'}
           </DataText>
         )}
@@ -466,7 +467,12 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
       </PageButtons>
       {debug && (
         <TYPE.light fontSize={'10px'} style={{ padding: '0 1.125rem 1rem', opacity: 0.7 }}>
-          Debug: {JSON.stringify({ reserveWnova: reserveWnova.toString(), tonyPriceWnova, volume24h: pairVolumeWnova.toString() })}
+          Debug:{' '}
+          {JSON.stringify({
+            reserveWnova: Number.isFinite(reserveWnova) ? reserveWnova : null,
+            tonyPriceWnova: Number.isFinite(tonyPriceWnova) ? tonyPriceWnova : null,
+            volume24h: Number.isFinite(pairVolumeWnova) ? pairVolumeWnova : null
+          })}
         </TYPE.light>
       )}
     </ListWrapper>

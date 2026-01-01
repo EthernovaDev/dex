@@ -11,7 +11,6 @@ import {
   HOURLY_PAIR_RATES,
 } from '../apollo/queries'
 
-import { useEthPrice } from './GlobalData'
 
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
@@ -25,7 +24,7 @@ import {
   splitQuery,
 } from '../utils'
 import { timeframeOptions, TRACKED_OVERRIDES_PAIRS, TRACKED_OVERRIDES_TOKENS } from '../constants'
-import { WRAPPED_NATIVE_ADDRESS } from '../constants/urls'
+import { WRAPPED_NATIVE_ADDRESS, PAIR_ADDRESS } from '../constants/urls'
 import { useLatestBlocks } from './Application'
 import { updateNameData } from '../utils/data'
 
@@ -185,7 +184,22 @@ export default function Provider({ children }) {
 
 async function getBulkPairData(pairList, ethPrice) {
   const [t1, t2, tWeek] = getTimestampsForChanges()
-  let [{ number: b1 }, { number: b2 }, { number: bWeek }] = await getBlocksFromTimestamps([t1, t2, tWeek])
+  let blocks = []
+  const withTimeout = (promise, timeoutMs) =>
+    Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('blocks timeout')), timeoutMs)),
+    ])
+  try {
+    blocks = await withTimeout(getBlocksFromTimestamps([t1, t2, tWeek]), 4000)
+  } catch (err) {
+    console.log('getBlocksFromTimestamps failed, falling back to current data only', err?.message || err)
+    blocks = []
+  }
+  const b1 = blocks?.[0]?.number
+  const b2 = blocks?.[1]?.number
+  const bWeek = blocks?.[2]?.number
+  const hasHistoricalBlocks = Boolean(b1 && b2 && bWeek)
 
   try {
     let current = await client.query({
@@ -196,15 +210,20 @@ async function getBulkPairData(pairList, ethPrice) {
       fetchPolicy: 'cache-first',
     })
 
-    let [oneDayResult, twoDayResult, oneWeekResult] = await Promise.all(
-      [b1, b2, bWeek].map(async (block) => {
-        let result = client.query({
-          query: PAIRS_HISTORICAL_BULK(block, pairList),
-          fetchPolicy: 'cache-first',
+    let oneDayResult = { data: { pairs: [] } }
+    let twoDayResult = { data: { pairs: [] } }
+    let oneWeekResult = { data: { pairs: [] } }
+    if (hasHistoricalBlocks) {
+      ;[oneDayResult, twoDayResult, oneWeekResult] = await Promise.all(
+        [b1, b2, bWeek].map(async (block) => {
+          let result = client.query({
+            query: PAIRS_HISTORICAL_BULK(block, pairList),
+            fetchPolicy: 'cache-first',
+          })
+          return result
         })
-        return result
-      })
-    )
+      )
+    }
 
     let oneDayData = oneDayResult?.data?.pairs.reduce((obj, cur, i) => {
       return { ...obj, [cur.id]: cur }
@@ -223,7 +242,7 @@ async function getBulkPairData(pairList, ethPrice) {
         current.data.pairs.map(async (pair) => {
           let data = pair
           let oneDayHistory = oneDayData?.[pair.id]
-          if (!oneDayHistory) {
+          if (!oneDayHistory && hasHistoricalBlocks) {
             let newData = await client.query({
               query: PAIR_DATA(pair.id, b1),
               fetchPolicy: 'cache-first',
@@ -231,7 +250,7 @@ async function getBulkPairData(pairList, ethPrice) {
             oneDayHistory = newData.data.pairs[0]
           }
           let twoDayHistory = twoDayData?.[pair.id]
-          if (!twoDayHistory) {
+          if (!twoDayHistory && hasHistoricalBlocks) {
             let newData = await client.query({
               query: PAIR_DATA(pair.id, b2),
               fetchPolicy: 'cache-first',
@@ -239,7 +258,7 @@ async function getBulkPairData(pairList, ethPrice) {
             twoDayHistory = newData.data.pairs[0]
           }
           let oneWeekHistory = oneWeekData?.[pair.id]
-          if (!oneWeekHistory) {
+          if (!oneWeekHistory && hasHistoricalBlocks) {
             let newData = await client.query({
               query: PAIR_DATA(pair.id, bWeek),
               fetchPolicy: 'cache-first',
@@ -523,28 +542,36 @@ const getHourlyRateData = async (pairAddress, startTime, latestBlock) => {
 
 export function Updater() {
   const [, { updateTopPairs }] = usePairDataContext()
-  const [ethPrice] = useEthPrice()
   useEffect(() => {
     async function getData() {
-      // get top pairs by reserves
-      let {
-        data: { pairs },
-      } = await client.query({
-        query: PAIRS_CURRENT,
-        fetchPolicy: 'cache-first',
-      })
+      try {
+        // get top pairs by reserves
+        let {
+          data: { pairs },
+        } = await client.query({
+          query: PAIRS_CURRENT,
+          fetchPolicy: 'cache-first',
+        })
 
-      // format as array of addresses
-      const formattedPairs = pairs.map((pair) => {
-        return pair.id
-      })
+        // format as array of addresses
+        let formattedPairs = Array.isArray(pairs) ? pairs.map((pair) => pair.id) : []
+        if (!formattedPairs.length && PAIR_ADDRESS) {
+          formattedPairs = [PAIR_ADDRESS]
+        }
 
-      // get data for every pair in list
-      let topPairs = await getBulkPairData(formattedPairs, ethPrice)
-      topPairs && updateTopPairs(topPairs)
+        // get data for every pair in list
+        let topPairs = await getBulkPairData(formattedPairs, 1)
+        topPairs && updateTopPairs(topPairs)
+      } catch (err) {
+        console.log('PairData updater failed, falling back to pinned pair', err?.message || err)
+        if (PAIR_ADDRESS) {
+          let topPairs = await getBulkPairData([PAIR_ADDRESS], 1)
+          topPairs && updateTopPairs(topPairs)
+        }
+      }
     }
-    ethPrice && getData()
-  }, [ethPrice, updateTopPairs])
+    getData()
+  }, [updateTopPairs])
   return null
 }
 
@@ -577,7 +604,6 @@ export function useHourlyRateData(pairAddress, timeWindow) {
  */
 export function useDataForList(pairList) {
   const [state] = usePairDataContext()
-  const [ethPrice] = useEthPrice()
 
   const [stale, setStale] = useState(false)
   const [fetched, setFetched] = useState([])
@@ -608,15 +634,15 @@ export function useDataForList(pairList) {
         unfetched.map((pair) => {
           return pair
         }),
-        ethPrice
+        1
       )
       setFetched(newFetched.concat(newPairData))
     }
-    if (ethPrice && pairList && pairList.length > 0 && !fetched && !stale) {
+    if (pairList && pairList.length > 0 && !fetched && !stale) {
       setStale(true)
       fetchNewPairData()
     }
-  }, [ethPrice, state, pairList, stale, fetched])
+  }, [state, pairList, stale, fetched])
 
   let formattedFetch =
     fetched &&
@@ -632,20 +658,19 @@ export function useDataForList(pairList) {
  */
 export function usePairData(pairAddress) {
   const [state, { update }] = usePairDataContext()
-  const [ethPrice] = useEthPrice()
   const pairData = state?.[pairAddress]
 
   useEffect(() => {
     async function fetchData() {
       if (!pairData && pairAddress) {
-        let data = await getBulkPairData([pairAddress], ethPrice)
+        let data = await getBulkPairData([pairAddress], 1)
         data && update(pairAddress, data[0])
       }
     }
-    if (!pairData && pairAddress && ethPrice && isAddress(pairAddress)) {
+    if (!pairData && pairAddress && isAddress(pairAddress)) {
       fetchData()
     }
-  }, [pairAddress, pairData, update, ethPrice])
+  }, [pairAddress, pairData, update])
 
   return pairData || {}
 }

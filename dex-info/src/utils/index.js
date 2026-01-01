@@ -354,6 +354,12 @@ export const isFiniteNum = (value) => {
   return false
 }
 
+export const toNum = (value, fallback = 0) => {
+  if (value === null || value === undefined || value === '') return fallback
+  const parsed = typeof value === 'string' ? parseFloat(value) : Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
 // using a currency library here in case we want to add more in future
 const USD_ENABLED = false
 

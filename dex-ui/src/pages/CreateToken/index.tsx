@@ -11,14 +11,19 @@ import { useActiveWeb3React } from '../../hooks'
 import { switchToEthernova } from '../../utils/switchNetwork'
 import { useEthernovaConfig } from '../../hooks/useEthernovaConfig'
 import { NATIVE_SYMBOL } from '../../constants/ethernova'
+import AppBody from '../AppBody'
 
-const Card = styled.div`
-  width: min(520px, 94vw);
-  background: ${({ theme }) => theme.bg1};
-  border: 1px solid ${({ theme }) => theme.bg3};
-  border-radius: 20px;
-  padding: 20px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+const FormColumn = styled(AutoColumn)`
+  width: 100%;
+`
+
+const SplitRow = styled(RowBetween)`
+  gap: 12px;
+
+  ${({ theme }) => theme.mediaWidth.upToSmall`
+    flex-direction: column;
+    align-items: stretch;
+  `}
 `
 
 const Field = styled.div`
@@ -41,6 +46,7 @@ const TextInput = styled.input`
   color: ${({ theme }) => theme.text1};
   outline: none;
   font-size: 16px;
+  width: 100%;
 
   ::placeholder {
     color: ${({ theme }) => theme.text3};
@@ -52,6 +58,10 @@ const ToggleRow = styled.div`
   align-items: center;
   gap: 8px;
   margin: 8px 0 12px;
+
+  ${({ theme }) => theme.mediaWidth.upToSmall`
+    align-items: flex-start;
+  `}
 `
 
 const Divider = styled.div`
@@ -270,23 +280,26 @@ export default function CreateToken() {
 
   if (chainId && chainId !== 77777) {
     return (
-      <AutoColumn gap="lg" style={{ width: '100%', alignItems: 'center' }}>
+      <AppBody>
         <SwapPoolTabs active={'create'} />
-        <Card>
+        <FormColumn gap="lg">
           <TYPE.largeHeader>Wrong network</TYPE.largeHeader>
           <TYPE.body style={{ marginTop: 8 }}>Switch to Ethernova (77777) to create tokens.</TYPE.body>
-          <ButtonPrimary style={{ marginTop: 16 }} onClick={() => switchToEthernova().catch(() => undefined)}>
+          <ButtonPrimary
+            style={{ marginTop: 16, width: '100%' }}
+            onClick={() => switchToEthernova().catch(() => undefined)}
+          >
             Switch to Ethernova
           </ButtonPrimary>
-        </Card>
-      </AutoColumn>
+        </FormColumn>
+      </AppBody>
     )
   }
 
   return (
-    <AutoColumn gap="lg" style={{ width: '100%', alignItems: 'center' }}>
+    <AppBody>
       <SwapPoolTabs active={'create'} />
-      <Card>
+      <FormColumn gap="lg">
         <TYPE.largeHeader>Create your own token</TYPE.largeHeader>
         <TYPE.body color="#9CA3AF" style={{ marginTop: 6 }}>
           Deploy a permissionless ERC-20 on Ethernova. This action is irreversible.
@@ -302,7 +315,7 @@ export default function CreateToken() {
           <Label>Symbol</Label>
           <TextInput placeholder="NOVA" value={symbol} onChange={e => setSymbol(e.target.value.toUpperCase())} />
         </Field>
-        <RowBetween style={{ gap: 12 }}>
+        <SplitRow>
           <Field style={{ flex: 1 }}>
             <Label>Decimals</Label>
             <TextInput
@@ -321,7 +334,7 @@ export default function CreateToken() {
               inputMode="decimal"
             />
           </Field>
-        </RowBetween>
+        </SplitRow>
 
         <ToggleRow>
           <input type="checkbox" checked={autoList} onChange={e => setAutoList(e.target.checked)} />
@@ -330,7 +343,7 @@ export default function CreateToken() {
 
         {autoList && (
           <>
-            <RowBetween style={{ gap: 12 }}>
+            <SplitRow>
               <Field style={{ flex: 1 }}>
                 <Label>Token amount</Label>
                 <TextInput
@@ -349,9 +362,9 @@ export default function CreateToken() {
                   inputMode="decimal"
                 />
               </Field>
-            </RowBetween>
+            </SplitRow>
             {needsApproval && (
-              <ButtonLight disabled={approvePending} onClick={onApprove} style={{ marginTop: 8 }}>
+              <ButtonLight disabled={approvePending} onClick={onApprove} style={{ marginTop: 8, width: '100%' }}>
                 {approvePending ? `Approving ${NATIVE_SYMBOL}...` : `Approve ${NATIVE_SYMBOL}`}
               </ButtonLight>
             )}
@@ -365,7 +378,7 @@ export default function CreateToken() {
         )}
 
         <ButtonPrimary
-          style={{ marginTop: 16 }}
+          style={{ marginTop: 16, width: '100%' }}
           disabled={pending || !account || !tokenFactoryAddress}
           onClick={onDeploy}
         >
@@ -373,7 +386,7 @@ export default function CreateToken() {
         </ButtonPrimary>
 
         {(txHash || createdToken || createdPair) && (
-          <AutoColumn gap="sm" style={{ marginTop: 16 }}>
+          <AutoColumn gap="sm" style={{ marginTop: 16, width: '100%' }}>
             {txHash && (
               <TYPE.body>
                 Tx:{' '}
@@ -407,11 +420,13 @@ export default function CreateToken() {
               </TYPE.body>
             )}
             {createdToken && (
-              <ButtonLight onClick={onAddToMetaMask}>Add token to MetaMask</ButtonLight>
+              <ButtonLight onClick={onAddToMetaMask} style={{ width: '100%' }}>
+                Add token to MetaMask
+              </ButtonLight>
             )}
           </AutoColumn>
         )}
-      </Card>
-    </AutoColumn>
+      </FormColumn>
+    </AppBody>
   )
 }

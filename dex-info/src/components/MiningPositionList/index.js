@@ -140,7 +140,7 @@ function MiningPositionList({ miningPositions }) {
     const pairPercentage = miningPosition.balance / miningPosition.pairData.totalSupply
     const wnovaLower = WRAPPED_NATIVE_ADDRESS?.toLowerCase?.() || ''
     const reserveWnova = getReserveWnova(miningPosition.pairData, wnovaLower)
-    const valueWnova = reserveWnova ? reserveWnova * 2 : null
+    const valueWnova = reserveWnova ? reserveWnova : null
     const valueFirstPair = miningPosition.pairData.reserve0
     const valueSecondPair = miningPosition.pairData.reserve1
     const firstPairName = miningPosition.miningPool.pair.token0
@@ -213,8 +213,8 @@ function MiningPositionList({ miningPositions }) {
         if (sortedColumn === SORT_FIELD.VALUE) {
           const reserveWnova0 = getReserveWnova(p0.pairData, WRAPPED_NATIVE_ADDRESS)
           const reserveWnova1 = getReserveWnova(p1.pairData, WRAPPED_NATIVE_ADDRESS)
-          const bal0 = reserveWnova0 ? (p0.balance / p0.pairData?.totalSupply) * reserveWnova0 * 2 : 0
-          const bal1 = reserveWnova1 ? (p1.balance / p1.pairData?.totalSupply) * reserveWnova1 * 2 : 0
+          const bal0 = reserveWnova0 ? (p0.balance / p0.pairData?.totalSupply) * reserveWnova0 : 0
+          const bal1 = reserveWnova1 ? (p1.balance / p1.pairData?.totalSupply) * reserveWnova1 : 0
           return bal0 > bal1 ? (sortDirection ? -1 : 1) : sortDirection ? 1 : -1
         }
         return 1

@@ -14,12 +14,12 @@ import GlobalStats from '../components/GlobalStats'
 import OnchainMarketPanel from '../components/OnchainMarketPanel'
 
 import { useGlobalData, useGlobalTransactions } from '../contexts/GlobalData'
-import { useAllPairData } from '../contexts/PairData'
+import { useAllPairData, usePairData } from '../contexts/PairData'
 import { useLatestBlocks } from '../contexts/Application'
 import { useMedia } from 'react-use'
 import Panel from '../components/Panel'
 import { useAllTokenData } from '../contexts/TokenData'
-import { formattedNum, formattedPercent } from '../utils'
+import { formattedNum, formattedPercent, getReserveWnova } from '../utils'
 import { TYPE, ThemedBackground } from '../Theme'
 import { transparentize } from 'polished'
 import { CustomLink } from '../components/Link'
@@ -59,6 +59,7 @@ function GlobalPage() {
   const allPairs = useAllPairData()
   const allTokens = useAllTokenData()
   const transactions = useGlobalTransactions()
+  const pinnedPair = usePairData(PAIR_ADDRESS)
   const [latestBlock] = useLatestBlocks()
   const subgraphReady = Boolean(latestBlock)
   const { totalLiquidityETH, oneDayVolumeETH, volumeChangeETH, liquidityChangeETH } = useGlobalData()
@@ -75,7 +76,7 @@ function GlobalPage() {
   }, [])
 
   // for tracked data on pairs
-  const [useTracked, setUseTracked] = useState(false)
+  const [useTracked, setUseTracked] = useState(true)
   const wnovaLower = WNOVA_ADDRESS?.toLowerCase?.() || ''
   const tonyLower = TONY_ADDRESS?.toLowerCase?.() || ''
   const pairSwaps = useMemo(() => {
@@ -89,6 +90,28 @@ function GlobalPage() {
       )
     })
   }, [transactions, wnovaLower, tonyLower])
+
+  const volumeWnova24h = useMemo(() => {
+    if (!pairSwaps || !pairSwaps.length) return 0
+    const now = Math.floor(Date.now() / 1000)
+    return pairSwaps.reduce((sum, swap) => {
+      const ts = Number.parseInt(swap?.transaction?.timestamp || swap?.timestamp || 0, 10)
+      if (!ts || now - ts > 86400) return sum
+      const token0 = swap?.pair?.token0?.id?.toLowerCase?.()
+      const token1 = swap?.pair?.token1?.id?.toLowerCase?.()
+      const amount0In = Number(swap?.amount0In || 0)
+      const amount0Out = Number(swap?.amount0Out || 0)
+      const amount1In = Number(swap?.amount1In || 0)
+      const amount1Out = Number(swap?.amount1Out || 0)
+      if (token0 === wnovaLower) return sum + (amount0In > 0 ? amount0In : amount0Out)
+      if (token1 === wnovaLower) return sum + (amount1In > 0 ? amount1In : amount1Out)
+      return sum
+    }, 0)
+  }, [pairSwaps, wnovaLower])
+
+  const reserveWnova = useMemo(() => getReserveWnova(pinnedPair, WNOVA_ADDRESS) || 0, [pinnedPair])
+  const headlineVolume = volumeWnova24h > 0 ? volumeWnova24h : oneDayVolumeETH || 0
+  const headlineLiquidity = reserveWnova > 0 ? reserveWnova : totalLiquidityETH || 0
 
   return (
     <PageWrapper>
@@ -125,7 +148,7 @@ function GlobalPage() {
                       </RowBetween>
                       <RowBetween align="flex-end">
                         <TYPE.main fontSize={'1.5rem'} lineHeight={1} fontWeight={600}>
-                          {oneDayVolumeETH ? formattedNum(oneDayVolumeETH, false) : '-'}
+                          {headlineVolume ? formattedNum(headlineVolume, false) : '-'}
                         </TYPE.main>
                         <TYPE.main fontSize={12}>{formattedPercent(volumeChangeETH)}</TYPE.main>
                       </RowBetween>
@@ -137,7 +160,7 @@ function GlobalPage() {
                       </RowBetween>
                       <RowBetween align="flex-end">
                         <TYPE.main fontSize={'1.5rem'} lineHeight={1} fontWeight={600}>
-                          {totalLiquidityETH ? formattedNum(totalLiquidityETH, false) : '-'}
+                          {headlineLiquidity ? formattedNum(headlineLiquidity, false) : '-'}
                         </TYPE.main>
                         <TYPE.main fontSize={12}>
                           {formattedPercent(liquidityChangeETH)}

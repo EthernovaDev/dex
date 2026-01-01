@@ -21,7 +21,7 @@ function AllPairsPage() {
 
   const below800 = useMedia('(max-width: 800px)')
 
-  const [useTracked, setUseTracked] = useState(false)
+  const [useTracked, setUseTracked] = useState(true)
 
   return (
     <PageWrapper>

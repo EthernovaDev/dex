@@ -128,6 +128,7 @@ export default function OnchainMarketPanel({
   allowOnchain = true,
 }) {
   const [timeframe, setTimeframe] = useState(TIMEFRAMES[0])
+  const [allowOnchainDelayed, setAllowOnchainDelayed] = useState(false)
 
   const wnovaLower = wnovaAddress?.toLowerCase?.() || ''
   const tonyLower = tonyAddress?.toLowerCase?.() || ''
@@ -188,7 +189,7 @@ export default function OnchainMarketPanel({
       }
 
       if (!side || wnovaAmount.isZero() || tonyAmount.isZero()) continue
-      const price = wnovaAmount.div(tonyAmount)
+      const price = tonyAmount.div(wnovaAmount)
       if (!price.isFinite()) continue
 
       const timestamp = Number.parseInt(swap?.transaction?.timestamp || swap?.timestamp || 0, 10)
@@ -235,7 +236,16 @@ export default function OnchainMarketPanel({
 
   const useSubgraph = Boolean(subgraphSeries && subgraphSeries.trades.length)
 
-  const useOnchain = allowOnchain && !useSubgraph
+  useEffect(() => {
+    if (!allowOnchain) {
+      setAllowOnchainDelayed(false)
+      return
+    }
+    const timer = setTimeout(() => setAllowOnchainDelayed(true), 15000)
+    return () => clearTimeout(timer)
+  }, [allowOnchain])
+
+  const useOnchain = allowOnchainDelayed && !useSubgraph
   const { status, candles, trades, lastPrice, refresh } = useOnchainSwapHistory({
     rpcUrl: useOnchain ? rpcUrl : null,
     factoryAddress,
@@ -292,7 +302,7 @@ export default function OnchainMarketPanel({
   return (
     <Panel style={{ marginBottom: '1.5rem' }}>
       <HeaderRow>
-        <TYPE.main>Market activity (WNOVA / TONY)</TYPE.main>
+        <TYPE.main>Market activity (TONY / WNOVA)</TYPE.main>
         <TimeframeRow>
           {TIMEFRAMES.map((tf) => (
             <TimeframeButton
@@ -307,8 +317,8 @@ export default function OnchainMarketPanel({
       </HeaderRow>
       <StatsRow>
         <StatCard>
-          TONY price (WNOVA)
-          <StatValue>{activeLastPrice ? `${formatPrice(activeLastPrice)} WNOVA/TONY` : '—'}</StatValue>
+          Pool price (TONY/WNOVA)
+          <StatValue>{activeLastPrice ? `${formatPrice(activeLastPrice)} TONY/WNOVA` : '—'}</StatValue>
         </StatCard>
         <StatCard>
           24h change
@@ -365,7 +375,7 @@ export default function OnchainMarketPanel({
                 <Badge $side={trade.side}>{trade.sideLabel || trade.side}</Badge>
                 <span>{spent}</span>
                 <span>{received}</span>
-                <span>{formatPrice(trade.price)} WNOVA/TONY</span>
+                <span>{formatPrice(trade.price)} TONY/WNOVA</span>
               </TradeRow>
             )
           })

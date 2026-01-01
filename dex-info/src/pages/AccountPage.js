@@ -153,10 +153,7 @@ function AccountPage({ account }) {
       ? dynamicPositions.reduce((total, position) => {
           const reserveWnova = getReserveWnova(position?.pair, wnovaLower)
           if (!reserveWnova) return total
-          return (
-            total +
-            (parseFloat(position?.liquidityTokenBalance) / parseFloat(position?.pair?.totalSupply)) * reserveWnova * 2
-          )
+          return total + (parseFloat(position?.liquidityTokenBalance) / parseFloat(position?.pair?.totalSupply)) * reserveWnova
         }, 0)
       : null
   }, [dynamicPositions, wnovaLower])

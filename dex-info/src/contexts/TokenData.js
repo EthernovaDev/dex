@@ -89,7 +89,7 @@ function applyPinnedPairFallback(data, pair) {
     data.priceETH = 1
     const reserveWnova = getReserveWnovaFromPair(pair)
     if (reserveWnova > 0) {
-      data.totalLiquidityETH = reserveWnova * 2
+      data.totalLiquidityETH = reserveWnova
     }
     return data
   }
@@ -100,7 +100,7 @@ function applyPinnedPairFallback(data, pair) {
     data.priceETH = price
     const reserveWnova = getReserveWnovaFromPair(pair)
     if (reserveWnova > 0) {
-      data.totalLiquidityETH = reserveWnova * 2
+      data.totalLiquidityETH = reserveWnova
     }
   }
   return data

@@ -87,7 +87,7 @@ export function getReserveWnova(pair, wnovaAddress = WRAPPED_NATIVE_ADDRESS) {
 export function getLiquidityWnova(pair, wnovaAddress = WRAPPED_NATIVE_ADDRESS) {
   const reserveWnova = getReserveWnova(pair, wnovaAddress)
   if (!Number.isFinite(reserveWnova) || reserveWnova <= 0) return null
-  return reserveWnova * 2
+  return reserveWnova
 }
 
 export const toNiceDate = (date) => {

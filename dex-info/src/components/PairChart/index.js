@@ -96,9 +96,9 @@ const PairChart = ({ address, color, base0, base1 }) => {
     let liquidityWnova = new BigNumber(0)
     if (isWnovaPair) {
       if (token0Id === WRAPPED_NATIVE_ADDRESS) {
-        liquidityWnova = reserve0.multipliedBy(2)
+        liquidityWnova = reserve0
       } else if (token1Id === WRAPPED_NATIVE_ADDRESS) {
-        liquidityWnova = reserve1.multipliedBy(2)
+        liquidityWnova = reserve1
       }
     }
 

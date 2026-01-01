@@ -243,7 +243,7 @@ export function useOnchainSwapHistory({
             }
             if (!side || !wnovaAmount.gt(0) || !tonyAmount.gt(0)) continue
 
-            const price = wnovaAmount.div(tonyAmount)
+            const price = tonyAmount.div(wnovaAmount)
             if (!price.isFinite()) continue
 
             const timestamp = await getTimestamp(log.blockNumber)

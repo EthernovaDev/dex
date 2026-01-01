@@ -3,19 +3,11 @@ import { client } from '../apollo/client'
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 import { useTimeframe } from './Application'
-import {
-  getPercentChange,
-  getBlockFromTimestamp,
-  getBlocksFromTimestamps,
-  get2DayPercentChange,
-  getTimeframe,
-  getReserveWnova,
-} from '../utils'
+import { getPercentChange, getBlocksFromTimestamps, get2DayPercentChange, getTimeframe, getReserveWnova } from '../utils'
 import {
   GLOBAL_DATA,
   GLOBAL_TXNS,
   GLOBAL_CHART,
-  ETH_PRICE,
   ALL_PAIRS,
   ALL_TOKENS,
   TOP_LPS_PER_PAIRS,
@@ -491,41 +483,6 @@ const getGlobalTransactions = async () => {
   return transactions
 }
 
-/**
- * Gets the current price  of ETH, 24 hour price, and % change between them
- */
-const getEthPrice = async () => {
-  const utcCurrentTime = dayjs()
-  const utcOneDayBack = utcCurrentTime.subtract(1, 'day').startOf('minute').unix()
-
-  let ethPrice = 1
-  let ethPriceOneDay = 1
-  let priceChangeETH = 0
-
-  try {
-    let oneDayBlock = await getBlockFromTimestamp(utcOneDayBack)
-    let result = await client.query({
-      query: ETH_PRICE(),
-      fetchPolicy: 'cache-first',
-    })
-    let resultOneDay = await client.query({
-      query: ETH_PRICE(oneDayBlock),
-      fetchPolicy: 'cache-first',
-    })
-    const currentRaw = result?.data?.bundles?.[0]?.ethPrice
-    const oneDayRaw = resultOneDay?.data?.bundles?.[0]?.ethPrice
-    const currentParsed = Number(currentRaw)
-    const oneDayParsed = Number(oneDayRaw)
-    ethPrice = Number.isFinite(currentParsed) && currentParsed > 0 ? currentParsed : 1
-    ethPriceOneDay = Number.isFinite(oneDayParsed) && oneDayParsed > 0 ? oneDayParsed : ethPrice
-    priceChangeETH = getPercentChange(ethPrice, ethPriceOneDay)
-  } catch (e) {
-    console.log(e)
-  }
-
-  return [ethPrice, ethPriceOneDay, priceChangeETH]
-}
-
 const PAIRS_TO_FETCH = 500
 const TOKENS_TO_FETCH = 500
 
@@ -608,7 +565,7 @@ export function useGlobalData() {
       let allTokens = await getAllTokensOnUniswap()
       updateAllTokensInUniswap(allTokens)
     }
-    if (!data && ethPrice && oldEthPrice) {
+    if (!data) {
       fetchData()
     }
   }, [ethPrice, oldEthPrice, update, data, updateAllPairsInUniswap, updateAllTokensInUniswap])
@@ -681,8 +638,7 @@ export function useEthPrice() {
   useEffect(() => {
     async function checkForEthPrice() {
       if (!ethPrice) {
-        let [newPrice, oneDayPrice, priceChange] = await getEthPrice()
-        updateEthPrice(newPrice, oneDayPrice, priceChange)
+        updateEthPrice(1, 1, 0)
       }
     }
     checkForEthPrice()
@@ -764,7 +720,7 @@ export function useTopLps() {
             const totalSupply = safeNum(pairData.totalSupply)
             const lpBalance = safeNum(entry.liquidityTokenBalance)
             const wnova =
-              totalSupply > 0 && reserveWnovaNum > 0 ? (lpBalance / totalSupply) * reserveWnovaNum * 2 : 0
+              totalSupply > 0 && reserveWnovaNum > 0 ? (lpBalance / totalSupply) * reserveWnovaNum : 0
             return topLps.push({
               user: entry.user,
               pairName: pairData.token0.symbol + '-' + pairData.token1.symbol,

@@ -15,7 +15,8 @@ import { withRouter } from 'react-router-dom'
 import { TOKEN_BLACKLIST } from '../../constants'
 import FormattedName from '../FormattedName'
 import { TYPE } from '../../Theme'
-import { WRAPPED_NATIVE_ADDRESS, TONY_ADDRESS } from '../../constants/urls'
+import { WRAPPED_NATIVE_ADDRESS, TONY_ADDRESS, PAIR_ADDRESS } from '../../constants/urls'
+import { usePairData } from '../../contexts/PairData'
 import BigNumber from 'bignumber.js'
 
 dayjs.extend(utc)
@@ -169,11 +170,27 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
   const below1080 = useMedia('(max-width: 1080px)')
   const below680 = useMedia('(max-width: 680px)')
   const below600 = useMedia('(max-width: 600px)')
+  const pinnedPair = usePairData(PAIR_ADDRESS)
+  const pinnedToken0 = pinnedPair?.token0?.id?.toLowerCase?.()
+  const pinnedToken1 = pinnedPair?.token1?.id?.toLowerCase?.()
+  const reserve0 = safeBig(pinnedPair?.reserve0 ?? 0)
+  const reserve1 = safeBig(pinnedPair?.reserve1 ?? 0)
+  const isToken0Wnova = pinnedToken0 === WRAPPED_NATIVE_ADDRESS
+  const isToken1Wnova = pinnedToken1 === WRAPPED_NATIVE_ADDRESS
+  const reserveWnova = isToken0Wnova ? reserve0 : isToken1Wnova ? reserve1 : new BigNumber(0)
+  const reserveTony = isToken0Wnova ? reserve1 : isToken1Wnova ? reserve0 : new BigNumber(0)
+  const tonyPriceWnova =
+    reserveWnova.gt(0) && reserveTony.gt(0) ? reserveWnova.div(reserveTony).toNumber() : 0
+  const pairVolumeWnova = isToken0Wnova
+    ? safeBig(pinnedPair?.oneDayVolumeToken0 ?? 0)
+    : isToken1Wnova
+    ? safeBig(pinnedPair?.oneDayVolumeToken1 ?? 0)
+    : new BigNumber(0)
 
   useEffect(() => {
     setMaxPage(1) // edit this to do modular
     setPage(1)
-  }, [tokens])
+  }, [tokens, reserveWnova, pairVolumeWnova, tonyPriceWnova])
 
   const formattedTokens = useMemo(() => {
     const fromSubgraph =
@@ -195,8 +212,8 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
         derivedETH: 1,
         priceETH: 1,
         totalLiquidity: 0,
-        totalLiquidityETH: 0,
-        oneDayVolumeETH: 0,
+        totalLiquidityETH: reserveWnova.gt(0) ? reserveWnova.toNumber() : 0,
+        oneDayVolumeETH: pairVolumeWnova.gt(0) ? pairVolumeWnova.toNumber() : 0,
         priceChangeETH: 0,
       })
     }
@@ -205,16 +222,16 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
         id: TONY_ADDRESS,
         symbol: 'TONY',
         name: 'STARK - IRON MAN',
-        derivedETH: 0,
-        priceETH: 0,
+        derivedETH: tonyPriceWnova || 0,
+        priceETH: tonyPriceWnova || 0,
         totalLiquidity: 0,
-        totalLiquidityETH: 0,
-        oneDayVolumeETH: 0,
+        totalLiquidityETH: reserveWnova.gt(0) ? reserveWnova.toNumber() : 0,
+        oneDayVolumeETH: pairVolumeWnova.gt(0) ? pairVolumeWnova.toNumber() : 0,
         priceChangeETH: 0,
       })
     }
     return fallback
-  }, [tokens])
+  }, [tokens, reserveWnova, pairVolumeWnova, tonyPriceWnova])
 
   const tokensWithMetrics = useMemo(() => {
     return (formattedTokens || []).map((token) => ({

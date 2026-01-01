@@ -304,8 +304,8 @@ function parseData(data, oneDayData, twoDayData, oneWeekData, ethPrice, oneDayBl
   data.volumeChangeToken1 = volumeChangeToken1
 
   // set liquidity properties
-  data.trackedReserveUSD = data.trackedReserveETH * ethPrice
-  data.liquidityChangeUSD = getPercentChange(data.reserveUSD, oneDayData?.reserveUSD)
+  data.trackedReserveUSD = 0
+  data.liquidityChangeUSD = 0
   data.liquidityChangeETH = getPercentChange(data.reserveETH, oneDayData?.reserveETH)
   const token0Id = data.token0?.id?.toLowerCase?.() || ''
   const token1Id = data.token1?.id?.toLowerCase?.() || ''
@@ -313,10 +313,14 @@ function parseData(data, oneDayData, twoDayData, oneWeekData, ethPrice, oneDayBl
     data.oneDayVolumeETH = data.oneDayVolumeToken0
     data.oneWeekVolumeETH = oneWeekVolumeToken0
     data.volumeChangeETH = volumeChangeToken0
+    data.reserveETH = data.reserve0
+    data.trackedReserveETH = data.reserve0
   } else if (token1Id === WRAPPED_NATIVE_ADDRESS) {
     data.oneDayVolumeETH = data.oneDayVolumeToken1
     data.oneWeekVolumeETH = oneWeekVolumeToken1
     data.volumeChangeETH = volumeChangeToken1
+    data.reserveETH = data.reserve1
+    data.trackedReserveETH = data.reserve1
   } else {
     data.oneDayVolumeETH = 0
     data.oneWeekVolumeETH = 0

@@ -140,7 +140,7 @@ function PositionList({ positions }) {
   const ListItem = ({ position, index }) => {
     const poolOwnership = position.liquidityTokenBalance / position.pair.totalSupply
     const reserveWnova = getReserveWnova(position.pair, wnovaLower)
-    const valueWnova = reserveWnova ? poolOwnership * reserveWnova * 2 : null
+    const valueWnova = reserveWnova ? poolOwnership * reserveWnova : null
 
     return (
       <DashGrid style={{ opacity: poolOwnership > 0 ? 1 : 0.6 }} focus={true}>
@@ -266,8 +266,8 @@ function PositionList({ positions }) {
         if (sortedColumn === SORT_FIELD.VALUE) {
           const bal0Reserve = getReserveWnova(p0.pair, wnovaLower)
           const bal1Reserve = getReserveWnova(p1.pair, wnovaLower)
-          const bal0 = bal0Reserve ? (p0.liquidityTokenBalance / p0.pair.totalSupply) * bal0Reserve * 2 : 0
-          const bal1 = bal1Reserve ? (p1.liquidityTokenBalance / p1.pair.totalSupply) * bal1Reserve * 2 : 0
+          const bal0 = bal0Reserve ? (p0.liquidityTokenBalance / p0.pair.totalSupply) * bal0Reserve : 0
+          const bal1 = bal1Reserve ? (p1.liquidityTokenBalance / p1.pair.totalSupply) * bal1Reserve : 0
           return bal0 > bal1 ? (sortDirection ? -1 : 1) : sortDirection ? 1 : -1
         }
         return 1

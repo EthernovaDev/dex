@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import styled from 'styled-components'
 import { ApolloProvider } from 'react-apollo'
 import { client } from './apollo/client'
@@ -172,10 +172,25 @@ const BLOCK_DIFFERENCE_THRESHOLD = 30
 
 function App() {
   const [savedOpen, setSavedOpen] = useState(false)
+  const [allowSpotFallback, setAllowSpotFallback] = useState(false)
 
   const [latestBlock, headBlock] = useLatestBlocks()
   const subgraphReady = Boolean(latestBlock)
-  const spotHistory = useSpotPriceHistory(subgraphReady ? null : RPC_URL, FACTORY_ADDRESS, WNOVA_ADDRESS, TONY_ADDRESS)
+  useEffect(() => {
+    if (subgraphReady) {
+      setAllowSpotFallback(false)
+      return
+    }
+    const timer = setTimeout(() => setAllowSpotFallback(true), 15000)
+    return () => clearTimeout(timer)
+  }, [subgraphReady])
+
+  const spotHistory = useSpotPriceHistory(
+    !subgraphReady && allowSpotFallback ? RPC_URL : null,
+    FACTORY_ADDRESS,
+    WNOVA_ADDRESS,
+    TONY_ADDRESS
+  )
 
   // show warning
   const showWarning = headBlock && latestBlock ? headBlock - latestBlock > BLOCK_DIFFERENCE_THRESHOLD : false
@@ -209,7 +224,7 @@ function App() {
                 {spotHistory.status === 'ok' && spotHistory.lastPrice ? (
                   <>
                     <FallbackText>
-                      Current spot price: {formatPrice(spotHistory.lastPrice)} WNOVA per TONY
+                      Current spot price: {formatPrice(spotHistory.lastPrice)} TONY per WNOVA
                     </FallbackText>
                     <MiniChart values={spotHistory.prices} />
                   </>

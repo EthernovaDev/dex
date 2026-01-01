@@ -17,6 +17,8 @@ import { TYPE } from '../../Theme'
 import { PAIR_BLACKLIST } from '../../constants'
 import { AutoColumn } from '../Column'
 import { WRAPPED_NATIVE_ADDRESS, TONY_ADDRESS, PAIR_ADDRESS } from '../../constants/urls'
+import { usePairData } from '../../contexts/PairData'
+import { FEE_BPS } from '../../constants/base'
 import BigNumber from 'bignumber.js'
 
 dayjs.extend(utc)
@@ -163,7 +165,7 @@ const getPairMetrics = (pairData) => {
   if (isToken0Wnova || isToken1Wnova) {
     const reserveWnova = isToken0Wnova ? reserve0 : reserve1
     if (reserveWnova.gt(0)) {
-      liquidity = reserveWnova.multipliedBy(2)
+      liquidity = reserveWnova
     }
   }
 
@@ -185,7 +187,7 @@ const getPairMetrics = (pairData) => {
     volume7d = safeBig(pairData.oneWeekVolumeETH ?? 0)
   }
 
-  const fees24h = volume24h.gt(0) ? volume24h.multipliedBy(0.003) : new BigNumber(0)
+  const fees24h = volume24h.gt(0) ? volume24h.multipliedBy(FEE_BPS / 10000) : new BigNumber(0)
   const apy = liquidity.gt(0) ? fees24h.multipliedBy(365).multipliedBy(100).dividedBy(liquidity).toNumber() : 0
 
   return {
@@ -214,10 +216,16 @@ function PairList({ pairs, color, disbaleLinks, maxItems = 10, useTracked = fals
   const below600 = useMedia('(max-width: 600px)')
   const below740 = useMedia('(max-width: 740px)')
   const below1080 = useMedia('(max-width: 1080px)')
+  const pinnedPair = usePairData(PAIR_ADDRESS)
 
   const resolvedPairs = React.useMemo(() => {
     if (pairs && Object.keys(pairs).length) return pairs
     if (!PAIR_ADDRESS || !WRAPPED_NATIVE_ADDRESS || !TONY_ADDRESS) return pairs
+    if (pinnedPair && pinnedPair.id) {
+      return {
+        [PAIR_ADDRESS]: pinnedPair,
+      }
+    }
     return {
       [PAIR_ADDRESS]: {
         id: PAIR_ADDRESS,
@@ -225,13 +233,15 @@ function PairList({ pairs, color, disbaleLinks, maxItems = 10, useTracked = fals
         token1: { id: WRAPPED_NATIVE_ADDRESS, symbol: 'WNOVA', name: 'Wrapped NOVA' },
         trackedReserveETH: 0,
         reserveETH: 0,
+        reserve0: 0,
+        reserve1: 0,
         oneDayVolumeETH: 0,
         oneWeekVolumeETH: 0,
         oneDayVolumeToken0: 0,
         oneDayVolumeToken1: 0,
       },
     }
-  }, [pairs])
+  }, [pairs, pinnedPair])
 
   // pagination
   const [page, setPage] = useState(1)
@@ -366,6 +376,25 @@ function PairList({ pairs, color, disbaleLinks, maxItems = 10, useTracked = fals
         )
       })
 
+  const fallbackPairKey = React.useMemo(() => {
+    if (!resolvedPairs || !PAIR_ADDRESS) return null
+    return (
+      Object.keys(resolvedPairs).find((key) => key?.toLowerCase?.() === PAIR_ADDRESS) || PAIR_ADDRESS
+    )
+  }, [resolvedPairs])
+
+  const safePairList =
+    pairList && pairList.length
+      ? pairList
+      : fallbackPairKey && resolvedPairs?.[fallbackPairKey]
+      ? [
+          <div key={fallbackPairKey} data-testid={`pair-row-${fallbackPairKey}`}>
+            <ListItem index={1} pairAddress={fallbackPairKey} />
+            <Divider />
+          </div>,
+        ]
+      : pairList
+
   return (
     <ListWrapper>
       <DashGrid
@@ -442,10 +471,10 @@ function PairList({ pairs, color, disbaleLinks, maxItems = 10, useTracked = fals
       </DashGrid>
       <Divider />
       <List p={0}>
-        {!pairList ? (
+        {!safePairList ? (
           <LocalLoader />
-        ) : pairList.length ? (
-          pairList
+        ) : safePairList.length ? (
+          safePairList
         ) : (
           <TYPE.light style={{ padding: '1rem' }}>No pairs yet.</TYPE.light>
         )}

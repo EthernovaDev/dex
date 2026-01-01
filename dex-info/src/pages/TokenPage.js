@@ -125,7 +125,19 @@ function TokenPage({ address, history }) {
   const rpcUrl = process.env.REACT_APP_RPC_URL || 'https://rpc.ethnova.net'
   const [latestBlock] = useLatestBlocks()
   const subgraphReady = Boolean(latestBlock)
-  const shouldUseOnchain = !subgraphReady || !tokenData
+  const [allowOnchain, setAllowOnchain] = useState(false)
+
+  useEffect(() => {
+    if (!address) return
+    if (subgraphReady && tokenData?.id) {
+      setAllowOnchain(false)
+      return
+    }
+    const timer = setTimeout(() => setAllowOnchain(true), 15000)
+    return () => clearTimeout(timer)
+  }, [address, subgraphReady, tokenData])
+
+  const shouldUseOnchain = allowOnchain && (!subgraphReady || !tokenData)
   const onchainInfo = useOnchainTokenInfo(address, shouldUseOnchain ? rpcUrl : null)
   const isWrappedNative = address?.toLowerCase() === WRAPPED_NATIVE_ADDRESS
   const safeSymbol = symbol || onchainInfo.info?.symbol || (isWrappedNative ? 'WNOVA' : 'UNKNOWN')

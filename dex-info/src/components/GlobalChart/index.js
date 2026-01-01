@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { ResponsiveContainer } from 'recharts'
 import { timeframeOptions } from '../../constants'
-import { useGlobalChartData, useGlobalData } from '../../contexts/GlobalData'
+import { useGlobalChartData } from '../../contexts/GlobalData'
 import { useMedia } from 'react-use'
 import DropdownSelect from '../DropdownSelect'
 import TradingViewChart, { CHART_TYPES } from '../TradingviewChart'
@@ -29,14 +29,16 @@ const GlobalChart = ({ display }) => {
 
   // global historical data
   const [dailyData, weeklyData] = useGlobalChartData()
-  const {
-    totalLiquidityETH,
-    oneDayVolumeETH,
-    volumeChangeETH,
-    liquidityChangeETH,
-    oneWeekVolumeETH,
-    weeklyVolumeChangeETH,
-  } = useGlobalData()
+  const deriveBase = (dataSet, field) => {
+    if (!dataSet || !dataSet.length) return { base: 0, change: null }
+    const last = dataSet[dataSet.length - 1]
+    const prev = dataSet.length > 1 ? dataSet[dataSet.length - 2] : null
+    const base = Number(last?.[field] || 0)
+    if (!prev) return { base, change: null }
+    const prevValue = Number(prev?.[field] || 0)
+    if (!Number.isFinite(prevValue) || prevValue <= 0) return { base, change: null }
+    return { base, change: ((base - prevValue) / prevValue) * 100 }
+  }
 
   // based on window, get starttim
   let utcStartTime = getTimeframe(timeWindow)
@@ -82,33 +84,40 @@ const GlobalChart = ({ display }) => {
         <DropdownSelect options={CHART_VIEW} active={chartView} setActive={setChartView} color={'#ff007a'} />
       )}
 
-      {chartDataFiltered && chartView === CHART_VIEW.LIQUIDITY && (
+      {chartDataFiltered && chartView === CHART_VIEW.LIQUIDITY && (() => {
+        const { base, change } = deriveBase(chartDataFiltered, 'totalLiquidityETH')
+        return (
         <ResponsiveContainer aspect={60 / 28} ref={ref}>
           <TradingViewChart
             data={dailyData}
-            base={totalLiquidityETH}
-            baseChange={liquidityChangeETH}
+            base={base}
+            baseChange={change}
             title="Liquidity (WNOVA)"
             field="totalLiquidityETH"
             width={width}
             type={CHART_TYPES.AREA}
           />
         </ResponsiveContainer>
-      )}
-      {chartDataFiltered && chartView === CHART_VIEW.VOLUME && (
+        )
+      })()}
+      {chartDataFiltered && chartView === CHART_VIEW.VOLUME && (() => {
+        const field = volumeWindow === VOLUME_WINDOW.WEEKLY ? 'weeklyVolumeETH' : 'dailyVolumeETH'
+        const { base, change } = deriveBase(chartDataFiltered, field)
+        return (
         <ResponsiveContainer aspect={60 / 28}>
           <TradingViewChart
             data={chartDataFiltered}
-            base={volumeWindow === VOLUME_WINDOW.WEEKLY ? oneWeekVolumeETH : oneDayVolumeETH}
-            baseChange={volumeWindow === VOLUME_WINDOW.WEEKLY ? weeklyVolumeChangeETH : volumeChangeETH}
+            base={base}
+            baseChange={change}
             title={volumeWindow === VOLUME_WINDOW.WEEKLY ? 'Volume (7d, WNOVA)' : 'Volume (WNOVA)'}
-            field={volumeWindow === VOLUME_WINDOW.WEEKLY ? 'weeklyVolumeETH' : 'dailyVolumeETH'}
+            field={field}
             width={width}
             type={CHART_TYPES.BAR}
             useWeekly={volumeWindow === VOLUME_WINDOW.WEEKLY}
           />
         </ResponsiveContainer>
-      )}
+        )
+      })()}
       {display === 'volume' && (
         <RowFixed
           style={{

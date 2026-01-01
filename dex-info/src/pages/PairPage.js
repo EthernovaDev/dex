@@ -156,7 +156,7 @@ function PairPage({ pairAddress, history }) {
   const isToken1Wnova = token1Id === wnovaLower
   const reserveWnova = isToken0Wnova ? reserve0 : isToken1Wnova ? reserve1 : null
   const liquidityWnova =
-    reserveWnova && Number(reserveWnova) > 0 ? formattedNum(Number(reserveWnova) * 2, false) : null
+    reserveWnova && Number(reserveWnova) > 0 ? formattedNum(Number(reserveWnova), false) : null
   const formattedLiquidity = liquidityWnova || (reserveETH ? formattedNum(reserveETH, false) : formattedNum(trackedReserveETH, false))
   const liquidityChange = formattedPercent(liquidityChangeETH)
 

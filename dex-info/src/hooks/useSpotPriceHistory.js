@@ -145,7 +145,7 @@ export function useSpotPriceHistory(rpcUrl, factoryAddress, wnovaAddress, tonyAd
             const reserve0 = new BigNumber(parsed.args.reserve0.toString())
             const reserve1 = new BigNumber(parsed.args.reserve1.toString())
             if (!isTargetPair || reserve0.isZero() || reserve1.isZero()) continue
-            const price = isToken0Wnova ? reserve0.div(reserve1).toNumber() : reserve1.div(reserve0).toNumber()
+            const price = isToken0Wnova ? reserve1.div(reserve0).toNumber() : reserve0.div(reserve1).toNumber()
             if (Number.isFinite(price)) nextPrices.push(price)
           } catch {
             // ignore bad log

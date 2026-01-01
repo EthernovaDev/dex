@@ -255,6 +255,9 @@ async function main() {
   page.on('requestfailed', req => {
     const url = req.url()
     const errText = req.failure()?.errorText || ''
+    if (/ERR_ABORTED/i.test(errText) && /\/subgraphs\//i.test(url)) {
+      return
+    }
     const line = `[requestfailed] ${url} - ${errText}`
     const postData = req.postData() || ''
     const isJsonRpc = isJsonRpcPayload(postData)
@@ -560,10 +563,180 @@ async function main() {
     }
   }
 
+  currentRoute = 'info-tokens'
+  await page.goto(`${BASE_URL}/info/#/tokens`, { waitUntil: 'domcontentloaded', timeout: 60000 })
+  await page.waitForTimeout(4000)
+  const tokenRows = await page.locator('[data-testid^="token-row-"]').count()
+  if (!tokenRows) {
+    addLiquidityFailures.push('Tokens list is empty')
+  } else {
+    routesRendered.infoTokens = true
+  }
+
+  currentRoute = 'info-pairs'
+  await page.goto(`${BASE_URL}/info/#/pairs`, { waitUntil: 'domcontentloaded', timeout: 60000 })
+  await page.waitForTimeout(2000)
+  try {
+    await page.waitForFunction(
+      () => document.querySelectorAll('[data-testid^="pair-row-"]').length > 0,
+      {},
+      { timeout: 25000 }
+    )
+  } catch (_) {
+    // continue and evaluate below
+  }
+  const pairRows = await page.locator('[data-testid^="pair-row-"]').count()
+  if (!pairRows) {
+    addLiquidityFailures.push('Pairs list is empty')
+  } else {
+    routesRendered.infoPairs = true
+  }
+  let pairDiagnostics = {}
+  if (pairAddress && pairRows) {
+    const pairKey = pairAddress.toLowerCase()
+    const liqSelector = `[data-testid="pair-liquidity-${pairKey}"]`
+    try {
+      await page.waitForSelector('[data-testid^="pair-liquidity-"]', { timeout: 15000 })
+    } catch (_) {
+      // ignore, fallback below
+    }
+    try {
+      await page.waitForFunction(
+        (key) => {
+          const row =
+            document.querySelector(`[data-testid=\"pair-row-${key}\"]`) ||
+            document.querySelector('[data-testid^="pair-row-"]')
+          if (!row) return false
+          const text = row.textContent || ''
+          return /TONY/i.test(text) && /WNOVA/i.test(text)
+        },
+        pairKey,
+        { timeout: 20000 }
+      )
+    } catch (_) {
+      // ignore, fallback below
+    }
+    try {
+      await page.waitForFunction(
+        (key) =>
+          Boolean(document.querySelector(`[data-testid="pair-row-${key}"]`)) ||
+          document.querySelectorAll('[data-testid^="pair-row-"]').length > 0,
+        pairKey,
+        { timeout: 15000 }
+      )
+    } catch (_) {
+      // ignore, will handle below
+    }
+
+    const resolvePairLiquidity = async () => {
+      let row = page.locator(`[data-testid="pair-row-${pairKey}"]`)
+      if (!(await row.count())) {
+        row = page
+          .locator('[data-testid^="pair-row-"]')
+          .filter({ hasText: /TONY/i })
+          .filter({ hasText: /WNOVA/i })
+          .first()
+      }
+      if (!(await row.count())) {
+        row = page.locator('[data-testid^="pair-row-"]').first()
+      }
+
+      let cell = page.locator(liqSelector)
+      if (!(await cell.count()) && (await row.count())) {
+        cell = row.locator('[data-testid^="pair-liquidity-"]').first()
+      }
+      return { row, cell }
+    }
+
+    let { row: pairRow, cell: liqCell } = await resolvePairLiquidity()
+    if (!(await liqCell.count())) {
+      await page.waitForTimeout(8000)
+      ;({ row: pairRow, cell: liqCell } = await resolvePairLiquidity())
+    }
+    try {
+      await page.waitForFunction(
+        () => {
+          const row = document.querySelector('[data-testid^="pair-row-"]')
+          if (!row) return false
+          return (row.textContent || '').trim().length > 0
+        },
+        {},
+        { timeout: 20000 }
+      )
+    } catch (_) {
+      // ignore
+    }
+
+    const capturePairDiagnostics = async (label) => {
+      const rowCount = await pairRow.count()
+      const liqCount = await liqCell.count()
+      const rowText = rowCount ? await pairRow.innerText() : ''
+      const liqText = liqCount ? await liqCell.innerText() : ''
+      return {
+        attempt: label,
+        rowCount,
+        liqCount,
+        rowText,
+        liqText
+      }
+    }
+
+    pairDiagnostics = {
+      pairKey,
+      liqSelector,
+      ...(await capturePairDiagnostics('initial'))
+    }
+
+    if (!pairDiagnostics.rowText || !pairDiagnostics.liqCount) {
+      await page.reload({ waitUntil: 'domcontentloaded', timeout: 60000 })
+      await page.waitForTimeout(8000)
+      ;({ row: pairRow, cell: liqCell } = await resolvePairLiquidity())
+      pairDiagnostics = {
+        ...pairDiagnostics,
+        ...(await capturePairDiagnostics('reload'))
+      }
+    }
+
+    if (pairDiagnostics.rowCount) {
+      if (!/TONY/i.test(pairDiagnostics.rowText || '') || !/WNOVA/i.test(pairDiagnostics.rowText || '')) {
+        addLiquidityFailures.push('Top pairs did not include TONY/WNOVA row')
+      }
+    }
+    if (pairDiagnostics.liqCount) {
+      if ((pairDiagnostics.liqText || '').includes('—')) {
+        addLiquidityFailures.push('Top pair liquidity shows — despite existing pool')
+      }
+    } else {
+      addLiquidityFailures.push('Top pair liquidity cell missing')
+    }
+  }
+
   for (let i = 0; i < 20; i += 1) {
     currentRoute = 'info-overview'
     await page.goto(`${BASE_URL}/info/#/overview`, { waitUntil: 'domcontentloaded', timeout: 60000 })
     await page.waitForTimeout(4000)
+    if (i === 0) {
+      const priceCard = page.locator('[data-testid="market-pool-price"]')
+      const priceLabel = page.locator('[data-testid="market-pool-price-label"]')
+      const priceValue = page.locator('[data-testid="market-pool-price-value"]')
+      if (await priceCard.count()) {
+        const cardBox = await priceCard.boundingBox()
+        const labelBox = await priceLabel.boundingBox()
+        const valueBox = await priceValue.boundingBox()
+        if (!labelBox || !valueBox || !cardBox) {
+          addLiquidityFailures.push('Market price card missing bounding boxes')
+        } else {
+          if (valueBox.y <= labelBox.y + labelBox.height - 2) {
+            addLiquidityFailures.push('Market price value overlaps label')
+          }
+          if (valueBox.y < cardBox.y || valueBox.y + valueBox.height > cardBox.y + cardBox.height) {
+            addLiquidityFailures.push('Market price value out of card bounds')
+          }
+        }
+      } else {
+        addLiquidityFailures.push('Market price card missing data-testid')
+      }
+    }
     const volumeCharts = await page.locator('[data-testid="chart-volume"]').count()
     const liquidityCharts = await page.locator('[data-testid="chart-liquidity"]').count()
     if (volumeCharts !== 1) {
@@ -588,26 +761,6 @@ async function main() {
     }
   }
   routesRendered.infoOverview = true
-
-  currentRoute = 'info-tokens'
-  await page.goto(`${BASE_URL}/info/#/tokens`, { waitUntil: 'domcontentloaded', timeout: 60000 })
-  await page.waitForTimeout(4000)
-  const tokenRows = await page.locator('[data-testid^="token-row-"]').count()
-  if (!tokenRows) {
-    addLiquidityFailures.push('Tokens list is empty')
-  } else {
-    routesRendered.infoTokens = true
-  }
-
-  currentRoute = 'info-pairs'
-  await page.goto(`${BASE_URL}/info/#/pairs`, { waitUntil: 'domcontentloaded', timeout: 60000 })
-  await page.waitForTimeout(4000)
-  const pairRows = await page.locator('[data-testid^="pair-row-"]').count()
-  if (!pairRows) {
-    addLiquidityFailures.push('Pairs list is empty')
-  } else {
-    routesRendered.infoPairs = true
-  }
 
   const rootHtml = await page.evaluate(() => {
     const root = document.getElementById('root')
@@ -652,7 +805,8 @@ async function main() {
       lastSoftRpcMethod,
       topRpcMethods
     },
-    rpcEvents
+    rpcEvents,
+    pairDiagnostics
   }
   writeFile(logFile, JSON.stringify(log, null, 2))
 

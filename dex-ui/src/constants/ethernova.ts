@@ -2,8 +2,10 @@ import {
   CHAIN_ID,
   EXPLORER_URL,
   FACTORY_ADDRESS,
+  LIQUIDITY_ROUTER_ADDRESS,
   MULTICALL_ADDRESS,
   ROUTER_ADDRESS,
+  SWAP_ROUTER_ADDRESS,
   TONY_ADDRESS,
   WNOVA_ADDRESS
 } from './addresses'
@@ -23,6 +25,8 @@ export const ETHERNOVA = {
   addresses: {
     factory: FACTORY_ADDRESS,
     router: ROUTER_ADDRESS,
+    swapRouter: SWAP_ROUTER_ADDRESS,
+    liquidityRouter: LIQUIDITY_ROUTER_ADDRESS,
     multicall2: MULTICALL_ADDRESS,
     wnova: WNOVA_ADDRESS,
     tony: TONY_ADDRESS

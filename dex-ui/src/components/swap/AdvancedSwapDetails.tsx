@@ -1,4 +1,4 @@
-import { ETHER, Trade, TradeType } from '@im33357/uniswap-v2-sdk'
+import { Currency, ETHER, JSBI, Percent, Token, Trade, TradeType } from '@im33357/uniswap-v2-sdk'
 import React, { useContext } from 'react'
 import { ThemeContext } from 'styled-components'
 import { Field } from '../../state/swap/actions'
@@ -12,6 +12,7 @@ import FormattedPriceImpact from './FormattedPriceImpact'
 import { SectionBreak } from './styleds'
 import SwapRoute from './SwapRoute'
 import { NATIVE_SYMBOL } from '../../constants/ethernova'
+import { TREASURY_FEE_BPS, WNOVA } from '../../constants'
 
 function TradeSummary({ trade, allowedSlippage }: { trade: Trade; allowedSlippage: number }) {
   const theme = useContext(ThemeContext)
@@ -20,6 +21,17 @@ function TradeSummary({ trade, allowedSlippage }: { trade: Trade; allowedSlippag
   const slippageAdjustedAmounts = computeSlippageAdjustedAmounts(trade, allowedSlippage)
   const inputSymbol = trade.inputAmount.currency === ETHER ? NATIVE_SYMBOL : trade.inputAmount.currency.symbol
   const outputSymbol = trade.outputAmount.currency === ETHER ? NATIVE_SYMBOL : trade.outputAmount.currency.symbol
+  const treasuryFeePercent = new Percent(JSBI.BigInt(TREASURY_FEE_BPS), JSBI.BigInt(10000))
+
+  const isWnova = (currency: Currency) =>
+    currency === ETHER || (currency instanceof Token && currency.address === WNOVA.address)
+
+  const treasuryFeeAmount =
+    isWnova(trade.inputAmount.currency)
+      ? trade.inputAmount.multiply(treasuryFeePercent)
+      : isWnova(trade.outputAmount.currency)
+      ? trade.outputAmount.multiply(treasuryFeePercent)
+      : null
 
   return (
     <>
@@ -60,6 +72,18 @@ function TradeSummary({ trade, allowedSlippage }: { trade: Trade; allowedSlippag
           </RowFixed>
           <TYPE.black fontSize={14} color={theme.text1}>
             {realizedLPFee ? `${realizedLPFee.toSignificant(4)} ${inputSymbol}` : '-'}
+          </TYPE.black>
+        </RowBetween>
+
+        <RowBetween>
+          <RowFixed>
+            <TYPE.black fontSize={14} fontWeight={400} color={theme.text2}>
+              Treasury Fee (1%)
+            </TYPE.black>
+            <QuestionHelper text="Protocol fee paid in WNOVA and sent to the treasury." />
+          </RowFixed>
+          <TYPE.black fontSize={14} color={theme.text1}>
+            {treasuryFeeAmount ? `${treasuryFeeAmount.toSignificant(4)} ${NATIVE_SYMBOL}` : `1% ${NATIVE_SYMBOL}`}
           </TYPE.black>
         </RowBetween>
       </AutoColumn>

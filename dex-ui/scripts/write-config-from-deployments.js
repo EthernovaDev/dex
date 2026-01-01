@@ -41,9 +41,12 @@ const config = {
   },
   contracts: {
     factory: addresses.factory || '',
-    router: addresses.router || '',
+    router: addresses.novaRouter || addresses.router || '',
+    swapRouter: addresses.novaRouter || addresses.router || '',
+    liquidityRouter: addresses.router || '',
     multicall2: addresses.multicall2 || '',
-    pair: addresses.pair || ''
+    pair: addresses.pair || '',
+    tokenFactory: addresses.tokenFactory || ''
   },
   startBlock
 }

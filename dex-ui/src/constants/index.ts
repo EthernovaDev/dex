@@ -1,11 +1,18 @@
 import { JSBI, Percent, Token } from '@im33357/uniswap-v2-sdk'
 import { AbstractConnector } from '@web3-react/abstract-connector'
-import { CHAIN_ID, ROUTER_ADDRESS as ROUTER_ADDRESS_ENV, TONY_ADDRESS } from './addresses'
+import {
+  CHAIN_ID,
+  ROUTER_ADDRESS as ROUTER_ADDRESS_ENV,
+  SWAP_ROUTER_ADDRESS,
+  LIQUIDITY_ROUTER_ADDRESS,
+  TONY_ADDRESS
+} from './addresses'
 import { WRAPPED_NATIVE } from './native'
 
 import { injected, walletconnect } from '../connectors'
 
 export const ROUTER_ADDRESS = ROUTER_ADDRESS_ENV
+export { SWAP_ROUTER_ADDRESS, LIQUIDITY_ROUTER_ADDRESS }
 
 // a list of tokens by chain
 type ChainTokenList = {
@@ -92,6 +99,7 @@ export const NetworkContextName = 'NETWORK'
 
 // default allowed slippage, in bips
 export const INITIAL_ALLOWED_SLIPPAGE = 50
+export const TREASURY_FEE_BPS = 100
 // 20 minutes, denominated in seconds
 export const DEFAULT_DEADLINE_FROM_NOW = 60 * 20
 

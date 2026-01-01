@@ -6,6 +6,8 @@ const requiredEnv = (name: string): string => {
   return value
 }
 
+const optionalEnv = (name: string): string | undefined => process.env[name]
+
 const parseChainId = (value: string | undefined, fallback: number): number => {
   if (!value) return fallback
   const trimmed = value.trim()
@@ -18,8 +20,10 @@ export const EXPLORER_URL = process.env.REACT_APP_EXPLORER_URL ?? ''
 
 export const FACTORY_ADDRESS = requiredEnv('REACT_APP_FACTORY_ADDRESS')
 export const ROUTER_ADDRESS = requiredEnv('REACT_APP_ROUTER_ADDRESS')
+export const SWAP_ROUTER_ADDRESS = optionalEnv('REACT_APP_SWAP_ROUTER_ADDRESS') ?? ROUTER_ADDRESS
+export const LIQUIDITY_ROUTER_ADDRESS = optionalEnv('REACT_APP_LIQUIDITY_ROUTER_ADDRESS') ?? ROUTER_ADDRESS
 export const WNOVA_ADDRESS = requiredEnv('REACT_APP_WNOVA_ADDRESS')
 export const TONY_ADDRESS = requiredEnv('REACT_APP_TONY_ADDRESS')
 export const MULTICALL_ADDRESS = requiredEnv('REACT_APP_MULTICALL_ADDRESS')
 
-export const BAD_RECIPIENT_ADDRESSES = [FACTORY_ADDRESS, ROUTER_ADDRESS]
+export const BAD_RECIPIENT_ADDRESSES = [FACTORY_ADDRESS, ROUTER_ADDRESS, SWAP_ROUTER_ADDRESS, LIQUIDITY_ROUTER_ADDRESS]

@@ -3,8 +3,10 @@ import {
   CHAIN_ID,
   EXPLORER_URL,
   FACTORY_ADDRESS,
+  LIQUIDITY_ROUTER_ADDRESS,
   MULTICALL_ADDRESS,
   ROUTER_ADDRESS,
+  SWAP_ROUTER_ADDRESS,
   TONY_ADDRESS,
   WNOVA_ADDRESS
 } from '../constants/addresses'
@@ -29,8 +31,11 @@ export type EthernovaConfig = {
   contracts: {
     factory: string
     router: string
+    liquidityRouter?: string
+    swapRouter?: string
     multicall2: string
     pair: string
+    tokenFactory?: string
   }
 }
 
@@ -60,8 +65,11 @@ const FALLBACK_CONFIG: EthernovaConfig = {
   contracts: {
     factory: FACTORY_ADDRESS ?? '',
     router: ROUTER_ADDRESS ?? '',
+    liquidityRouter: LIQUIDITY_ROUTER_ADDRESS ?? '',
+    swapRouter: SWAP_ROUTER_ADDRESS ?? '',
     multicall2: MULTICALL_ADDRESS ?? '',
-    pair: ''
+    pair: '',
+    tokenFactory: process.env.REACT_APP_TOKEN_FACTORY_ADDRESS ?? ''
   }
 }
 
@@ -93,8 +101,11 @@ function normalizeConfig(raw: any): EthernovaConfig {
     contracts: {
       factory: cfg.contracts?.factory ?? FALLBACK_CONFIG.contracts.factory,
       router: cfg.contracts?.router ?? FALLBACK_CONFIG.contracts.router,
+      liquidityRouter: cfg.contracts?.liquidityRouter ?? FALLBACK_CONFIG.contracts.liquidityRouter,
+      swapRouter: cfg.contracts?.swapRouter ?? FALLBACK_CONFIG.contracts.swapRouter,
       multicall2: cfg.contracts?.multicall2 ?? FALLBACK_CONFIG.contracts.multicall2,
-      pair: cfg.contracts?.pair ?? FALLBACK_CONFIG.contracts.pair
+      pair: cfg.contracts?.pair ?? FALLBACK_CONFIG.contracts.pair,
+      tokenFactory: cfg.contracts?.tokenFactory ?? FALLBACK_CONFIG.contracts.tokenFactory
     }
   }
 }

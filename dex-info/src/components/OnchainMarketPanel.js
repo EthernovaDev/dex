@@ -312,7 +312,7 @@ export default function OnchainMarketPanel({
     0
   )
   const isUp = change24h !== null && change24h >= 0
-  const priceValue = isFiniteNum(activeLastPrice) ? `${formatPrice(activeLastPrice)} TONY/WNOVA` : '—'
+  const priceValue = isFiniteNum(activeLastPrice) ? formatPrice(activeLastPrice) : '—'
   const changeValue = isFiniteNum(change24h) ? `${change24h.toFixed(2)}%` : '—'
   const volumeValue = isFiniteNum(volume24h) ? `${formattedNum(volume24h, false)} WNOVA` : '—'
   const tradesValue = Number.isFinite(trades24h.length) ? trades24h.length : '—'

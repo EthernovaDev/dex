@@ -8,7 +8,7 @@ import { usePairData, useAllPairData } from '../../contexts/PairData'
 import { useSpotPriceHistory } from '../../hooks/useSpotPriceHistory'
 import { formattedNum, localNumber, formatPrice, isFiniteNum } from '../../utils'
 import { PAIR_ADDRESS, WRAPPED_NATIVE_ADDRESS } from '../../constants/urls'
-import { FEE_BPS } from '../../constants/base'
+import { FEE_BPS, TREASURY_FEE_BPS } from '../../constants/base'
 
 import { TYPE } from '../../Theme'
 
@@ -82,6 +82,9 @@ export default function GlobalStats() {
     }).length || pairCount || 0
   const volumeForFees = volumeWnova > 0 ? volumeWnova : oneDayVolumeETH || 0
   const oneDayFees = isFiniteNum(volumeForFees) ? formattedNum(volumeForFees * (FEE_BPS / 10000), false) : '—'
+  const protocolFees = isFiniteNum(volumeForFees)
+    ? formattedNum(volumeForFees * (TREASURY_FEE_BPS / 10000), false)
+    : '—'
 
   return (
     <Header>
@@ -106,6 +109,11 @@ export default function GlobalStats() {
           {!below1295 && (
             <TYPE.main mr={'1rem'}>
               Fees (24H, WNOVA): <Medium>{oneDayFees}</Medium>&nbsp;
+            </TYPE.main>
+          )}
+          {!below1295 && (
+            <TYPE.main mr={'1rem'}>
+              Treasury (24H, WNOVA): <Medium>{protocolFees}</Medium>&nbsp;
             </TYPE.main>
           )}
         </RowFixed>

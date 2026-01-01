@@ -125,7 +125,8 @@ const SORT_FIELD = {
 
 const safeBig = (value) => {
   try {
-    return new BigNumber(value || 0)
+    const next = new BigNumber(value || 0)
+    return next.isFinite() ? next : new BigNumber(0)
   } catch {
     return new BigNumber(0)
   }
@@ -182,10 +183,12 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
   const tonyPriceWnova =
     reserveWnova.gt(0) && reserveTony.gt(0) ? reserveWnova.div(reserveTony).toNumber() : 0
   const pairVolumeWnova = isToken0Wnova
-    ? safeBig(pinnedPair?.oneDayVolumeToken0 ?? 0)
+    ? safeBig(pinnedPair?.oneDayVolumeToken0 ?? pinnedPair?.oneDayVolumeETH ?? pinnedPair?.volumeToken0 ?? 0)
     : isToken1Wnova
-    ? safeBig(pinnedPair?.oneDayVolumeToken1 ?? 0)
+    ? safeBig(pinnedPair?.oneDayVolumeToken1 ?? pinnedPair?.oneDayVolumeETH ?? pinnedPair?.volumeToken1 ?? 0)
     : new BigNumber(0)
+  const debug =
+    typeof window !== 'undefined' && window.location && window.location.search && window.location.search.includes('debug=1')
 
   useEffect(() => {
     setMaxPage(1) // edit this to do modular
@@ -201,34 +204,66 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
         })
         .map((key) => tokens[key])
 
-    if (fromSubgraph && fromSubgraph.length) return fromSubgraph
+    const applyOverrides = (token) => {
+      const tokenId = token?.id?.toLowerCase?.()
+      if (!tokenId) return token
+      if (tokenId === WRAPPED_NATIVE_ADDRESS) {
+        return {
+          ...token,
+          derivedETH: 1,
+          priceETH: 1,
+          totalLiquidityETH: reserveWnova.gt(0) ? reserveWnova.toNumber() : token.totalLiquidityETH ?? 0,
+          oneDayVolumeETH: pairVolumeWnova.gt(0) ? pairVolumeWnova.toNumber() : token.oneDayVolumeETH ?? 0,
+          priceChangeETH: token.priceChangeETH ?? 0,
+        }
+      }
+      if (tokenId === TONY_ADDRESS) {
+        return {
+          ...token,
+          derivedETH: tonyPriceWnova || token.derivedETH || 0,
+          priceETH: tonyPriceWnova || token.priceETH || 0,
+          totalLiquidityETH: reserveWnova.gt(0) ? reserveWnova.toNumber() : token.totalLiquidityETH ?? 0,
+          oneDayVolumeETH: pairVolumeWnova.gt(0) ? pairVolumeWnova.toNumber() : token.oneDayVolumeETH ?? 0,
+          priceChangeETH: token.priceChangeETH ?? 0,
+        }
+      }
+      return token
+    }
+
+    if (fromSubgraph && fromSubgraph.length) {
+      return fromSubgraph.map(applyOverrides)
+    }
 
     const fallback = []
     if (WRAPPED_NATIVE_ADDRESS) {
-      fallback.push({
-        id: WRAPPED_NATIVE_ADDRESS,
-        symbol: 'WNOVA',
-        name: 'Wrapped NOVA',
-        derivedETH: 1,
-        priceETH: 1,
-        totalLiquidity: 0,
-        totalLiquidityETH: reserveWnova.gt(0) ? reserveWnova.toNumber() : 0,
-        oneDayVolumeETH: pairVolumeWnova.gt(0) ? pairVolumeWnova.toNumber() : 0,
-        priceChangeETH: 0,
-      })
+      fallback.push(
+        applyOverrides({
+          id: WRAPPED_NATIVE_ADDRESS,
+          symbol: 'WNOVA',
+          name: 'Wrapped NOVA',
+          derivedETH: 1,
+          priceETH: 1,
+          totalLiquidity: 0,
+          totalLiquidityETH: reserveWnova.gt(0) ? reserveWnova.toNumber() : 0,
+          oneDayVolumeETH: pairVolumeWnova.gt(0) ? pairVolumeWnova.toNumber() : 0,
+          priceChangeETH: 0,
+        })
+      )
     }
     if (TONY_ADDRESS) {
-      fallback.push({
-        id: TONY_ADDRESS,
-        symbol: 'TONY',
-        name: 'STARK - IRON MAN',
-        derivedETH: tonyPriceWnova || 0,
-        priceETH: tonyPriceWnova || 0,
-        totalLiquidity: 0,
-        totalLiquidityETH: reserveWnova.gt(0) ? reserveWnova.toNumber() : 0,
-        oneDayVolumeETH: pairVolumeWnova.gt(0) ? pairVolumeWnova.toNumber() : 0,
-        priceChangeETH: 0,
-      })
+      fallback.push(
+        applyOverrides({
+          id: TONY_ADDRESS,
+          symbol: 'TONY',
+          name: 'STARK - IRON MAN',
+          derivedETH: tonyPriceWnova || 0,
+          priceETH: tonyPriceWnova || 0,
+          totalLiquidity: 0,
+          totalLiquidityETH: reserveWnova.gt(0) ? reserveWnova.toNumber() : 0,
+          oneDayVolumeETH: pairVolumeWnova.gt(0) ? pairVolumeWnova.toNumber() : 0,
+          priceChangeETH: 0,
+        })
+      )
     }
     return fallback
   }, [tokens, reserveWnova, pairVolumeWnova, tonyPriceWnova])
@@ -429,6 +464,11 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
           <Arrow faded={page === maxPage ? true : false}>→</Arrow>
         </div>
       </PageButtons>
+      {debug && (
+        <TYPE.light fontSize={'10px'} style={{ padding: '0 1.125rem 1rem', opacity: 0.7 }}>
+          Debug: {JSON.stringify({ reserveWnova: reserveWnova.toString(), tonyPriceWnova, volume24h: pairVolumeWnova.toString() })}
+        </TYPE.light>
+      )}
     </ListWrapper>
   )
 }

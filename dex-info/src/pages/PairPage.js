@@ -40,6 +40,7 @@ import { useListedTokens } from '../contexts/Application'
 import HoverText from '../components/HoverText'
 import { UNTRACKED_COPY, PAIR_BLACKLIST, BLOCKED_WARNINGS } from '../constants'
 import { EXPLORER_URL } from '../constants/urls'
+import { TREASURY_FEE_BPS } from '../constants/base'
 
 const explorerBase = EXPLORER_URL.replace(/\/+$/, '')
 const RPC_URL = process.env.REACT_APP_RPC_URL
@@ -171,6 +172,9 @@ function PairPage({ pairAddress, history }) {
 
   // get fees	  // get fees
   const fees = isFiniteNum(oneDayVolumeETH) ? formattedNum(oneDayVolumeETH * 0.003, false) : '—'
+  const protocolFees = isFiniteNum(oneDayVolumeETH)
+    ? formattedNum(oneDayVolumeETH * (TREASURY_FEE_BPS / 10000), false)
+    : '—'
 
   // rates
   const token0Rate = isFiniteNum(reserve0) && isFiniteNum(reserve1) ? formatPrice(reserve1 / reserve0) : '-'
@@ -387,9 +391,14 @@ function PairPage({ pairAddress, history }) {
                       <div />
                     </RowBetween>
                     <RowBetween align="flex-end">
-                      <TYPE.main fontSize={'1.5rem'} lineHeight={1} fontWeight={500}>
-                        {fees}
-                      </TYPE.main>
+                      <AutoColumn gap="6px">
+                        <TYPE.main fontSize={'1.5rem'} lineHeight={1} fontWeight={500}>
+                          {fees}
+                        </TYPE.main>
+                        <TYPE.light fontSize={12} color="text2">
+                          Protocol: {protocolFees} WNOVA
+                        </TYPE.light>
+                      </AutoColumn>
                       <TYPE.main>{volumeChange}</TYPE.main>
                     </RowBetween>
                   </AutoColumn>

@@ -18,7 +18,7 @@ import { PAIR_BLACKLIST } from '../../constants'
 import { AutoColumn } from '../Column'
 import { WRAPPED_NATIVE_ADDRESS, TONY_ADDRESS, PAIR_ADDRESS } from '../../constants/urls'
 import { usePairData } from '../../contexts/PairData'
-import { FEE_BPS } from '../../constants/base'
+import { FEE_BPS, TREASURY_FEE_BPS } from '../../constants/base'
 import BigNumber from 'bignumber.js'
 
 dayjs.extend(utc)
@@ -133,7 +133,8 @@ const FIELD_TO_VALUE = (field, useTracked) => {
 
 const safeBig = (value) => {
   try {
-    return new BigNumber(value || 0)
+    const next = new BigNumber(value || 0)
+    return next.isFinite() ? next : new BigNumber(0)
   } catch {
     return new BigNumber(0)
   }
@@ -146,6 +147,7 @@ const getPairMetrics = (pairData) => {
       volume24h: new BigNumber(0),
       volume7d: new BigNumber(0),
       fees24h: new BigNumber(0),
+      protocolFees24h: new BigNumber(0),
       apy: 0,
       hasWnova: false,
     }
@@ -171,42 +173,57 @@ const getPairMetrics = (pairData) => {
 
   let volume24h = new BigNumber(0)
   if (isToken0Wnova) {
-    volume24h = safeBig(pairData.oneDayVolumeToken0 ?? pairData.oneDayVolumeETH ?? 0)
+    volume24h = safeBig(
+      pairData.oneDayVolumeToken0 ?? pairData.oneDayVolumeETH ?? pairData.volumeToken0 ?? 0
+    )
   } else if (isToken1Wnova) {
-    volume24h = safeBig(pairData.oneDayVolumeToken1 ?? pairData.oneDayVolumeETH ?? 0)
+    volume24h = safeBig(
+      pairData.oneDayVolumeToken1 ?? pairData.oneDayVolumeETH ?? pairData.volumeToken1 ?? 0
+    )
   } else {
-    volume24h = safeBig(pairData.oneDayVolumeETH ?? 0)
+    volume24h = safeBig(pairData.oneDayVolumeETH ?? pairData.volumeToken0 ?? pairData.volumeToken1 ?? 0)
   }
 
   let volume7d = new BigNumber(0)
   if (isToken0Wnova) {
-    volume7d = safeBig(pairData.oneWeekVolumeToken0 ?? pairData.oneWeekVolumeETH ?? 0)
+    volume7d = safeBig(
+      pairData.oneWeekVolumeToken0 ?? pairData.oneWeekVolumeETH ?? pairData.volumeToken0 ?? 0
+    )
   } else if (isToken1Wnova) {
-    volume7d = safeBig(pairData.oneWeekVolumeToken1 ?? pairData.oneWeekVolumeETH ?? 0)
+    volume7d = safeBig(
+      pairData.oneWeekVolumeToken1 ?? pairData.oneWeekVolumeETH ?? pairData.volumeToken1 ?? 0
+    )
   } else {
-    volume7d = safeBig(pairData.oneWeekVolumeETH ?? 0)
+    volume7d = safeBig(pairData.oneWeekVolumeETH ?? pairData.volumeToken0 ?? pairData.volumeToken1 ?? 0)
   }
 
   const fees24h = volume24h.gt(0) ? volume24h.multipliedBy(FEE_BPS / 10000) : new BigNumber(0)
-  const apy = liquidity.gt(0) ? fees24h.multipliedBy(365).multipliedBy(100).dividedBy(liquidity).toNumber() : 0
+  const protocolFees24h =
+    volume24h.gt(0) && TREASURY_FEE_BPS > 0
+      ? volume24h.multipliedBy(TREASURY_FEE_BPS / 10000)
+      : new BigNumber(0)
+  const apy = liquidity.gt(0)
+    ? fees24h.multipliedBy(365).multipliedBy(100).dividedBy(liquidity).toNumber()
+    : 0
 
   return {
     liquidity,
     volume24h,
     volume7d,
     fees24h,
+    protocolFees24h,
     apy,
     hasWnova: isToken0Wnova || isToken1Wnova,
   }
 }
 
-const formatDataText = (value, trackedValue, supressWarning = false) => {
-  const showUntracked = value !== '—' && !trackedValue && !supressWarning
+const formatDataText = (value, trackedValue, supressWarning = false, subLabel = '') => {
+  const showUntracked = value !== '—' && !trackedValue && !supressWarning && !subLabel
   return (
     <AutoColumn gap="2px" style={{ opacity: showUntracked ? '0.7' : '1' }}>
       <div style={{ textAlign: 'right' }}>{value}</div>
       <TYPE.light fontSize={'9px'} style={{ textAlign: 'right' }}>
-        {showUntracked ? 'untracked' : '  '}
+        {subLabel ? subLabel : showUntracked ? 'untracked' : '  '}
       </TYPE.light>
     </AutoColumn>
   )
@@ -217,6 +234,8 @@ function PairList({ pairs, color, disbaleLinks, maxItems = 10, useTracked = fals
   const below740 = useMedia('(max-width: 740px)')
   const below1080 = useMedia('(max-width: 1080px)')
   const pinnedPair = usePairData(PAIR_ADDRESS)
+  const debug =
+    typeof window !== 'undefined' && window.location && window.location.search && window.location.search.includes('debug=1')
 
   const resolvedPairs = React.useMemo(() => {
     if (pairs && Object.keys(pairs).length) return pairs
@@ -291,6 +310,8 @@ function PairList({ pairs, color, disbaleLinks, maxItems = 10, useTracked = fals
 
       const feesValue = metrics.fees24h?.isFinite?.() ? metrics.fees24h.toString() : null
       const fees = isFiniteNum(feesValue) ? formattedNum(feesValue, false) : '—'
+      const protocolValue = metrics.protocolFees24h?.isFinite?.() ? metrics.protocolFees24h.toString() : null
+      const protocolFees = isFiniteNum(protocolValue) ? formattedNum(protocolValue, false) : '—'
 
       const apy = Number.isFinite(metrics.apy) ? formattedPercent(metrics.apy) : '—'
 
@@ -326,7 +347,12 @@ function PairList({ pairs, color, disbaleLinks, maxItems = 10, useTracked = fals
           )}
           {!below1080 && (
             <DataText area="fees" data-testid={`pair-fees-${pairKey}`}>
-              {formatDataText(fees, metrics.hasWnova)}
+              {formatDataText(
+                fees,
+                metrics.hasWnova,
+                true,
+                protocolFees !== '—' ? `protocol ${protocolFees}` : ''
+              )}
             </DataText>
           )}
           {!below1080 && (
@@ -411,6 +437,21 @@ function PairList({ pairs, color, disbaleLinks, maxItems = 10, useTracked = fals
           </div>,
         ]
       : pairList
+
+  const debugInfo = React.useMemo(() => {
+    if (!debug) return null
+    const pair = (PAIR_ADDRESS && resolvedPairs?.[PAIR_ADDRESS]) || pinnedPair
+    if (!pair) return null
+    const metrics = getPairMetrics(pair)
+    return {
+      pair: pair?.id || PAIR_ADDRESS,
+      reserve0: pair?.reserve0 ?? null,
+      reserve1: pair?.reserve1 ?? null,
+      volume24h: metrics.volume24h?.toString?.() ?? null,
+      liquidityWnova: metrics.liquidity?.toString?.() ?? null,
+      readSource: pair?.id ? 'subgraph' : 'fallback',
+    }
+  }, [debug, resolvedPairs, pinnedPair])
 
   return (
     <ListWrapper>
@@ -513,6 +554,11 @@ function PairList({ pairs, color, disbaleLinks, maxItems = 10, useTracked = fals
           <Arrow faded={page === maxPage ? true : false}>→</Arrow>
         </div>
       </PageButtons>
+      {debugInfo && (
+        <TYPE.light fontSize={'10px'} style={{ padding: '0 1.125rem 1rem', opacity: 0.7 }}>
+          Debug: {JSON.stringify(debugInfo)}
+        </TYPE.light>
+      )}
     </ListWrapper>
   )
 }

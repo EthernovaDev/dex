@@ -433,7 +433,7 @@ export default function CreateToken() {
 
   if (chainId && chainId !== 77777) {
     return (
-      <PageContainer>
+      <PageContainer data-testid="create-page">
         <TabsRow>
           <SwapPoolTabs active={'create'} />
         </TabsRow>
@@ -456,7 +456,7 @@ export default function CreateToken() {
   }
 
   return (
-    <PageContainer>
+    <PageContainer data-testid="create-page">
       <TabsRow>
         <SwapPoolTabs active={'create'} />
       </TabsRow>
@@ -558,12 +558,13 @@ export default function CreateToken() {
               style={{ marginTop: 16, width: '100%' }}
               disabled={pending || !account || !tokenFactoryAddress}
               onClick={onDeploy}
+              data-testid="create-deploy-btn"
             >
               {pending ? 'Deploying...' : autoList ? 'Deploy + Add Liquidity' : 'Deploy Token'}
             </ButtonPrimary>
 
             {(txHash || createdToken || createdPair) && (
-              <AutoColumn gap="sm" style={{ marginTop: 16, width: '100%' }}>
+              <AutoColumn gap="sm" style={{ marginTop: 16, width: '100%' }} data-testid="create-success">
                 {txHash && (
                   <TYPE.body>
                     Tx:{' '}
@@ -603,7 +604,7 @@ export default function CreateToken() {
           </FormColumn>
         </CreateCard>
 
-        <InfoColumn>
+        <InfoColumn data-testid="create-info-panel">
           <InfoCard>
             <InfoTitle>How it works</InfoTitle>
             <InfoList>
@@ -642,8 +643,8 @@ export default function CreateToken() {
             </InfoLinks>
           </InfoCard>
         </InfoColumn>
-        <MobileInfo>
-          <summary>Info & fees</summary>
+        <MobileInfo data-testid="create-info-accordion">
+          <summary data-testid="create-info-accordion-toggle">Info & fees</summary>
           <AutoColumn gap="sm" style={{ marginTop: 12 }}>
             <InfoCard>
               <InfoTitle>How it works</InfoTitle>

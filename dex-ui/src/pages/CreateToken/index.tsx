@@ -376,17 +376,34 @@ export default function CreateToken() {
           <AutoColumn gap="sm" style={{ marginTop: 16 }}>
             {txHash && (
               <TYPE.body>
-                Tx: <a href={`https://explorer.ethnova.net/tx/${txHash}`} target="_blank" rel="noreferrer">{txHash}</a>
+                Tx:{' '}
+                <a href={`https://explorer.ethnova.net/tx/${txHash}`} target="_blank" rel="noopener noreferrer">
+                  {txHash}
+                </a>
               </TYPE.body>
             )}
             {createdToken && (
               <TYPE.body>
-                Token: <a href={`https://explorer.ethnova.net/token/${createdToken}`} target="_blank" rel="noreferrer">{createdToken}</a>
+                Token:{' '}
+                <a
+                  href={`https://explorer.ethnova.net/token/${createdToken}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {createdToken}
+                </a>
               </TYPE.body>
             )}
             {createdPair && (
               <TYPE.body>
-                Pair: <a href={`https://explorer.ethnova.net/token/${createdPair}`} target="_blank" rel="noreferrer">{createdPair}</a>
+                Pair:{' '}
+                <a
+                  href={`https://explorer.ethnova.net/token/${createdPair}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {createdPair}
+                </a>
               </TYPE.body>
             )}
             {createdToken && (

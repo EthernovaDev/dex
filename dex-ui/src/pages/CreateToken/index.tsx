@@ -164,8 +164,9 @@ export default function CreateToken() {
       const tx = await contract.approve(tokenFactoryAddress, wnovaAmountRaw)
       await tx.wait(1)
       setAllowance(wnovaAmountRaw.toString())
-    } catch (err: any) {
-      setError(err?.message || 'Approve failed')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Approve failed'
+      setError(message)
     } finally {
       setApprovePending(false)
     }
@@ -238,8 +239,9 @@ export default function CreateToken() {
           // ignore unrelated logs
         }
       }
-    } catch (err: any) {
-      setError(err?.message || 'Deploy failed')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Deploy failed'
+      setError(message)
     } finally {
       setPending(false)
     }

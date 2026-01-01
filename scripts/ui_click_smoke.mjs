@@ -61,16 +61,25 @@ async function main() {
   let rpcConsecutive = 0
   let lastRpcErrorAt = 0
   let lastRpcSuccessAt = 0
-  const RPC_ERROR_WINDOW_MS = 15000
-
-  const recordRpcSoftError = () => {
-    const now = Date.now()
-    if (now - lastRpcErrorAt > RPC_ERROR_WINDOW_MS) {
-      rpcSoft503 += 1
-      rpcConsecutive += 1
-      lastRpcErrorAt = now
-    }
+  let lastRpcSoftIncrementAt = 0
+  let lastSoftIncidentAt = 0
+  let lastSoftIncidentUrl = ''
+  let lastSoftIncidentMethod = ''
+  let lastRpcUrl = ''
+  let lastSoft503Url = ''
+  let lastSoft503At = ''
+  let lastSoftRpcMethod = ''
+  let rpcBaseUrl = 'unknown'
+  const toInt = (val, fallback) => {
+    const parsed = parseInt(val, 10)
+    return Number.isFinite(parsed) ? parsed : fallback
   }
+  const rpcErrorWindowMs = toInt(process.env.SMOKE_RPC_WINDOW_MS, 15000)
+  const rpcSoftMax = toInt(process.env.SMOKE_RPC_SOFT_MAX, 5)
+  const rpcConsecMax = toInt(process.env.SMOKE_RPC_CONSEC_MAX, 3)
+  const rpcLogMax = toInt(process.env.SMOKE_RPC_LOG_MAX, 20)
+  const rpcEvents = []
+  const rpcMethodCounts = {}
 
   let wnovaAddress = ''
   let tonyAddress = ''
@@ -96,23 +105,133 @@ async function main() {
     })
     .filter(Boolean)
 
-  const isRpcUrl = url => rpcHosts.some(host => host && url.includes(host))
+  const getHost = url => {
+    try {
+      return new URL(url).host
+    } catch (_) {
+      return url.replace(/^https?:\/\//, '').split('/')[0]
+    }
+  }
+  const isRpcHost = url => {
+    if (rpcBaseUrl && rpcBaseUrl !== 'unknown') {
+      return getHost(url) === getHost(rpcBaseUrl)
+    }
+    return rpcHosts.some(host => host && url.includes(host))
+  }
+  const isRpcUrl = url => isRpcHost(url)
+  const isJsonRpcPayload = data => /\"jsonrpc\"\s*:\s*\"2\.0\"/.test(data || '')
+  const extractRpcMethods = data => {
+    if (!data) return []
+    try {
+      const parsed = JSON.parse(data)
+      if (Array.isArray(parsed)) {
+        return parsed.map(item => item?.method).filter(Boolean)
+      }
+      return parsed?.method ? [parsed.method] : []
+    } catch (_) {
+      return []
+    }
+  }
+  const registerRpcHost = url => {
+    try {
+      const host = new URL(url).host
+      if (host && !rpcHosts.includes(host)) {
+        rpcHosts.push(host)
+      }
+    } catch (_) {
+      // ignore
+    }
+  }
   const isSoftRpcText = text =>
-    /503|Service Unavailable|gateway|Internal JSON-RPC error|failed to fetch|NetworkError|ECONNRESET|ETIMEDOUT/i.test(
+    /429|502|503|504|Service Unavailable|Bad Gateway|gateway|Internal JSON-RPC error|failed to fetch|NetworkError|ECONNRESET|ETIMEDOUT/i.test(
       text
     )
+  const isSoftRpcStatus = status => [429, 502, 503, 504].includes(status)
   const isHardConsole = text => /ChunkLoadError|Loading chunk|Uncaught|TypeError|ReferenceError|Invariant failed/i.test(text)
   const isIgnoredWarning = text => /Redux-LocalStorage-Simple/i.test(text)
 
+  console.log(
+    `[INFO] RPC thresholds: window=${rpcErrorWindowMs}ms softMax=${rpcSoftMax} consecMax=${rpcConsecMax} logMax=${rpcLogMax}`
+  )
+
+  let currentRoute = 'swap'
+
   const browser = await chromium.launch({ headless: true })
   const page = await browser.newPage()
+
+  const pushRpcEvent = ({ status, url, route, method, kind }) => {
+    rpcEvents.push({
+      time: new Date().toISOString(),
+      status,
+      method: method || 'unknown',
+      url,
+      route,
+      kind
+    })
+    if (rpcEvents.length > rpcLogMax) {
+      rpcEvents.splice(0, rpcEvents.length - rpcLogMax)
+    }
+  }
+
+  const getRouteLabel = () => currentRoute || 'unknown'
+
+  const recordRpcMethod = method => {
+    if (!method) return
+    rpcMethodCounts[method] = (rpcMethodCounts[method] || 0) + 1
+  }
+
+  const recordRpcSoft = ({ url = '', method = '', status = 'soft' } = {}) => {
+    const now = Date.now()
+    const isDistinct =
+      now - lastSoftIncidentAt > 1500 ||
+      (url && url !== lastSoftIncidentUrl) ||
+      (method && method !== lastSoftIncidentMethod)
+    if (isDistinct && (!lastRpcSoftIncrementAt || now - lastRpcSoftIncrementAt > rpcErrorWindowMs)) {
+      rpcSoft503 += 1
+      lastRpcSoftIncrementAt = now
+    }
+    lastRpcErrorAt = now
+    if (!lastSoftIncidentAt || now - lastSoftIncidentAt < 4000) {
+      rpcConsecutive += 1
+    } else {
+      rpcConsecutive = 1
+    }
+    lastSoftIncidentAt = now
+    if (url) lastSoftIncidentUrl = url
+    if (method) lastSoftIncidentMethod = method
+    if (url) {
+      lastSoft503Url = url
+      lastSoft503At = new Date().toISOString()
+    }
+    if (method) {
+      lastSoftRpcMethod = method
+    }
+    if (method) recordRpcMethod(method)
+    pushRpcEvent({
+      status,
+      url: url || 'unknown',
+      route: getRouteLabel(),
+      method,
+      kind: 'soft'
+    })
+  }
+
+  const recordRpcSuccess = () => {
+    lastRpcSuccessAt = Date.now()
+    if (lastSoftIncidentAt && Date.now() - lastSoftIncidentAt > 4000) {
+      rpcConsecutive = 0
+    }
+  }
 
   page.on('console', msg => {
     const text = msg.text()
     const line = `[console.${msg.type()}] ${text}`
     if (msg.type() === 'error' || msg.type() === 'warning') {
-      const isSoftRpc = isSoftRpcText(text) && rpcHosts.some(host => text.includes(host))
-      const recentRpc = Date.now() - lastRpcErrorAt < 10000
+      const hostHint = rpcBaseUrl !== 'unknown' ? getHost(rpcBaseUrl) : null
+      const isSoftRpc =
+        isSoftRpcText(text) &&
+        ((lastRpcUrl && isRpcUrl(lastRpcUrl)) || (hostHint && text.includes(hostHint)) || rpcHosts.some(host => text.includes(host)))
+      const recentRpc = Date.now() - lastRpcErrorAt < rpcErrorWindowMs
       if (isIgnoredWarning(text)) {
         return
       }
@@ -120,9 +239,7 @@ async function main() {
         hardConsoleErrors += 1
         consoleErrors.push(line)
       } else if (isSoftRpc || (isSoftRpcText(text) && recentRpc)) {
-        rpcSoft503 += 1
-        rpcConsecutive += 1
-        lastRpcErrorAt = Date.now()
+        recordRpcSoft({ url: lastRpcUrl, method: '', status: 'other' })
       } else {
         hardConsoleErrors += 1
         consoleErrors.push(line)
@@ -136,37 +253,81 @@ async function main() {
     const url = req.url()
     const errText = req.failure()?.errorText || ''
     const line = `[requestfailed] ${url} - ${errText}`
+    const postData = req.postData() || ''
+    const isJsonRpc = isJsonRpcPayload(postData)
+    const methods = extractRpcMethods(postData)
+    const method = methods[0] || ''
+    if (isJsonRpc) {
+      registerRpcHost(url)
+    }
     if (isRpcUrl(url) && /503|429|502|504|timeout|ECONNRESET|ETIMEDOUT/i.test(errText)) {
-      rpcSoft503 += 1
-      rpcConsecutive += 1
-      lastRpcErrorAt = Date.now()
+      recordRpcSoft({ url, method, status: 'other' })
       return
     }
     requestFailures.push(line)
     if (isRpcUrl(url)) {
       rpcOtherErrors += 1
+      if (method) recordRpcMethod(method)
+      pushRpcEvent({ status: 'other', url, route: getRouteLabel(), method, kind: 'other' })
     }
   })
   page.on('response', res => {
     const url = res.url()
+    const req = res.request()
+    const postData = req?.postData?.() || ''
+    const methods = extractRpcMethods(postData)
+    const method = methods[0] || ''
+    if (isJsonRpcPayload(postData)) {
+      registerRpcHost(url)
+    }
+    if (isRpcUrl(url) || isJsonRpcPayload(postData)) {
+      lastRpcUrl = url
+      if (rpcBaseUrl === 'unknown') {
+        try {
+          rpcBaseUrl = new URL(url).origin
+        } catch (_) {
+          rpcBaseUrl = url
+        }
+      }
+    }
     if (res.status() === 404) {
       notFoundHits.push(url)
     }
     if (isRpcUrl(url)) {
-      if ([429, 502, 503, 504].includes(res.status())) {
-        rpcSoft503 += 1
-        rpcConsecutive += 1
-        lastRpcErrorAt = Date.now()
+      if (isSoftRpcStatus(res.status())) {
+        recordRpcSoft({ url, method, status: `${res.status()}` })
       } else if (res.status() >= 200 && res.status() < 400) {
-        rpcConsecutive = 0
-        lastRpcSuccessAt = Date.now()
+        recordRpcSuccess()
       } else if (res.status() >= 400) {
         rpcOtherErrors += 1
+        if (method) recordRpcMethod(method)
+        pushRpcEvent({
+          status: `${res.status()}`,
+          url,
+          route: getRouteLabel(),
+          method,
+          kind: 'other'
+        })
       }
     }
   })
   page.on('request', req => {
     const url = req.url()
+    const postData = req.postData() || ''
+    const isJsonRpc = isJsonRpcPayload(postData)
+    if (isJsonRpc) {
+      registerRpcHost(url)
+    }
+    if (isRpcUrl(url) || isJsonRpc) {
+      lastRpcUrl = url
+      if (rpcBaseUrl === 'unknown') {
+        try {
+          rpcBaseUrl = new URL(url).origin
+        } catch (_) {
+          rpcBaseUrl = url
+        }
+      }
+    }
     if (/infura/i.test(url)) {
       infuraHits.push(url)
     }
@@ -175,10 +336,32 @@ async function main() {
     }
   })
 
+  currentRoute = 'swap'
   await page.goto(DEBUG_URL, { waitUntil: 'domcontentloaded', timeout: 60000 })
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.waitForTimeout(1500)
   await page.screenshot({ path: path.join(OUT_DIR, beforeShot), fullPage: true })
+  if (rpcBaseUrl === 'unknown') {
+    try {
+      const cfgResp = await page.request.get(`${BASE_URL}/ethernova.config.json`, { timeout: 5000 })
+      if (cfgResp.ok()) {
+        const cfg = await cfgResp.json()
+        const urls = []
+        if (typeof cfg?.rpcUrl === 'string') urls.push(cfg.rpcUrl)
+        if (Array.isArray(cfg?.rpcUrls)) urls.push(...cfg.rpcUrls)
+        const first = urls.find(Boolean)
+        if (first) {
+          try {
+            rpcBaseUrl = new URL(first).origin
+          } catch (_) {
+            rpcBaseUrl = first
+          }
+        }
+      }
+    } catch (_) {
+      // best-effort only
+    }
+  }
 
   const openTokenModal = async () => {
     const selectTokenButton = await page.locator('button:has-text("Select a token")').first()
@@ -209,6 +392,7 @@ async function main() {
   if (await poolTab.count()) {
     await poolTab.click()
     routesRendered.pool = true
+    currentRoute = 'pool'
   }
   await page.waitForTimeout(1500)
 
@@ -226,6 +410,7 @@ async function main() {
   if (await addLiquidity.count()) {
     await addLiquidity.click()
     await page.waitForTimeout(1500)
+    currentRoute = 'add-liquidity'
     const poolSelect = page.locator('button:has-text("Select a token")').first()
     if (await poolSelect.count()) {
       await poolSelect.click()
@@ -253,6 +438,7 @@ async function main() {
   }
 
   for (const route of addLiquidityRoutes) {
+    currentRoute = 'add-liquidity-route'
     await page.goto(route, { waitUntil: 'domcontentloaded', timeout: 60000 })
     await page.waitForTimeout(2000)
     // attempt to flip tokens by selecting the opposite token in the first selector
@@ -309,6 +495,7 @@ async function main() {
     await checkMaxForPanel('add-liquidity-input-tokenb', 'tokenB')
   }
 
+  currentRoute = 'import'
   await page.goto(`${DEBUG_URL}#/find`, { waitUntil: 'domcontentloaded', timeout: 60000 })
   await page.waitForTimeout(12000)
   const stillChecking = await page.locator('text=Checking position').count()
@@ -318,6 +505,7 @@ async function main() {
     routesRendered.import = true
   }
 
+  currentRoute = 'explore'
   await page.goto(`${DEBUG_URL}#/explore`, { waitUntil: 'domcontentloaded', timeout: 60000 })
   await page.waitForTimeout(5000)
   const exploreCrash = await page.locator('text=NovaDEX crashed').count()
@@ -331,6 +519,7 @@ async function main() {
     ? `${BASE_URL}/info/#/pair/${pairAddress}`
     : `${BASE_URL}/info/`
 
+  currentRoute = 'info-pair'
   await page.goto(infoPairUrl, { waitUntil: 'domcontentloaded', timeout: 60000 })
   await page.waitForTimeout(6000)
   const infoCrash = await page.locator('text=NovaDEX Analytics crashed').count()
@@ -350,10 +539,11 @@ async function main() {
   const tradeLabelCount = await page.locator('text=/SELL TONY|BUY TONY/i').count()
   const noTradesLabel = await page.locator('text=No trades yet.').count()
   if (!tradeLabelCount && !noTradesLabel) {
-    addLiquidityFailures.push('Recent trades missing BUY/SELL WNOVA labels')
+    addLiquidityFailures.push('Recent trades missing BUY/SELL TONY labels')
   }
 
   if (wnovaAddress) {
+    currentRoute = 'info-token'
     const tokenUrl = `${BASE_URL}/info/#/token/${wnovaAddress}`
     await page.goto(tokenUrl, { waitUntil: 'domcontentloaded', timeout: 60000 })
     await page.waitForTimeout(6000)
@@ -367,7 +557,8 @@ async function main() {
     }
   }
 
-  for (let i = 0; i < 10; i += 1) {
+  for (let i = 0; i < 20; i += 1) {
+    currentRoute = 'info-overview'
     await page.goto(`${BASE_URL}/info/#/overview`, { waitUntil: 'domcontentloaded', timeout: 60000 })
     await page.waitForTimeout(4000)
     const volumeCharts = await page.locator('[data-testid="chart-volume"]').count()
@@ -395,6 +586,7 @@ async function main() {
   }
   routesRendered.infoOverview = true
 
+  currentRoute = 'info-tokens'
   await page.goto(`${BASE_URL}/info/#/tokens`, { waitUntil: 'domcontentloaded', timeout: 60000 })
   await page.waitForTimeout(4000)
   const tokenRows = await page.locator('[data-testid^="token-row-"]').count()
@@ -404,6 +596,7 @@ async function main() {
     routesRendered.infoTokens = true
   }
 
+  currentRoute = 'info-pairs'
   await page.goto(`${BASE_URL}/info/#/pairs`, { waitUntil: 'domcontentloaded', timeout: 60000 })
   await page.waitForTimeout(4000)
   const pairRows = await page.locator('[data-testid^="pair-row-"]').count()
@@ -424,7 +617,11 @@ async function main() {
 
   const crash = hasCrash(consoleErrors, pageErrors)
   const whiteScreen = isWhiteScreen(rootHtml)
-  const rpcSoftFail = rpcSoft503 >= 5 || rpcConsecutive >= 3
+  const rpcSoftFail = rpcSoft503 >= rpcSoftMax || rpcConsecutive >= rpcConsecMax
+  const topRpcMethods = Object.entries(rpcMethodCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([method, count]) => ({ method, count }))
   const log = {
     url: DEBUG_URL,
     consoleErrors,
@@ -442,8 +639,17 @@ async function main() {
       rpcOtherErrors,
       rpcConsecutive,
       navigationOK: !crash && !whiteScreen,
-      routesRendered
-    }
+      routesRendered,
+      rpcBaseUrl,
+      lastRpcUrl,
+      lastSoft503Url,
+      lastSoft503At,
+      lastSoftRpcUrl: lastSoft503Url,
+      lastSoftRpcAt: lastSoft503At,
+      lastSoftRpcMethod,
+      topRpcMethods
+    },
+    rpcEvents
   }
   writeFile(logFile, JSON.stringify(log, null, 2))
 

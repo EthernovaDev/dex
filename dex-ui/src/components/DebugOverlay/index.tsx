@@ -25,7 +25,7 @@ const Wrapper = styled.div`
   font-size: 12px;
   line-height: 1.35;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
-  pointer-events: none;
+  pointer-events: auto;
 `
 
 const Title = styled.div`
@@ -50,6 +50,17 @@ const Label = styled.span`
 const Value = styled.span`
   text-align: right;
   word-break: break-all;
+`
+
+const CopyButton = styled.button`
+  margin-left: 6px;
+  font-size: 11px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.8);
+  padding: 2px 6px;
+  cursor: pointer;
 `
 
 function parseChainId(raw?: string | number): number | null {
@@ -101,6 +112,27 @@ export default function DebugOverlay() {
   const swapContext = debugState.lastSwapContext
   const swapSim = debugState.lastSwapSimulation
   const formatAmount = (value?: string | null) => (value && value.length ? value : '—')
+  const copyText = (value?: string | null) => {
+    if (!value || typeof window === 'undefined') return
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(value).catch(() => {})
+      return
+    }
+    const textarea = document.createElement('textarea')
+    textarea.value = value
+    textarea.style.position = 'fixed'
+    textarea.style.opacity = '0'
+    document.body.appendChild(textarea)
+    textarea.focus()
+    textarea.select()
+    try {
+      document.execCommand('copy')
+    } catch {
+      // ignore
+    } finally {
+      document.body.removeChild(textarea)
+    }
+  }
 
   return (
     <Wrapper>
@@ -258,6 +290,59 @@ export default function DebugOverlay() {
         <Value>{swapContext?.methodName || '—'}</Value>
       </Row>
       <Row>
+        <Label>Args</Label>
+        <Value>{swapContext?.argsSummary ? JSON.stringify(swapContext.argsSummary) : '—'}</Value>
+      </Row>
+      <Row>
+        <Label>Deadline raw</Label>
+        <Value>{swapContext?.deadlineArgRaw || '—'}</Value>
+      </Row>
+      <Row>
+        <Label>Tx to/from</Label>
+        <Value>
+          {swapContext?.txTo || '—'} / {swapContext?.txFrom || '—'}
+        </Value>
+      </Row>
+      <Row>
+        <Label>Tx value</Label>
+        <Value>{swapContext?.txValue || '—'}</Value>
+      </Row>
+      <Row>
+        <Label>Gas est/limit</Label>
+        <Value>
+          {swapContext?.gasEstimate || '—'} / {swapContext?.gasLimit || '—'}
+        </Value>
+      </Row>
+      <Row>
+        <Label>Fee data</Label>
+        <Value>
+          {swapContext?.maxFeePerGas || swapContext?.gasPrice || '—'} /{' '}
+          {swapContext?.maxPriorityFeePerGas || '—'}
+        </Value>
+      </Row>
+      <Row>
+        <Label>Nonce</Label>
+        <Value>{swapContext?.nonce ?? '—'}</Value>
+      </Row>
+      <Row>
+        <Label>Calldata</Label>
+        <Value>
+          {swapContext?.calldataTruncated || '—'}
+          {swapContext?.calldata ? (
+            <CopyButton onClick={() => copyText(swapContext.calldata)}>Copy</CopyButton>
+          ) : null}
+        </Value>
+      </Row>
+      <Row>
+        <Label>TxRequest</Label>
+        <Value>
+          {swapContext?.txRequestJson ? 'ready' : '—'}
+          {swapContext?.txRequestJson ? (
+            <CopyButton onClick={() => copyText(swapContext.txRequestJson)}>Copy</CopyButton>
+          ) : null}
+        </Value>
+      </Row>
+      <Row>
         <Label>Path</Label>
         <Value>{swapContext?.path?.join(' -> ') || '—'}</Value>
       </Row>
@@ -277,6 +362,12 @@ export default function DebugOverlay() {
           {swapSim?.status ? `${swapSim.status}${swapSim.reason ? `: ${swapSim.reason}` : ''}` : '—'}
         </Value>
       </Row>
+      {swapSim?.data ? (
+        <Row>
+          <Label>Sim data</Label>
+          <Value>{swapSim.data}</Value>
+        </Row>
+      ) : null}
     </Wrapper>
   )
 }

@@ -1,5 +1,6 @@
 import { BigNumber } from '@ethersproject/bignumber'
 import { Contract } from '@ethersproject/contracts'
+import { Interface } from '@ethersproject/abi'
 import { JSBI, Percent, Router, SwapParameters, Trade, TradeType } from '@im33357/uniswap-v2-sdk'
 import { useMemo } from 'react'
 import { BIPS_BASE, DEFAULT_DEADLINE_FROM_NOW, INITIAL_ALLOWED_SLIPPAGE } from '../constants'
@@ -15,6 +16,7 @@ import { Version } from './useToggledVersion'
 import { useSwapRouterAddress } from './useSwapRouterAddress'
 import { computeSwapSlippageAmounts } from '../utils/prices'
 import { Field } from '../state/swap/actions'
+import { emitDebug } from '../utils/debugEvents'
 
 export enum SwapCallbackState {
   INVALID,
@@ -39,10 +41,57 @@ interface FailedCall {
 
 type EstimatedSwapCall = SuccessfulCall | FailedCall
 
+function extractRevertData(error: any): string | null {
+  const rawBody = typeof error?.body === 'string' ? error.body : null
+  const parsedBody = rawBody
+    ? (() => {
+        try {
+          return JSON.parse(rawBody)
+        } catch {
+          return null
+        }
+      })()
+    : null
+  const dataCandidates = [
+    error?.data,
+    error?.error?.data,
+    error?.error?.error?.data,
+    error?.error?.data?.data,
+    error?.data?.data,
+    error?.cause?.data,
+    error?.info?.data,
+    error?.info?.error?.data,
+    error?.info?.error?.error?.data,
+    parsedBody?.error?.data,
+    parsedBody?.error?.error?.data
+  ]
+  const found = dataCandidates.find((candidate) => typeof candidate === 'string' && candidate.startsWith('0x'))
+  return found || null
+}
+
+function decodeRevertReason(data: string | null): string | null {
+  if (!data || data === '0x') return null
+  if (data.startsWith('0x08c379a0')) {
+    try {
+      const iface = new Interface(['function Error(string)'])
+      const [reason] = iface.decodeFunctionData('Error', data)
+      return String(reason)
+    } catch {
+      return null
+    }
+  }
+  if (data.startsWith('0x4e487b71')) {
+    return 'Panic'
+  }
+  return null
+}
+
 function extractSwapErrorMessage(error: any): string {
   const reason = error?.reason ?? error?.error?.reason ?? ''
   const dataMessage = error?.data?.message ?? error?.error?.data?.message ?? ''
   const message = error?.message ?? ''
+  const revertData = extractRevertData(error)
+  const decodedRevert = decodeRevertReason(revertData)
   const combined = [reason, dataMessage, message].find((value) => typeof value === 'string' && value.length > 0) || ''
 
   if (/TRANSFER_FROM_FAILED|transfer amount exceeds allowance|insufficient allowance/i.test(combined)) {
@@ -54,11 +103,56 @@ function extractSwapErrorMessage(error: any): string {
   if (/EXCESSIVE_INPUT_AMOUNT/i.test(combined)) {
     return 'Input amount too high for current liquidity. Try reducing the amount.'
   }
+  if (/EXPIRED|deadline/i.test(combined)) {
+    return 'Transaction expired. Check your deadline setting.'
+  }
+  if (/INVALID_PATH|PAIR_NOT_FOUND|PATH/i.test(combined) && /INVALID|NOT/i.test(combined)) {
+    return 'Invalid swap path or pair not found.'
+  }
   if (/INSUFFICIENT_LIQUIDITY|INSUFFICIENT_A_AMOUNT|INSUFFICIENT_B_AMOUNT/i.test(combined)) {
     return 'Not enough liquidity for this trade.'
   }
 
+  if (decodedRevert) {
+    return `Swap failed: ${decodedRevert}`
+  }
+  if (revertData) {
+    return combined ? `Swap failed: ${combined}` : 'Swap failed: execution reverted.'
+  }
+
   return combined ? `Swap failed: ${combined}` : 'Swap failed: unknown error.'
+}
+
+function assertSwapInvariants(
+  methodName: string,
+  args: any[],
+  value: string | undefined,
+  recipient: string | null,
+  nowTs: number
+) {
+  const usesEthValue =
+    methodName === 'swapExactETHForTokens' ||
+    methodName === 'swapExactETHForTokensSupportingFeeOnTransferTokens' ||
+    methodName === 'swapETHForExactTokens'
+  const valueIsZero = !value || isZero(value)
+  if (!usesEthValue && !valueIsZero) {
+    throw new Error('Swap invariant failed: value must be 0 for ERC20 swaps.')
+  }
+  const toArg = args.length >= 2 ? args[args.length - 2] : null
+  if (!recipient || !toArg || toArg === '0x0000000000000000000000000000000000000000') {
+    throw new Error('Swap invariant failed: invalid recipient address.')
+  }
+  if (typeof toArg === 'string' && recipient && toArg.toLowerCase() !== recipient.toLowerCase()) {
+    throw new Error('Swap invariant failed: recipient mismatch.')
+  }
+  const deadlineArg = args[args.length - 1]
+  const parsedDeadline =
+    typeof deadlineArg === 'string'
+      ? Number(deadlineArg.startsWith('0x') ? parseInt(deadlineArg, 16) : Number(deadlineArg))
+      : Number(deadlineArg)
+  if (!Number.isFinite(parsedDeadline) || parsedDeadline <= nowTs) {
+    throw new Error('Swap invariant failed: deadline is expired or invalid.')
+  }
 }
 
 /**
@@ -137,6 +231,11 @@ export function useSwapCallArguments(
     const adjustParams = (parameters: SwapParameters): SwapParameters => {
       const args = [...parameters.args]
       let value = parameters.value
+      const nowTs = Math.floor(Date.now() / 1000)
+      const usesEthValue =
+        parameters.methodName === 'swapExactETHForTokens' ||
+        parameters.methodName === 'swapExactETHForTokensSupportingFeeOnTransferTokens' ||
+        parameters.methodName === 'swapETHForExactTokens'
 
       if (trade.tradeType === TradeType.EXACT_INPUT) {
         const grossIn = slippageAmounts[Field.INPUT]
@@ -160,6 +259,12 @@ export function useSwapCallArguments(
           if (netOut) args[0] = netOut.raw.toString()
           if (maxIn) args[1] = maxIn.raw.toString()
         }
+      }
+
+      const deadlineIndex = args.length - 1
+      args[deadlineIndex] = String(nowTs + deadline)
+      if (!usesEthValue) {
+        value = '0x0'
       }
 
       return { ...parameters, args, value }
@@ -253,6 +358,41 @@ export function useSwapCallback(
           },
           gasEstimate
         } = successfulEstimation
+
+        const nowTs = Math.floor(Date.now() / 1000)
+        assertSwapInvariants(methodName, args, value, recipient, nowTs)
+
+        const txRequest: any = {
+          to: contract.address,
+          from: account,
+          data: contract.interface.encodeFunctionData(methodName, args),
+          value: value && !isZero(value) ? value : '0x0',
+          gasLimit: calculateGasMargin(gasEstimate).toHexString()
+        }
+        const debugEnabled =
+          typeof window !== 'undefined' &&
+          (window.location.search.includes('debug=1') ||
+            window.location.hash.includes('debug=1') ||
+            window.localStorage.getItem('debugSwap') === '1')
+        if (debugEnabled) {
+          emitDebug({
+            lastSwapContext: {
+              txRequestJson: JSON.stringify(txRequest),
+              txTo: txRequest.to,
+              txFrom: txRequest.from,
+              txValue: txRequest.value,
+              gasLimit: txRequest.gasLimit,
+              methodName,
+              argsSummary: {
+                amount0: args[0]?.toString?.() ?? String(args[0]),
+                amount1: args[1]?.toString?.() ?? String(args[1]),
+                path: Array.isArray(args[args.length - 3]) ? args[args.length - 3] : null,
+                to: args[args.length - 2]?.toString?.() ?? String(args[args.length - 2]),
+                deadline: args[args.length - 1]?.toString?.() ?? String(args[args.length - 1])
+              }
+            }
+          })
+        }
 
         return contract[methodName](...args, {
           gasLimit: calculateGasMargin(gasEstimate),

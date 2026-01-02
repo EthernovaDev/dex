@@ -60,6 +60,19 @@ export type DebugEventDetail = {
     recipient?: string | null
     methodName?: string | null
     calldata?: string | null
+    calldataTruncated?: string | null
+    argsSummary?: Record<string, unknown> | null
+    deadlineArgRaw?: string | null
+    txTo?: string | null
+    txFrom?: string | null
+    txValue?: string | null
+    gasLimit?: string | null
+    gasEstimate?: string | null
+    gasPrice?: string | null
+    maxFeePerGas?: string | null
+    maxPriorityFeePerGas?: string | null
+    nonce?: number | null
+    txRequestJson?: string | null
     path?: string[] | null
     allowance?: string | null
     balance?: string | null

@@ -21,6 +21,8 @@ import { NATIVE_SYMBOL } from '../../constants/ethernova'
 import { useActiveWeb3React } from '../../hooks'
 import { useSwapCallArguments } from '../../hooks/useSwapCallback'
 import { Interface } from '@ethersproject/abi'
+import { BigNumber } from '@ethersproject/bignumber'
+import { calculateGasMargin } from '../../utils'
 import { emitDebug } from '../../utils/debugEvents'
 
 export default function SwapModalFooter({
@@ -45,7 +47,9 @@ export default function SwapModalFooter({
   const { account, library } = useActiveWeb3React()
   const debugEnabled =
     typeof window !== 'undefined' &&
-    (window.location.search.includes('debug=1') || window.localStorage.getItem('debugSwap') === '1')
+    (window.location.search.includes('debug=1') ||
+      window.location.hash.includes('debug=1') ||
+      window.localStorage.getItem('debugSwap') === '1')
   const swapCalls = useSwapCallArguments(trade, allowedSlippage, deadline, recipient)
   const [simulateState, setSimulateState] = useState<{
     status: 'idle' | 'loading' | 'ok' | 'reverted' | 'error'
@@ -61,13 +65,36 @@ export default function SwapModalFooter({
   const outputSymbol = trade.outputAmount.currency === ETHER ? NATIVE_SYMBOL : trade.outputAmount.currency.symbol
   const severity = warningSeverity(priceImpactWithoutFee)
 
+  const extractRevertData = useCallback((error: any) => {
+    const rawBody = typeof error?.body === 'string' ? error.body : null
+    const parsedBody = rawBody
+      ? (() => {
+          try {
+            return JSON.parse(rawBody)
+          } catch {
+            return null
+          }
+        })()
+      : null
+    const dataCandidates = [
+      error?.data,
+      error?.error?.data,
+      error?.error?.error?.data,
+      error?.error?.data?.data,
+      error?.data?.data,
+      error?.cause?.data,
+      error?.info?.data,
+      error?.info?.error?.data,
+      error?.info?.error?.error?.data,
+      parsedBody?.error?.data,
+      parsedBody?.error?.error?.data
+    ]
+    const found = dataCandidates.find((candidate) => typeof candidate === 'string' && candidate.startsWith('0x'))
+    return found || null
+  }, [])
+
   const decodeRevert = useCallback((error: any) => {
-    const data =
-      error?.data ||
-      error?.error?.data ||
-      error?.error?.error?.data ||
-      error?.error?.data?.data ||
-      error?.data?.data
+    const data = extractRevertData(error)
     if (!data || typeof data !== 'string') {
       return { reason: error?.reason || error?.message || 'execution reverted', data: null }
     }
@@ -85,24 +112,94 @@ export default function SwapModalFooter({
       return { reason: 'execution reverted (Panic)', data }
     }
     return { reason: 'execution reverted (unknown)', data }
-  }, [])
+  }, [extractRevertData])
 
-  const runSimulation = useCallback(async () => {
-    if (!debugEnabled || !account || !library) return
-    if (!swapCalls.length) {
-      setSimulateState({ status: 'error', message: 'no swap call data' })
-      emitDebug({ lastSwapSimulation: { status: 'error', reason: 'no swap call data', time: new Date().toISOString() } })
-      return
-    }
-    setSimulateState({ status: 'loading', message: 'Simulating...' })
-    let lastError: any = null
-    for (const call of swapCalls) {
+  const runSimulation = useCallback(
+    async (blockOnRevert: boolean = false) => {
+      if (!debugEnabled || !account || !library) {
+        setSimulateState({ status: 'error', message: 'missing dependencies' })
+        emitDebug({
+          lastSwapSimulation: { status: 'error', reason: 'missing dependencies', time: new Date().toISOString() }
+        })
+        return { status: 'error', reason: 'missing dependencies' }
+      }
+      if (!swapCalls.length) {
+        setSimulateState({ status: 'error', message: 'no swap call data' })
+        emitDebug({
+          lastSwapSimulation: { status: 'error', reason: 'no swap call data', time: new Date().toISOString() }
+        })
+        return { status: 'error', reason: 'no swap call data' }
+      }
+      setSimulateState({ status: 'loading', message: 'Simulating...' })
+
+      let lastError: any = null
+      let selectedCall: any = null
+      let gasEstimate: BigNumber | null = null
+      const estimatedCalls = await Promise.all(
+        swapCalls.map(async call => {
+          const {
+            parameters: { methodName, args, value },
+            contract
+          } = call
+          const options = value && value !== '0x0' ? { value } : {}
+          try {
+            const estimate = await contract.estimateGas[methodName](...args, options)
+            return { call, gasEstimate: estimate }
+          } catch (err) {
+            return { call, error: err }
+          }
+        })
+      )
+      const successfulEstimation = estimatedCalls.find(
+        (el, ix, list) =>
+          'gasEstimate' in el && (ix === list.length - 1 || 'gasEstimate' in list[ix + 1])
+      )
+      if (successfulEstimation && 'gasEstimate' in successfulEstimation) {
+        selectedCall = successfulEstimation.call
+        gasEstimate = successfulEstimation.gasEstimate ?? null
+      } else {
+        const fallbackSuccess = estimatedCalls.find(el => 'gasEstimate' in el)
+        if (fallbackSuccess && 'gasEstimate' in fallbackSuccess) {
+          selectedCall = fallbackSuccess.call
+          gasEstimate = fallbackSuccess.gasEstimate ?? null
+        }
+      }
+      if (!selectedCall) {
+        const errorCall = estimatedCalls.slice().reverse().find(el => 'error' in el)
+        lastError = errorCall && 'error' in errorCall ? errorCall.error : null
+      }
+
+      const callToUse = selectedCall || swapCalls[0]
+      if (!callToUse) {
+        setSimulateState({ status: 'error', message: 'no swap call data' })
+        return { status: 'error', reason: 'no swap call data' }
+      }
+
       const {
         parameters: { methodName, args, value },
         contract
-      } = call
+      } = callToUse
       const deadlineArg = args[args.length - 1]
-      const deadlineTs = deadlineArg ? Number(deadlineArg) : null
+      const deadlineRaw =
+        typeof deadlineArg === 'string'
+          ? deadlineArg
+          : deadlineArg?.toString?.()
+          ? String(deadlineArg.toString())
+          : null
+      const deadlineTs = deadlineRaw
+        ? Number(deadlineRaw.startsWith('0x') ? parseInt(deadlineRaw, 16) : Number(deadlineRaw))
+        : null
+      const argsSummary = (() => {
+        const toArg = args.length >= 2 ? args[args.length - 2] : null
+        const pathArg = args.length >= 3 && Array.isArray(args[args.length - 3]) ? args[args.length - 3] : null
+        return {
+          amount0: args[0]?.toString?.() ?? String(args[0]),
+          amount1: args[1]?.toString?.() ?? String(args[1]),
+          path: pathArg ?? null,
+          to: toArg?.toString?.() ?? String(toArg),
+          deadline: deadlineRaw
+        }
+      })()
       const calldata = (() => {
         try {
           return contract.interface.encodeFunctionData(methodName, args)
@@ -110,38 +207,109 @@ export default function SwapModalFooter({
           return null
         }
       })()
+      const valueBn = (() => {
+        try {
+          return value ? BigNumber.from(value) : BigNumber.from(0)
+        } catch {
+          return BigNumber.from(0)
+        }
+      })()
+      const feeData =
+        typeof (library as any)?.getFeeData === 'function'
+          ? await (library as any).getFeeData().catch(() => null)
+          : null
+      const networkChainId = await library.getNetwork().then((net) => net.chainId).catch(() => null)
+      const nonce = await library.getTransactionCount(account, 'pending').catch(() => null)
+      const txRequest: any = {
+        to: contract.address,
+        from: account,
+        data: calldata || undefined,
+        value: valueBn.toHexString()
+      }
+      if (networkChainId) {
+        txRequest.chainId = networkChainId
+      }
+      if (gasEstimate) {
+        txRequest.gasLimit = calculateGasMargin(gasEstimate).toHexString()
+      }
+      if (feeData?.maxFeePerGas && feeData?.maxPriorityFeePerGas) {
+        txRequest.maxFeePerGas = feeData.maxFeePerGas.toHexString()
+        txRequest.maxPriorityFeePerGas = feeData.maxPriorityFeePerGas.toHexString()
+      } else if (feeData?.gasPrice) {
+        txRequest.gasPrice = feeData.gasPrice.toHexString()
+      }
+      const previousSwapContext =
+        typeof window !== 'undefined' ? (window as any).__NOVADEX_DEBUG__?.lastSwapContext || {} : {}
       emitDebug({
         lastSwapContext: {
+          ...previousSwapContext,
           methodName,
           calldata,
-          deadlineTs: Number.isFinite(deadlineTs) ? deadlineTs : null
+          calldataTruncated: calldata ? `${calldata.slice(0, 42)}…` : null,
+          deadlineTs: Number.isFinite(deadlineTs) ? deadlineTs : null,
+          deadlineArgRaw: deadlineRaw,
+          argsSummary,
+          txTo: contract.address,
+          txFrom: account,
+          txValue: valueBn.toHexString(),
+          gasLimit: txRequest.gasLimit ?? null,
+          gasEstimate: gasEstimate ? gasEstimate.toHexString() : null,
+          gasPrice: txRequest.gasPrice ?? null,
+          maxFeePerGas: txRequest.maxFeePerGas ?? null,
+          maxPriorityFeePerGas: txRequest.maxPriorityFeePerGas ?? null,
+          nonce: typeof nonce === 'number' ? nonce : null,
+          txRequestJson: JSON.stringify(txRequest)
         }
       })
-      const options = !value || value === '0x0' ? {} : { value }
+
       try {
-        await contract.callStatic[methodName](...args, options)
+        await library.call(txRequest, 'pending')
         setSimulateState({ status: 'ok', message: 'simulate ok' })
         emitDebug({ lastSwapSimulation: { status: 'ok', time: new Date().toISOString() } })
-        return
+        return { status: 'ok' }
       } catch (err) {
         lastError = err
       }
-    }
-    const decoded = decodeRevert(lastError)
-    setSimulateState({
-      status: 'reverted',
-      message: decoded.reason || 'execution reverted',
-      data: decoded.data ?? undefined
-    })
-    emitDebug({
-      lastSwapSimulation: {
-        status: 'reverted',
-        reason: decoded.reason || null,
-        data: decoded.data ?? null,
-        time: new Date().toISOString()
+
+      let decoded = decodeRevert(lastError)
+      const revertData = decoded.data
+      if (revertData && typeof (contract as any)?.interface?.parseError === 'function') {
+        try {
+          const parsed = (contract as any).interface.parseError(revertData)
+          const args = parsed?.args ? Array.from(parsed.args).map((arg: any) => arg?.toString?.() ?? String(arg)) : []
+          decoded = { reason: `${parsed?.name || 'CustomError'}(${args.join(',')})`, data: revertData }
+        } catch {
+          // ignore custom error parse
+        }
       }
-    })
-  }, [account, library, swapCalls, debugEnabled, decodeRevert])
+      setSimulateState({
+        status: 'reverted',
+        message: decoded.reason || 'execution reverted',
+        data: decoded.data ?? undefined
+      })
+      emitDebug({
+        lastSwapSimulation: {
+          status: 'reverted',
+          reason: decoded.reason || null,
+          data: decoded.data ?? null,
+          time: new Date().toISOString()
+        }
+      })
+      return { status: 'reverted', reason: decoded.reason || 'execution reverted' }
+    },
+    [account, library, swapCalls, debugEnabled, decodeRevert]
+  )
+
+  const handleConfirm = useCallback(async () => {
+    if (!debugEnabled) {
+      onConfirm()
+      return
+    }
+    const result = await runSimulation(true)
+    if (result?.status === 'ok') {
+      onConfirm()
+    }
+  }, [debugEnabled, onConfirm, runSimulation])
 
   return (
     <>
@@ -213,7 +381,7 @@ export default function SwapModalFooter({
 
       <AutoRow>
         <ButtonError
-          onClick={onConfirm}
+          onClick={handleConfirm}
           disabled={disabledConfirm}
           error={severity > 2}
           style={{ margin: '10px 0 0 0' }}
@@ -235,7 +403,7 @@ export default function SwapModalFooter({
           <TYPE.main fontSize={12} color={theme.text2}>
             Debug swap simulation
           </TYPE.main>
-          <ButtonLight onClick={runSimulation} disabled={simulateState.status === 'loading'}>
+          <ButtonLight onClick={() => runSimulation(false)} disabled={simulateState.status === 'loading'}>
             {simulateState.status === 'loading' ? 'Simulating…' : 'Simulate (eth_call)'}
           </ButtonLight>
           <TYPE.main fontSize={12} color={theme.text1}>

@@ -168,6 +168,7 @@ function PairPage({ pairAddress, history }) {
   const isToken0Wnova = isAddrEq(token0Id, wnovaLower)
   const isToken1Wnova = isAddrEq(token1Id, wnovaLower)
   const reserveWnova = isToken0Wnova ? reserve0 : isToken1Wnova ? reserve1 : null
+  const reserveTony = isToken0Wnova ? reserve1 : isToken1Wnova ? reserve0 : null
   const liquiditySeries = React.useMemo(() => {
     if (!pairChartData || !pairChartData.length) return []
     return pairChartData
@@ -273,6 +274,7 @@ function PairPage({ pairAddress, history }) {
             tonyAddress={TONY_ADDRESS}
             pairAddress={pairId}
             reserveWnova={Number.isFinite(reserveWnova) ? reserveWnova : null}
+            reserveTony={Number.isFinite(reserveTony) ? reserveTony : null}
             liquiditySeries={liquiditySeries}
             swaps={transactions?.swaps || []}
             allowOnchain={!subgraphReady}

@@ -111,6 +111,16 @@ function GlobalPage() {
   }, [pairSwaps, wnovaLower])
 
   const reserveWnova = useMemo(() => getReserveWnova(pinnedPair, WNOVA_ADDRESS) || 0, [pinnedPair])
+  const reserveTony = useMemo(() => {
+    const token0Id = normAddr(pinnedPair?.token0?.id)
+    const token1Id = normAddr(pinnedPair?.token1?.id)
+    if (!token0Id || !token1Id) return 0
+    const reserve0 = Number(pinnedPair?.reserve0 ?? 0)
+    const reserve1 = Number(pinnedPair?.reserve1 ?? 0)
+    if (isAddrEq(token0Id, wnovaLower)) return reserve1
+    if (isAddrEq(token1Id, wnovaLower)) return reserve0
+    return 0
+  }, [pinnedPair, wnovaLower])
   const liquiditySeries = useMemo(() => {
     if (!dailyData || !dailyData.length) return []
     return dailyData
@@ -154,6 +164,7 @@ function GlobalPage() {
             tonyAddress={TONY_ADDRESS}
             pairAddress={PAIR_ADDRESS}
             reserveWnova={reserveWnova}
+            reserveTony={reserveTony}
             liquiditySeries={liquiditySeries}
             swaps={pairSwaps}
             showVolume={false}

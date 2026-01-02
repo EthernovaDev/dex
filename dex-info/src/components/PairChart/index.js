@@ -140,6 +140,26 @@ const PairChart = ({ address, color, base0, base1 }) => {
   const chartWidth = width || 520
   const chartHeight = height || 320
 
+  const reserve0Num = Number(pairData?.reserve0 ?? NaN)
+  const reserve1Num = Number(pairData?.reserve1 ?? NaN)
+  const reserveWnovaValue = isWnovaPair
+    ? token0Id === WRAPPED_NATIVE_ADDRESS
+      ? reserve0Num
+      : reserve1Num
+    : 0
+
+  const chartDataWithFallback = React.useMemo(() => {
+    if (chartDataMapped && chartDataMapped.length) return chartDataMapped
+    if (Number.isFinite(reserveWnovaValue) && reserveWnovaValue > 0) {
+      const now = Math.floor(Date.now() / 1000)
+      return [
+        { date: now - 86400, reserveWnova: reserveWnovaValue, dailyVolumeETH: 0 },
+        { date: now, reserveWnova: reserveWnovaValue, dailyVolumeETH: 0 },
+      ]
+    }
+    return chartDataMapped
+  }, [chartDataMapped, reserveWnovaValue])
+
   if (!chartDataMapped) {
     return (
       <ChartWrapper>
@@ -148,10 +168,10 @@ const PairChart = ({ address, color, base0, base1 }) => {
     )
   }
 
-  if (chartDataMapped && chartDataMapped.length === 0) {
+  if (chartDataMapped && chartDataMapped.length === 0 && (!chartDataWithFallback || !chartDataWithFallback.length)) {
     return (
       <ChartWrapper>
-        <EmptyCard height="300px">No historical data yet.</EmptyCard>{' '}
+        <EmptyCard height="160px">No data yet.</EmptyCard>
       </ChartWrapper>
     )
   }
@@ -229,7 +249,7 @@ const PairChart = ({ address, color, base0, base1 }) => {
       )}
       {chartFilter === CHART_VIEW.LIQUIDITY && (
         <ResponsiveContainer aspect={aspect}>
-          <AreaChart margin={{ top: 0, right: 10, bottom: 6, left: 0 }} barCategoryGap={1} data={chartDataMapped}>
+          <AreaChart margin={{ top: 0, right: 10, bottom: 6, left: 0 }} barCategoryGap={1} data={chartDataWithFallback}>
             <defs>
               <linearGradient id="colorUv" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor={color} stopOpacity={0.35} />
@@ -322,7 +342,7 @@ const PairChart = ({ address, color, base0, base1 }) => {
           <BarChart
             margin={{ top: 0, right: 0, bottom: 6, left: below1080 ? 0 : 10 }}
             barCategoryGap={1}
-            data={chartDataMapped}
+            data={chartDataWithFallback}
           >
             <XAxis
               tickLine={false}

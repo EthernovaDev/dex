@@ -156,6 +156,7 @@ export default function OnchainMarketPanel({
   tonyAddress,
   pairAddress,
   reserveWnova,
+  reserveTony,
   liquiditySeries,
   swaps,
   showVolume = true,
@@ -306,6 +307,37 @@ export default function OnchainMarketPanel({
       .filter((entry) => Number.isFinite(entry.time) && Number.isFinite(entry.value))
   }, [activeCandles])
 
+  const fallbackPriceSeries = useMemo(() => {
+    if (activeTrades && activeTrades.length) {
+      return activeTrades
+        .slice()
+        .sort((a, b) => a.timestamp - b.timestamp)
+        .map((trade) => ({
+          time: Number(trade.timestamp),
+          value: Number(trade.price || 0),
+        }))
+        .filter((entry) => Number.isFinite(entry.time) && Number.isFinite(entry.value))
+    }
+    if (Number.isFinite(reserveWnova) && Number.isFinite(reserveTony) && reserveWnova > 0 && reserveTony > 0) {
+      const now = Math.floor(Date.now() / 1000)
+      const price = reserveTony / reserveWnova
+      return [
+        { time: now - 3600, value: price },
+        { time: now, value: price },
+      ]
+    }
+    if (isFiniteNum(activeLastPrice)) {
+      const now = Math.floor(Date.now() / 1000)
+      return [
+        { time: now - 3600, value: Number(activeLastPrice) },
+        { time: now, value: Number(activeLastPrice) },
+      ]
+    }
+    return []
+  }, [activeTrades, reserveWnova, reserveTony, activeLastPrice])
+
+  const priceSeriesFinal = priceSeries.length ? priceSeries : fallbackPriceSeries
+
   const volumeSeries = useMemo(() => {
     if (!activeCandles || !activeCandles.length) return []
     return activeCandles.map((candle) => {
@@ -317,6 +349,16 @@ export default function OnchainMarketPanel({
       }
     })
   }, [activeCandles])
+
+  const volumeSeriesFinal = useMemo(() => {
+    if (volumeSeries.length) return volumeSeries
+    if (!activeTrades || !activeTrades.length) return []
+    return activeTrades.map((trade) => ({
+      time: Number(trade.timestamp),
+      value: Number(trade.wnovaAmount || 0),
+      color: trade.side === 'buy' ? 'rgba(34,197,94,0.55)' : 'rgba(239,68,68,0.55)',
+    }))
+  }, [activeTrades, volumeSeries])
 
   const liquiditySeriesFinal = useMemo(() => {
     if (liquiditySeries && liquiditySeries.length) return liquiditySeries
@@ -416,17 +458,17 @@ export default function OnchainMarketPanel({
       <div id="novadex-candle-chart" ref={ref} style={{ marginTop: '12px' }} data-testid="market-candle-chart">
         {activeStatus === 'loading' && !activeCandles?.length ? (
           <LocalLoader />
-        ) : chartTab === 'price' && priceSeries.length ? (
+        ) : chartTab === 'price' && priceSeriesFinal.length ? (
           <SimpleSeriesChart
-            data={priceSeries}
+            data={priceSeriesFinal}
             width={width}
             height={CHART_HEIGHT}
             type="area"
             valueFormatter={(val) => formatPrice(val)}
           />
-        ) : chartTab === 'volume' && volumeSeries.length ? (
+        ) : chartTab === 'volume' && volumeSeriesFinal.length ? (
           <SimpleSeriesChart
-            data={volumeSeries}
+            data={volumeSeriesFinal}
             width={width}
             height={CHART_HEIGHT}
             type="histogram"

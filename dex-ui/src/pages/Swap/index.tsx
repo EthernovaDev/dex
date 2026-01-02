@@ -347,8 +347,11 @@ export default function Swap() {
     const nowTs = Math.floor(Date.now() / 1000)
     const deadlineTs = typeof deadline === 'number' ? nowTs + deadline : null
     const recipientForDebug = recipient === null ? account : recipientAddress ?? recipient
+    const previousSwapContext =
+      typeof window !== 'undefined' ? (window as any).__NOVADEX_DEBUG__?.lastSwapContext || {} : {}
     emitDebug({
       lastSwapContext: {
+        ...previousSwapContext,
         router: swapRouterAddress || SWAP_ROUTER_ADDRESS,
         spender: swapRouterAddress || SWAP_ROUTER_ADDRESS,
         tokenIn: inputCurrency instanceof Token ? inputCurrency.address : inputCurrency === ETHER ? 'NATIVE' : null,

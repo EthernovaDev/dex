@@ -32,7 +32,7 @@ import {
   isAddrEq,
 } from '../utils'
 import { useColor } from '../hooks'
-import { usePairData, usePairTransactions } from '../contexts/PairData'
+import { usePairData, usePairTransactions, usePairChartData } from '../contexts/PairData'
 import { TYPE, ThemedBackground } from '../Theme'
 import { transparentize } from 'polished'
 import CopyHelper from '../components/Copy'
@@ -158,6 +158,7 @@ function PairPage({ pairAddress, history }) {
   }, [])
 
   const transactions = usePairTransactions(pairAddress)
+  const pairChartData = usePairChartData(pairAddress)
   const backgroundColor = useColor(pairAddress)
 
   const wnovaLower = normAddr(WNOVA_ADDRESS)
@@ -166,6 +167,15 @@ function PairPage({ pairAddress, history }) {
   const isToken0Wnova = isAddrEq(token0Id, wnovaLower)
   const isToken1Wnova = isAddrEq(token1Id, wnovaLower)
   const reserveWnova = isToken0Wnova ? reserve0 : isToken1Wnova ? reserve1 : null
+  const liquiditySeries = React.useMemo(() => {
+    if (!pairChartData || !pairChartData.length) return []
+    return pairChartData
+      .map((entry) => {
+        const value = Number(entry?.reserveETH)
+        return { time: Number(entry?.date), value }
+      })
+      .filter((entry) => Number.isFinite(entry.time) && Number.isFinite(entry.value))
+  }, [pairChartData])
   const liquidityWnova = isFiniteNum(reserveWnova) ? formattedNum(Number(reserveWnova), false) : null
   const formattedLiquidity = liquidityWnova
     ? liquidityWnova
@@ -260,6 +270,8 @@ function PairPage({ pairAddress, history }) {
             wnovaAddress={WNOVA_ADDRESS}
             tonyAddress={TONY_ADDRESS}
             pairAddress={pairAddress}
+            reserveWnova={Number.isFinite(reserveWnova) ? reserveWnova : null}
+            liquiditySeries={liquiditySeries}
             swaps={transactions?.swaps || []}
             allowOnchain={!subgraphReady}
           />

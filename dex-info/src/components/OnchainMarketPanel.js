@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import styled from 'styled-components'
 import CandleStickChart from './CandleChart'
+import SimpleSeriesChart from './SimpleSeriesChart'
 import LocalLoader from './LocalLoader'
 import Panel from './Panel'
 import { TYPE } from '../Theme'
@@ -132,9 +133,17 @@ const EmptyState = styled.div`
 const CHART_HEIGHT = 320
 
 const TIMEFRAMES = [
-  { label: '5m', intervalSec: 300, lookbackBlocks: 20000 },
-  { label: '1h', intervalSec: 3600, lookbackBlocks: 60000 },
-  { label: '1d', intervalSec: 86400, lookbackBlocks: 140000 },
+  { label: '1H', intervalSec: 3600, lookbackBlocks: 60000 },
+  { label: '1D', intervalSec: 86400, lookbackBlocks: 140000 },
+  { label: '1W', intervalSec: 604800, lookbackBlocks: 500000 },
+  { label: '1M', intervalSec: 2592000, lookbackBlocks: 1800000 },
+  { label: '1Y', intervalSec: 31536000, lookbackBlocks: 6000000 },
+]
+
+const CHART_TABS = [
+  { key: 'price', label: 'Price' },
+  { key: 'volume', label: 'Volume' },
+  { key: 'liquidity', label: 'Liquidity' },
 ]
 
 export default function OnchainMarketPanel({
@@ -143,11 +152,14 @@ export default function OnchainMarketPanel({
   wnovaAddress,
   tonyAddress,
   pairAddress,
+  reserveWnova,
+  liquiditySeries,
   swaps,
   showVolume = true,
   allowOnchain = true,
 }) {
   const [timeframe, setTimeframe] = useState(TIMEFRAMES[0])
+  const [chartTab, setChartTab] = useState(CHART_TABS[0].key)
   const [allowOnchainDelayed, setAllowOnchainDelayed] = useState(false)
 
   const wnovaLower = normAddr(wnovaAddress)
@@ -293,6 +305,30 @@ export default function OnchainMarketPanel({
     }))
   }, [activeTrades])
 
+  const volumeSeries = useMemo(() => {
+    if (!activeCandles || !activeCandles.length) return []
+    return activeCandles.map((candle) => {
+      const isUp = Number(candle.close) >= Number(candle.open)
+      return {
+        time: Number(candle.timestamp),
+        value: Number(candle.volume || 0),
+        color: isUp ? 'rgba(34,197,94,0.55)' : 'rgba(239,68,68,0.55)',
+      }
+    })
+  }, [activeCandles])
+
+  const liquiditySeriesFinal = useMemo(() => {
+    if (liquiditySeries && liquiditySeries.length) return liquiditySeries
+    if (Number.isFinite(reserveWnova) && reserveWnova > 0) {
+      const now = Math.floor(Date.now() / 1000)
+      if (activeCandles && activeCandles.length) {
+        return activeCandles.map((c) => ({ time: Number(c.timestamp), value: Number(reserveWnova) }))
+      }
+      return [{ time: now, value: Number(reserveWnova) }]
+    }
+    return []
+  }, [liquiditySeries, reserveWnova, activeCandles])
+
   const ref = useRef()
   const [width, setWidth] = useState(520)
 
@@ -323,6 +359,7 @@ export default function OnchainMarketPanel({
   const changeValue = isFiniteNum(change24h) ? `${change24h.toFixed(2)}%` : '—'
   const volumeValue = isFiniteNum(volume24h) ? `${formattedNum(volume24h, false)} WNOVA` : '—'
   const tradesValue = Number.isFinite(trades24h.length) ? trades24h.length : '—'
+
 
   return (
     <Panel style={{ marginBottom: '1.5rem' }}>
@@ -364,10 +401,21 @@ export default function OnchainMarketPanel({
           <StatValue data-testid="market-24h-trades-value">{tradesValue}</StatValue>
         </StatCard>
       </StatsRow>
+      <TimeframeRow style={{ marginTop: '10px' }}>
+        {CHART_TABS.map((tab) => (
+          <TimeframeButton
+            key={tab.key}
+            data-active={tab.key === chartTab}
+            onClick={() => setChartTab(tab.key)}
+          >
+            {tab.label}
+          </TimeframeButton>
+        ))}
+      </TimeframeRow>
       <div id="novadex-candle-chart" ref={ref} style={{ marginTop: '12px' }} data-testid="market-candle-chart">
         {activeStatus === 'loading' && !activeCandles?.length ? (
           <LocalLoader />
-        ) : activeCandles && activeCandles.length ? (
+        ) : chartTab === 'price' && activeCandles && activeCandles.length ? (
           <CandleStickChart
             data={activeCandles}
             base={activeLastPrice || 0}
@@ -376,6 +424,22 @@ export default function OnchainMarketPanel({
             showVolume={showVolume}
             markers={markers}
             valueFormatter={(val) => formatPrice(val)}
+          />
+        ) : chartTab === 'volume' && volumeSeries.length ? (
+          <SimpleSeriesChart
+            data={volumeSeries}
+            width={width}
+            height={CHART_HEIGHT}
+            type="histogram"
+            valueFormatter={(val) => formattedNum(val, false)}
+          />
+        ) : chartTab === 'liquidity' && liquiditySeriesFinal.length ? (
+          <SimpleSeriesChart
+            data={liquiditySeriesFinal}
+            width={width}
+            height={CHART_HEIGHT}
+            type="area"
+            valueFormatter={(val) => formattedNum(val, false)}
           />
         ) : (
           <EmptyState>No on-chain swaps yet.</EmptyState>

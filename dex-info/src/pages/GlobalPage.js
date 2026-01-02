@@ -111,6 +111,15 @@ function GlobalPage() {
   }, [pairSwaps, wnovaLower])
 
   const reserveWnova = useMemo(() => getReserveWnova(pinnedPair, WNOVA_ADDRESS) || 0, [pinnedPair])
+  const liquiditySeries = useMemo(() => {
+    if (!dailyData || !dailyData.length) return []
+    return dailyData
+      .map((entry) => {
+        const value = Number(entry?.totalLiquidityETH)
+        return { time: Number(entry?.date), value }
+      })
+      .filter((entry) => Number.isFinite(entry.time) && Number.isFinite(entry.value))
+  }, [dailyData])
   const lastDaily = dailyData && dailyData.length ? dailyData[dailyData.length - 1] : null
   const chartVolume = Number(lastDaily?.dailyVolumeETH ?? lastDaily?.totalVolumeETH ?? NaN)
   const chartLiquidity = Number(lastDaily?.totalLiquidityETH ?? NaN)
@@ -144,6 +153,8 @@ function GlobalPage() {
             wnovaAddress={WNOVA_ADDRESS}
             tonyAddress={TONY_ADDRESS}
             pairAddress={PAIR_ADDRESS}
+            reserveWnova={reserveWnova}
+            liquiditySeries={liquiditySeries}
             swaps={pairSwaps}
             showVolume={false}
             allowOnchain={!subgraphReady}

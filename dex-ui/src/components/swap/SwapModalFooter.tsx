@@ -214,6 +214,7 @@ export default function SwapModalFooter({
           return BigNumber.from(0)
         }
       })()
+      const valueHex = valueBn.isZero() ? '0x0' : valueBn.toHexString()
       const feeData =
         typeof (library as any)?.getFeeData === 'function'
           ? await (library as any).getFeeData().catch(() => null)
@@ -224,7 +225,7 @@ export default function SwapModalFooter({
         to: contract.address,
         from: account,
         data: calldata || undefined,
-        value: valueBn.toHexString()
+        value: valueHex
       }
       if (networkChainId) {
         txRequest.chainId = networkChainId
@@ -251,7 +252,7 @@ export default function SwapModalFooter({
           argsSummary,
           txTo: contract.address,
           txFrom: account,
-          txValue: valueBn.toHexString(),
+          txValue: valueHex,
           gasLimit: txRequest.gasLimit ?? null,
           gasEstimate: gasEstimate ? gasEstimate.toHexString() : null,
           gasPrice: txRequest.gasPrice ?? null,

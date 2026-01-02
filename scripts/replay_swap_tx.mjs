@@ -64,6 +64,18 @@ async function main() {
   } catch (err) {
     throw new Error('Invalid JSON for txRequest')
   }
+  if (txRequest?.gasLimit && !txRequest?.gas) {
+    txRequest.gas = txRequest.gasLimit
+    delete txRequest.gasLimit
+  }
+  if (typeof txRequest?.value === 'string') {
+    try {
+      const valueBig = BigInt(txRequest.value)
+      txRequest.value = valueBig === 0n ? '0x0' : `0x${valueBig.toString(16)}`
+    } catch {
+      // keep original
+    }
+  }
   const blockTag = process.env.BLOCK_TAG || 'pending'
   const nowTs = Math.floor(Date.now() / 1000)
   console.log('[INFO] blockTag:', blockTag, 'nowTs:', nowTs)

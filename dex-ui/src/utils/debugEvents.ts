@@ -54,7 +54,12 @@ export type DebugEventDetail = {
     feeWnova?: string | null
     minOut?: string | null
     slippageBps?: number | null
-    deadline?: number | null
+    deadlineSeconds?: number | null
+    deadlineTs?: number | null
+    nowTs?: number | null
+    recipient?: string | null
+    methodName?: string | null
+    calldata?: string | null
     path?: string[] | null
     allowance?: string | null
     balance?: string | null

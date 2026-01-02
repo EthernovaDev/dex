@@ -7,8 +7,10 @@ const CONFIG_PATH = '/opt/novadex/dex/dex-ui/public/ethernova.config.json'
 const SWAP_FROM = (process.env.SWAP_FROM || '').trim()
 const TOKEN_IN = (process.env.TOKEN_IN || '').trim()
 const TOKEN_OUT = (process.env.TOKEN_OUT || '').trim()
+const ROUTER_OVERRIDE = (process.env.ROUTER || '').trim()
 const AMOUNT_IN = BigInt(process.env.AMOUNT_IN_WEI || '1000000000000000000') // 1 WNOVA default
 const SLIPPAGE_BPS = Number(process.env.SLIPPAGE_BPS || '50')
+const DEADLINE_SECONDS = Number(process.env.DEADLINE_SECONDS || '1200')
 const TREASURY_FEE_BPS = 100n
 const BPS = 10000n
 
@@ -77,7 +79,7 @@ async function main() {
   const config = loadConfig()
   const wnova = config.tokens.WNOVA.address
   const tony = config.tokens.TONY.address
-  const router = config.contracts.swapRouter || config.contracts.router
+  const router = ROUTER_OVERRIDE || config.contracts.swapRouter || config.contracts.router
   const pair = config.contracts.pair
 
   const tokenIn = TOKEN_IN || wnova
@@ -121,7 +123,9 @@ async function main() {
   console.log('[INFO] outputs', { grossOut: grossOut.toString(), netOut: netOut.toString(), minOutGross: minOutGross.toString(), minOutNet: minOutNet.toString() })
 
   const path = [tokenIn, tokenOut]
-  const deadline = Math.floor(Date.now() / 1000) + 60 * 20
+  const nowTs = Math.floor(Date.now() / 1000)
+  const deadline = nowTs + DEADLINE_SECONDS
+  console.log('[INFO] deadline', { nowTs, deadlineTs: deadline, delta: deadline - nowTs })
   const dataGross = ifaceRouter.encodeFunctionData('swapExactTokensForTokens', [
     AMOUNT_IN.toString(),
     minOutGross.toString(),

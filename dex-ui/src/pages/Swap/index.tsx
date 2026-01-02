@@ -344,6 +344,9 @@ export default function Swap() {
       inputIsWnova && grossInput ? treasuryFeeFromGross(grossInput) : outputIsWnova && trade?.outputAmount
         ? treasuryFeeFromGross(trade.outputAmount)
         : null
+    const nowTs = Math.floor(Date.now() / 1000)
+    const deadlineTs = typeof deadline === 'number' ? nowTs + deadline : null
+    const recipientForDebug = recipient === null ? account : recipientAddress ?? recipient
     emitDebug({
       lastSwapContext: {
         router: swapRouterAddress || SWAP_ROUTER_ADDRESS,
@@ -356,7 +359,10 @@ export default function Swap() {
         feeWnova: feeWnovaAmount?.toExact?.() ?? null,
         minOut: slippageAmounts?.[Field.OUTPUT]?.toExact?.() ?? null,
         slippageBps: allowedSlippage ?? null,
-        deadline: deadline ?? null,
+        deadlineSeconds: deadline ?? null,
+        deadlineTs,
+        nowTs,
+        recipient: recipientForDebug ?? null,
         path: trade?.route?.path?.map(token => token.address) ?? null,
         allowance: swapAllowance?.toExact?.() ?? null,
         balance: currencyBalances?.[Field.INPUT]?.toExact?.() ?? null,
@@ -389,7 +395,9 @@ export default function Swap() {
     displayInputAmount,
     inputIsWnova,
     currencyBalances,
-    deadline
+    deadline,
+    recipient,
+    recipientAddress
   ])
 
   // check whether the user has approved the router on the input token

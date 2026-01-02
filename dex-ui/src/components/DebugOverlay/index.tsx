@@ -240,8 +240,22 @@ export default function DebugOverlay() {
       <Row>
         <Label>Slippage / Deadline</Label>
         <Value>
-          {swapContext?.slippageBps ?? '—'} / {swapContext?.deadline ?? '—'}
+          {swapContext?.slippageBps ?? '—'} / {swapContext?.deadlineSeconds ?? '—'}
         </Value>
+      </Row>
+      <Row>
+        <Label>Deadline ts (now)</Label>
+        <Value>
+          {swapContext?.deadlineTs ?? '—'} ({swapContext?.nowTs ?? '—'})
+        </Value>
+      </Row>
+      <Row>
+        <Label>Recipient</Label>
+        <Value>{swapContext?.recipient || '—'}</Value>
+      </Row>
+      <Row>
+        <Label>Method</Label>
+        <Value>{swapContext?.methodName || '—'}</Value>
       </Row>
       <Row>
         <Label>Path</Label>

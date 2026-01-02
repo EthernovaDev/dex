@@ -101,6 +101,22 @@ export default function SwapModalFooter({
         parameters: { methodName, args, value },
         contract
       } = call
+      const deadlineArg = args[args.length - 1]
+      const deadlineTs = deadlineArg ? Number(deadlineArg) : null
+      const calldata = (() => {
+        try {
+          return contract.interface.encodeFunctionData(methodName, args)
+        } catch {
+          return null
+        }
+      })()
+      emitDebug({
+        lastSwapContext: {
+          methodName,
+          calldata,
+          deadlineTs: Number.isFinite(deadlineTs) ? deadlineTs : null
+        }
+      })
       const options = !value || value === '0x0' ? {} : { value }
       try {
         await contract.callStatic[methodName](...args, options)

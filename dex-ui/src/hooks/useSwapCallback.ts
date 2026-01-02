@@ -12,6 +12,7 @@ import { useActiveWeb3React } from './index'
 import { useV1ExchangeContract } from './useContract'
 import useENS from './useENS'
 import { Version } from './useToggledVersion'
+import { useSwapRouterAddress } from './useSwapRouterAddress'
 
 export enum SwapCallbackState {
   INVALID,
@@ -36,6 +37,28 @@ interface FailedCall {
 
 type EstimatedSwapCall = SuccessfulCall | FailedCall
 
+function extractSwapErrorMessage(error: any): string {
+  const reason = error?.reason ?? error?.error?.reason ?? ''
+  const dataMessage = error?.data?.message ?? error?.error?.data?.message ?? ''
+  const message = error?.message ?? ''
+  const combined = [reason, dataMessage, message].find((value) => typeof value === 'string' && value.length > 0) || ''
+
+  if (/TRANSFER_FROM_FAILED|transfer amount exceeds allowance|insufficient allowance/i.test(combined)) {
+    return 'Approve WNOVA for NovaRouter (swap router) and try again.'
+  }
+  if (/INSUFFICIENT_OUTPUT_AMOUNT/i.test(combined)) {
+    return 'Slippage or protocol fee too low. Try increasing slippage tolerance.'
+  }
+  if (/EXCESSIVE_INPUT_AMOUNT/i.test(combined)) {
+    return 'Input amount too high for current liquidity. Try reducing the amount.'
+  }
+  if (/INSUFFICIENT_LIQUIDITY|INSUFFICIENT_A_AMOUNT|INSUFFICIENT_B_AMOUNT/i.test(combined)) {
+    return 'Not enough liquidity for this trade.'
+  }
+
+  return combined ? `Swap failed: ${combined}` : 'Swap failed: unknown error.'
+}
+
 /**
  * Returns the swap calls that can be used to make the trade
  * @param trade trade to execute
@@ -50,6 +73,7 @@ function useSwapCallArguments(
   recipientAddressOrName: string | null // the ENS name or address of the recipient of the trade, or null if swap should be returned to sender
 ): SwapCall[] {
   const { account, chainId, library } = useActiveWeb3React()
+  const swapRouterAddress = useSwapRouterAddress()
 
   const { address: recipientAddress } = useENS(recipientAddressOrName)
   const recipient = recipientAddressOrName === null ? account : recipientAddress
@@ -60,8 +84,9 @@ function useSwapCallArguments(
     const tradeVersion = getTradeVersion(trade)
     if (!trade || !recipient || !library || !account || !tradeVersion || !chainId) return []
 
+    const swapRouter = swapRouterAddress || undefined
     const contract: Contract | null =
-      tradeVersion === Version.v2 ? getRouterContract(chainId, library, account) : v1Exchange
+      tradeVersion === Version.v2 ? getRouterContract(chainId, library, account, swapRouter) : v1Exchange
     if (!contract) {
       return []
     }
@@ -103,7 +128,7 @@ function useSwapCallArguments(
         break
     }
     return swapMethods.map(parameters => ({ parameters, contract }))
-  }, [account, allowedSlippage, chainId, deadline, library, recipient, trade, v1Exchange])
+  }, [account, allowedSlippage, chainId, deadline, library, recipient, trade, v1Exchange, swapRouterAddress])
 }
 
 // returns a function that will execute a swap, if the parameters are all valid
@@ -165,17 +190,7 @@ export function useSwapCallback(
                   })
                   .catch(callError => {
                     console.debug('Call threw error', call, callError)
-                    let errorMessage: string
-                    switch (callError.reason) {
-                      case 'UniswapV2Router: INSUFFICIENT_OUTPUT_AMOUNT':
-                      case 'UniswapV2Router: EXCESSIVE_INPUT_AMOUNT':
-                        errorMessage =
-                          'This transaction will not succeed either due to price movement or fee on transfer. Try increasing your slippage tolerance.'
-                        break
-                      default:
-                        errorMessage = `The transaction cannot succeed due to error: ${callError.reason}. This is probably an issue with one of the tokens you are swapping.`
-                    }
-                    return { call, error: new Error(errorMessage) }
+                    return { call, error: new Error(extractSwapErrorMessage(callError)) }
                   })
               })
           })
@@ -231,14 +246,11 @@ export function useSwapCallback(
             return response.hash
           })
           .catch((error: any) => {
-            // if the user rejected the tx, pass this along
             if (error?.code === 4001) {
               throw new Error('Transaction rejected.')
-            } else {
-              // otherwise, the error was unexpected and we need to convey that
-              console.error(`Swap failed`, error, methodName, args, value)
-              throw new Error(`Swap failed: ${error.message}`)
             }
+            console.error(`Swap failed`, error, methodName, args, value)
+            throw new Error(extractSwapErrorMessage(error))
           })
       },
       error: null

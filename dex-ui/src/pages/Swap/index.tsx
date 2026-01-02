@@ -21,14 +21,16 @@ import TokenWarningModal from '../../components/TokenWarningModal'
 import ProgressSteps from '../../components/ProgressSteps'
 import WrapUnwrapModal from '../../components/WrapUnwrap/WrapUnwrapModal'
 
-import { BETTER_TRADE_LINK_THRESHOLD, BIPS_BASE, INITIAL_ALLOWED_SLIPPAGE } from '../../constants'
+import { BETTER_TRADE_LINK_THRESHOLD, BIPS_BASE, INITIAL_ALLOWED_SLIPPAGE, SWAP_ROUTER_ADDRESS } from '../../constants'
 import { NATIVE_SYMBOL } from '../../constants/ethernova'
 import { getTradeVersion, isTradeBetter } from '../../data/V1'
 import { useActiveWeb3React } from '../../hooks'
 import { useEthernovaConfig } from '../../hooks/useEthernovaConfig'
+import { useSwapRouterAddress } from '../../hooks/useSwapRouterAddress'
 import { useCurrency } from '../../hooks/Tokens'
 import { ApprovalState, useApproveCallbackFromTrade } from '../../hooks/useApproveCallback'
 import { usePairLookup } from '../../hooks/usePairLookup'
+import { useTokenAllowance } from '../../data/Allowances'
 import useENSAddress from '../../hooks/useENSAddress'
 import { useSwapCallback } from '../../hooks/useSwapCallback'
 import useToggledVersion, { Version } from '../../hooks/useToggledVersion'
@@ -76,6 +78,7 @@ export default function Swap() {
 
   const { account, chainId, library } = useActiveWeb3React()
   const { config } = useEthernovaConfig()
+  const swapRouterAddress = useSwapRouterAddress()
   const isConnected = Boolean(account && library)
   const isWrongNetwork = isConnected && chainId !== ETHERNOVA_CHAIN_ID
   const theme = useContext(ThemeContext)
@@ -128,7 +131,7 @@ export default function Swap() {
       setSwapGasLimit(undefined)
       return
     }
-    const router = getRouterContract(chainId, library, account)
+    const router = getRouterContract(chainId, library, account, swapRouterAddress || undefined)
     if (!router) {
       setSwapGasLimit(undefined)
       return
@@ -239,6 +242,11 @@ export default function Swap() {
     BigNumber.from(poolReserves.reserve1).isZero()
 
   const debugEnabled = typeof window !== 'undefined' && window.location.search.includes('debug=1')
+  const swapAllowance = useTokenAllowance(
+    inputCurrency instanceof Token ? inputCurrency : undefined,
+    account ?? undefined,
+    swapRouterAddress || SWAP_ROUTER_ADDRESS
+  )
   useEffect(() => {
     if (!debugEnabled) return
     console.debug('[Swap debug]', {
@@ -252,7 +260,10 @@ export default function Swap() {
       token0: pairLookup.token0,
       token1: pairLookup.token1,
       reserveA: pairLookup.reserveA?.toString(),
-      reserveB: pairLookup.reserveB?.toString()
+      reserveB: pairLookup.reserveB?.toString(),
+      swapRouter: swapRouterAddress || SWAP_ROUTER_ADDRESS,
+      allowance: swapAllowance?.toExact?.() ?? null,
+      amountIn: parsedAmounts?.[Field.INPUT]?.toExact?.() ?? null
     })
     emitDebug({
       lastLiquidityContext: {
@@ -275,6 +286,17 @@ export default function Swap() {
         rpcUrl: config.rpcUrl ?? null
       }
     })
+    emitDebug({
+      lastAction: {
+        name: 'swap.spender.check',
+        time: new Date().toISOString(),
+        meta: {
+          swapRouter: swapRouterAddress || SWAP_ROUTER_ADDRESS,
+          allowance: swapAllowance?.toExact?.() ?? null,
+          amountIn: parsedAmounts?.[Field.INPUT]?.toExact?.() ?? null
+        }
+      }
+    })
   }, [
     debugEnabled,
     typedValue,
@@ -289,6 +311,8 @@ export default function Swap() {
     pairLookup.reserveA,
     pairLookup.reserveB,
     pairLookup.reserves,
+    swapRouterAddress,
+    swapAllowance,
     chainId,
     account,
     library,

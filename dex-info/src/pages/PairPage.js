@@ -20,7 +20,17 @@ import TxnList from '../components/TxnList'
 import Loader from '../components/LocalLoader'
 import { BasicLink } from '../components/Link'
 import Search from '../components/Search'
-import { formattedNum, formattedPercent, getPoolLink, getSwapLink, shortenAddress, formatPrice, isFiniteNum } from '../utils'
+import {
+  formattedNum,
+  formattedPercent,
+  getPoolLink,
+  getSwapLink,
+  shortenAddress,
+  formatPrice,
+  isFiniteNum,
+  normAddr,
+  isAddrEq,
+} from '../utils'
 import { useColor } from '../hooks'
 import { usePairData, usePairTransactions } from '../contexts/PairData'
 import { TYPE, ThemedBackground } from '../Theme'
@@ -150,11 +160,11 @@ function PairPage({ pairAddress, history }) {
   const transactions = usePairTransactions(pairAddress)
   const backgroundColor = useColor(pairAddress)
 
-  const wnovaLower = WNOVA_ADDRESS?.toLowerCase?.() || ''
-  const token0Id = token0?.id?.toLowerCase?.()
-  const token1Id = token1?.id?.toLowerCase?.()
-  const isToken0Wnova = token0Id === wnovaLower
-  const isToken1Wnova = token1Id === wnovaLower
+  const wnovaLower = normAddr(WNOVA_ADDRESS)
+  const token0Id = normAddr(token0?.id)
+  const token1Id = normAddr(token1?.id)
+  const isToken0Wnova = isAddrEq(token0Id, wnovaLower)
+  const isToken1Wnova = isAddrEq(token1Id, wnovaLower)
   const reserveWnova = isToken0Wnova ? reserve0 : isToken1Wnova ? reserve1 : null
   const liquidityWnova = isFiniteNum(reserveWnova) ? formattedNum(Number(reserveWnova), false) : null
   const formattedLiquidity = liquidityWnova

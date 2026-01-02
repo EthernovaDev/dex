@@ -75,12 +75,12 @@ export function localNumber(val) {
 }
 
 export function getReserveWnova(pair, wnovaAddress = WRAPPED_NATIVE_ADDRESS) {
-  const wnovaLower = wnovaAddress?.toLowerCase?.()
-  const token0Id = pair?.token0?.id?.toLowerCase?.()
-  const token1Id = pair?.token1?.id?.toLowerCase?.()
+  const wnovaLower = normAddr(wnovaAddress)
+  const token0Id = normAddr(pair?.token0?.id)
+  const token1Id = normAddr(pair?.token1?.id)
   if (!wnovaLower || !token0Id || !token1Id) return null
-  if (token0Id === wnovaLower) return Number(pair?.reserve0 || 0)
-  if (token1Id === wnovaLower) return Number(pair?.reserve1 || 0)
+  if (isAddrEq(token0Id, wnovaLower)) return Number(pair?.reserve0 || 0)
+  if (isAddrEq(token1Id, wnovaLower)) return Number(pair?.reserve1 || 0)
   return null
 }
 
@@ -352,6 +352,14 @@ export const isFiniteNum = (value) => {
   if (typeof value === 'string') return Number.isFinite(Number(value))
   if (typeof value === 'object' && typeof value.isFinite === 'function') return value.isFinite()
   return false
+}
+
+export const normAddr = (value) => (value || '').toLowerCase()
+
+export const isAddrEq = (a, b) => {
+  const na = normAddr(a)
+  const nb = normAddr(b)
+  return Boolean(na && nb && na === nb)
 }
 
 export const toNum = (value, fallback = 0) => {

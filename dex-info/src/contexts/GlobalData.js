@@ -3,7 +3,14 @@ import { client } from '../apollo/client'
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 import { useTimeframe } from './Application'
-import { getPercentChange, getBlocksFromTimestamps, get2DayPercentChange, getTimeframe, getReserveWnova } from '../utils'
+import {
+  getPercentChange,
+  getBlocksFromTimestamps,
+  get2DayPercentChange,
+  getTimeframe,
+  getReserveWnova,
+  normAddr,
+} from '../utils'
 import {
   GLOBAL_DATA,
   GLOBAL_TXNS,
@@ -670,7 +677,7 @@ export function useTopLps() {
   let topLps = state?.topLps
 
   const allPairs = useAllPairData()
-  const wnovaLower = WRAPPED_NATIVE_ADDRESS?.toLowerCase?.() || ''
+  const wnovaLower = normAddr(WRAPPED_NATIVE_ADDRESS)
 
   useEffect(() => {
     async function fetchData() {

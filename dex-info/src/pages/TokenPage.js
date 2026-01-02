@@ -15,7 +15,16 @@ import TxnList from '../components/TxnList'
 import TokenChart from '../components/TokenChart'
 import { BasicLink } from '../components/Link'
 import Search from '../components/Search'
-import { formattedNum, formattedPercent, formatPrice, getPoolLink, getSwapLink, localNumber, isFiniteNum } from '../utils'
+import {
+  formattedNum,
+  formattedPercent,
+  formatPrice,
+  getPoolLink,
+  getSwapLink,
+  localNumber,
+  isFiniteNum,
+  isAddrEq,
+} from '../utils'
 import { useTokenData, useTokenTransactions, useTokenPairs } from '../contexts/TokenData'
 import { TYPE, ThemedBackground } from '../Theme'
 import { transparentize } from 'polished'
@@ -139,7 +148,7 @@ function TokenPage({ address, history }) {
 
   const shouldUseOnchain = allowOnchain && (!subgraphReady || !tokenData)
   const onchainInfo = useOnchainTokenInfo(address, shouldUseOnchain ? rpcUrl : null)
-  const isWrappedNative = address?.toLowerCase() === WRAPPED_NATIVE_ADDRESS
+  const isWrappedNative = isAddrEq(address, WRAPPED_NATIVE_ADDRESS)
   const safeSymbol = symbol || onchainInfo.info?.symbol || (isWrappedNative ? 'WNOVA' : 'UNKNOWN')
   const safeName = name || onchainInfo.info?.name || (isWrappedNative ? 'Wrapped NOVA' : 'Unknown Token')
 

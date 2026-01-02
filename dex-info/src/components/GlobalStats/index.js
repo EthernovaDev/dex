@@ -6,7 +6,7 @@ import { useGlobalData, useGlobalTransactions } from '../../contexts/GlobalData'
 import { useLatestBlocks } from '../../contexts/Application'
 import { usePairData, useAllPairData } from '../../contexts/PairData'
 import { useSpotPriceHistory } from '../../hooks/useSpotPriceHistory'
-import { formattedNum, localNumber, formatPrice, isFiniteNum } from '../../utils'
+import { formattedNum, localNumber, formatPrice, isFiniteNum, normAddr, isAddrEq } from '../../utils'
 import { PAIR_ADDRESS, WRAPPED_NATIVE_ADDRESS } from '../../constants/urls'
 import { FEE_BPS, TREASURY_FEE_BPS } from '../../constants/base'
 
@@ -40,16 +40,16 @@ export default function GlobalStats() {
   const tonyAddress = process.env.REACT_APP_TONY_ADDRESS
   const pairAddress = PAIR_ADDRESS || process.env.REACT_APP_PAIR_ADDRESS
   const pairData = usePairData(pairAddress)
-  const wnovaLower = WRAPPED_NATIVE_ADDRESS || wnovaAddress?.toLowerCase?.() || ''
-  const token0Id = pairData?.token0?.id?.toLowerCase?.()
-  const token1Id = pairData?.token1?.id?.toLowerCase?.()
+  const wnovaLower = normAddr(WRAPPED_NATIVE_ADDRESS || wnovaAddress)
+  const token0Id = normAddr(pairData?.token0?.id)
+  const token1Id = normAddr(pairData?.token1?.id)
   const reserve0 = Number(pairData?.reserve0 || 0)
   const reserve1 = Number(pairData?.reserve1 || 0)
   let spotFromPair = null
   if (wnovaLower && token0Id && token1Id && reserve0 > 0 && reserve1 > 0) {
-    if (token0Id === wnovaLower) {
+    if (isAddrEq(token0Id, wnovaLower)) {
       spotFromPair = reserve1 / reserve0
-    } else if (token1Id === wnovaLower) {
+    } else if (isAddrEq(token1Id, wnovaLower)) {
       spotFromPair = reserve0 / reserve1
     }
   }
@@ -63,23 +63,23 @@ export default function GlobalStats() {
     return nowSec - ts <= 86400
   })
   const volumeWnova = recentSwaps.reduce((sum, swap) => {
-    const token0Id = swap?.pair?.token0?.id?.toLowerCase?.()
-    const token1Id = swap?.pair?.token1?.id?.toLowerCase?.()
+    const token0Id = normAddr(swap?.pair?.token0?.id)
+    const token1Id = normAddr(swap?.pair?.token1?.id)
     const amount0In = Number(swap?.amount0In || 0)
     const amount0Out = Number(swap?.amount0Out || 0)
     const amount1In = Number(swap?.amount1In || 0)
     const amount1Out = Number(swap?.amount1Out || 0)
-    if (token0Id === wnovaLower) return sum + (amount0In > 0 ? amount0In : amount0Out)
-    if (token1Id === wnovaLower) return sum + (amount1In > 0 ? amount1In : amount1Out)
+    if (isAddrEq(token0Id, wnovaLower)) return sum + (amount0In > 0 ? amount0In : amount0Out)
+    if (isAddrEq(token1Id, wnovaLower)) return sum + (amount1In > 0 ? amount1In : amount1Out)
     return sum
   }, 0)
   const txns24h = recentSwaps.length || oneDayTxns || 0
   const pairCountWnova = (() => {
     const localCount =
       Object.values(allPairs || {}).filter((pair) => {
-        const t0 = pair?.token0?.id?.toLowerCase?.()
-        const t1 = pair?.token1?.id?.toLowerCase?.()
-        return t0 === wnovaLower || t1 === wnovaLower
+        const t0 = normAddr(pair?.token0?.id)
+        const t1 = normAddr(pair?.token1?.id)
+        return isAddrEq(t0, wnovaLower) || isAddrEq(t1, wnovaLower)
       }).length || 0
     const pinnedFallback = pairData?.id ? 1 : 0
     return Math.max(localCount, pairCount || 0, pinnedFallback)

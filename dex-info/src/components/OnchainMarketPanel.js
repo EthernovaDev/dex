@@ -4,7 +4,7 @@ import CandleStickChart from './CandleChart'
 import LocalLoader from './LocalLoader'
 import Panel from './Panel'
 import { TYPE } from '../Theme'
-import { formattedNum, formatPrice, isFiniteNum } from '../utils'
+import { formattedNum, formatPrice, isFiniteNum, normAddr, isAddrEq } from '../utils'
 import { useOnchainSwapHistory } from '../hooks/useOnchainSwapHistory'
 import BigNumber from 'bignumber.js'
 
@@ -150,8 +150,8 @@ export default function OnchainMarketPanel({
   const [timeframe, setTimeframe] = useState(TIMEFRAMES[0])
   const [allowOnchainDelayed, setAllowOnchainDelayed] = useState(false)
 
-  const wnovaLower = wnovaAddress?.toLowerCase?.() || ''
-  const tonyLower = tonyAddress?.toLowerCase?.() || ''
+  const wnovaLower = normAddr(wnovaAddress)
+  const tonyLower = normAddr(tonyAddress)
 
   const subgraphSeries = useMemo(() => {
     if (!swaps || !swaps.length || !wnovaLower || !tonyLower) return null
@@ -159,14 +159,14 @@ export default function OnchainMarketPanel({
     const trades = []
 
     for (const swap of swaps) {
-      const pairToken0 = swap?.pair?.token0?.id?.toLowerCase?.()
-      const pairToken1 = swap?.pair?.token1?.id?.toLowerCase?.()
+      const pairToken0 = normAddr(swap?.pair?.token0?.id)
+      const pairToken1 = normAddr(swap?.pair?.token1?.id)
       if (!pairToken0 || !pairToken1) continue
 
-      const isToken0Wnova = pairToken0 === wnovaLower
-      const isToken1Wnova = pairToken1 === wnovaLower
-      const isToken0Tony = pairToken0 === tonyLower
-      const isToken1Tony = pairToken1 === tonyLower
+      const isToken0Wnova = isAddrEq(pairToken0, wnovaLower)
+      const isToken1Wnova = isAddrEq(pairToken1, wnovaLower)
+      const isToken0Tony = isAddrEq(pairToken0, tonyLower)
+      const isToken1Tony = isAddrEq(pairToken1, tonyLower)
       if (!((isToken0Wnova && isToken1Tony) || (isToken1Wnova && isToken0Tony))) continue
 
       const amount0In = new BigNumber(swap?.amount0In || 0)

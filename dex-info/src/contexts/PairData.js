@@ -22,6 +22,8 @@ import {
   getBlocksFromTimestamps,
   getTimestampsForChanges,
   splitQuery,
+  normAddr,
+  isAddrEq,
 } from '../utils'
 import { timeframeOptions, TRACKED_OVERRIDES_PAIRS, TRACKED_OVERRIDES_TOKENS } from '../constants'
 import { WRAPPED_NATIVE_ADDRESS, PAIR_ADDRESS } from '../constants/urls'
@@ -326,15 +328,15 @@ function parseData(data, oneDayData, twoDayData, oneWeekData, ethPrice, oneDayBl
   data.trackedReserveUSD = 0
   data.liquidityChangeUSD = 0
   data.liquidityChangeETH = getPercentChange(data.reserveETH, oneDayData?.reserveETH)
-  const token0Id = data.token0?.id?.toLowerCase?.() || ''
-  const token1Id = data.token1?.id?.toLowerCase?.() || ''
-  if (token0Id === WRAPPED_NATIVE_ADDRESS) {
+  const token0Id = normAddr(data.token0?.id)
+  const token1Id = normAddr(data.token1?.id)
+  if (isAddrEq(token0Id, WRAPPED_NATIVE_ADDRESS)) {
     data.oneDayVolumeETH = data.oneDayVolumeToken0
     data.oneWeekVolumeETH = oneWeekVolumeToken0
     data.volumeChangeETH = volumeChangeToken0
     data.reserveETH = data.reserve0
     data.trackedReserveETH = data.reserve0
-  } else if (token1Id === WRAPPED_NATIVE_ADDRESS) {
+  } else if (isAddrEq(token1Id, WRAPPED_NATIVE_ADDRESS)) {
     data.oneDayVolumeETH = data.oneDayVolumeToken1
     data.oneWeekVolumeETH = oneWeekVolumeToken1
     data.volumeChangeETH = volumeChangeToken1

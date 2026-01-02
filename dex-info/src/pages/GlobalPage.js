@@ -19,7 +19,7 @@ import { useLatestBlocks } from '../contexts/Application'
 import { useMedia } from 'react-use'
 import Panel from '../components/Panel'
 import { useAllTokenData } from '../contexts/TokenData'
-import { formattedNum, formattedPercent, getReserveWnova, isFiniteNum } from '../utils'
+import { formattedNum, formattedPercent, getReserveWnova, isFiniteNum, normAddr, isAddrEq } from '../utils'
 import { TYPE, ThemedBackground } from '../Theme'
 import { transparentize } from 'polished'
 import { CustomLink } from '../components/Link'
@@ -78,16 +78,16 @@ function GlobalPage() {
 
   // for tracked data on pairs
   const [useTracked, setUseTracked] = useState(true)
-  const wnovaLower = WNOVA_ADDRESS?.toLowerCase?.() || ''
-  const tonyLower = TONY_ADDRESS?.toLowerCase?.() || ''
+  const wnovaLower = normAddr(WNOVA_ADDRESS)
+  const tonyLower = normAddr(TONY_ADDRESS)
   const pairSwaps = useMemo(() => {
     if (!transactions?.swaps?.length || !wnovaLower || !tonyLower) return []
     return transactions.swaps.filter((swap) => {
-      const token0 = swap?.pair?.token0?.id?.toLowerCase?.()
-      const token1 = swap?.pair?.token1?.id?.toLowerCase?.()
+      const token0 = normAddr(swap?.pair?.token0?.id)
+      const token1 = normAddr(swap?.pair?.token1?.id)
       return (
-        (token0 === wnovaLower && token1 === tonyLower) ||
-        (token1 === wnovaLower && token0 === tonyLower)
+        (isAddrEq(token0, wnovaLower) && isAddrEq(token1, tonyLower)) ||
+        (isAddrEq(token1, wnovaLower) && isAddrEq(token0, tonyLower))
       )
     })
   }, [transactions, wnovaLower, tonyLower])
@@ -98,14 +98,14 @@ function GlobalPage() {
     return pairSwaps.reduce((sum, swap) => {
       const ts = Number.parseInt(swap?.transaction?.timestamp || swap?.timestamp || 0, 10)
       if (!ts || now - ts > 86400) return sum
-      const token0 = swap?.pair?.token0?.id?.toLowerCase?.()
-      const token1 = swap?.pair?.token1?.id?.toLowerCase?.()
+      const token0 = normAddr(swap?.pair?.token0?.id)
+      const token1 = normAddr(swap?.pair?.token1?.id)
       const amount0In = Number(swap?.amount0In || 0)
       const amount0Out = Number(swap?.amount0Out || 0)
       const amount1In = Number(swap?.amount1In || 0)
       const amount1Out = Number(swap?.amount1Out || 0)
-      if (token0 === wnovaLower) return sum + (amount0In > 0 ? amount0In : amount0Out)
-      if (token1 === wnovaLower) return sum + (amount1In > 0 ? amount1In : amount1Out)
+      if (isAddrEq(token0, wnovaLower)) return sum + (amount0In > 0 ? amount0In : amount0Out)
+      if (isAddrEq(token1, wnovaLower)) return sum + (amount1In > 0 ? amount1In : amount1Out)
       return sum
     }, 0)
   }, [pairSwaps, wnovaLower])

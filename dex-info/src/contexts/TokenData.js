@@ -21,6 +21,8 @@ import {
   isAddress,
   getBlocksFromTimestamps,
   splitQuery,
+  normAddr,
+  isAddrEq,
 } from '../utils'
 import { timeframeOptions } from '../constants'
 import { useLatestBlocks } from './Application'
@@ -37,8 +39,8 @@ const UPDATE_COMBINED = 'UPDATE_COMBINED'
 
 const TOKEN_PAIRS_KEY = 'TOKEN_PAIRS_KEY'
 
-const WNOVA_LOWER = WRAPPED_NATIVE_ADDRESS?.toLowerCase?.() || ''
-const PAIR_LOWER = PAIR_ADDRESS?.toLowerCase?.() || ''
+const WNOVA_LOWER = normAddr(WRAPPED_NATIVE_ADDRESS)
+const PAIR_LOWER = normAddr(PAIR_ADDRESS)
 
 const safeNumber = (value) => {
   const parsed = Number(value)
@@ -62,29 +64,29 @@ async function getPinnedPairData() {
 
 function getReserveWnovaFromPair(pair) {
   if (!pair) return 0
-  const token0Id = pair.token0?.id?.toLowerCase?.()
-  const token1Id = pair.token1?.id?.toLowerCase?.()
-  if (token0Id === WNOVA_LOWER) return safeNumber(pair.reserve0)
-  if (token1Id === WNOVA_LOWER) return safeNumber(pair.reserve1)
+  const token0Id = normAddr(pair.token0?.id)
+  const token1Id = normAddr(pair.token1?.id)
+  if (isAddrEq(token0Id, WNOVA_LOWER)) return safeNumber(pair.reserve0)
+  if (isAddrEq(token1Id, WNOVA_LOWER)) return safeNumber(pair.reserve1)
   return 0
 }
 
 function getPriceInWnovaFromPair(tokenId, pair) {
   if (!tokenId || !pair) return 0
-  const token0Id = pair.token0?.id?.toLowerCase?.()
-  const token1Id = pair.token1?.id?.toLowerCase?.()
+  const token0Id = normAddr(pair.token0?.id)
+  const token1Id = normAddr(pair.token1?.id)
   if (!token0Id || !token1Id) return 0
-  if (token0Id === tokenId && token1Id === WNOVA_LOWER) return safeNumber(pair.token0Price)
-  if (token1Id === tokenId && token0Id === WNOVA_LOWER) return safeNumber(pair.token1Price)
+  if (isAddrEq(token0Id, tokenId) && isAddrEq(token1Id, WNOVA_LOWER)) return safeNumber(pair.token0Price)
+  if (isAddrEq(token1Id, tokenId) && isAddrEq(token0Id, WNOVA_LOWER)) return safeNumber(pair.token1Price)
   return 0
 }
 
 function applyPinnedPairFallback(data, pair) {
   if (!data || !pair) return data
-  const tokenId = data.id?.toLowerCase?.()
+  const tokenId = normAddr(data.id)
   if (!tokenId) return data
 
-  if (tokenId === WNOVA_LOWER) {
+  if (isAddrEq(tokenId, WNOVA_LOWER)) {
     data.derivedETH = 1
     data.priceETH = 1
     const reserveWnova = getReserveWnovaFromPair(pair)
@@ -366,7 +368,7 @@ const getTopTokens = async () => {
           let derivedEthTwo = parseFloat(twoDayHistory?.derivedETH ?? 0)
 
           if ((!derivedEthNow || derivedEthNow <= 0) && pinnedPair) {
-            const fallbackPrice = getPriceInWnovaFromPair(data?.id?.toLowerCase?.(), pinnedPair)
+            const fallbackPrice = getPriceInWnovaFromPair(normAddr(data?.id), pinnedPair)
             if (fallbackPrice > 0) {
               derivedEthNow = fallbackPrice
               if (!derivedEthOld || derivedEthOld <= 0) derivedEthOld = fallbackPrice
@@ -486,7 +488,7 @@ const getTokenData = async (address) => {
     let derivedEthTwo = parseFloat(twoDayData?.derivedETH ?? 0)
 
     if ((!derivedEthNow || derivedEthNow <= 0) && pinnedPair) {
-      const fallbackPrice = getPriceInWnovaFromPair(data?.id?.toLowerCase?.(), pinnedPair)
+      const fallbackPrice = getPriceInWnovaFromPair(normAddr(data?.id), pinnedPair)
       if (fallbackPrice > 0) {
         derivedEthNow = fallbackPrice
         if (!derivedEthOld || derivedEthOld <= 0) derivedEthOld = fallbackPrice

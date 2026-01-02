@@ -258,8 +258,8 @@ const CandleStickChart = ({
   }, [width, height])
 
   return (
-    <div>
-      <div ref={ref} />
+    <div style={{ position: 'relative' }}>
+      <div ref={ref} style={{ position: 'relative' }} />
       <IconWrapper>
         <Play
           onClick={() => {

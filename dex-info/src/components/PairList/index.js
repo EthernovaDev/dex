@@ -9,7 +9,7 @@ import styled from 'styled-components'
 import { CustomLink } from '../Link'
 import { Divider } from '../../components'
 import { withRouter } from 'react-router-dom'
-import { formattedNum, formattedPercent, isFiniteNum, toNum } from '../../utils'
+import { formattedNum, formattedPercent, isFiniteNum, toNum, normAddr, isAddrEq } from '../../utils'
 import DoubleTokenLogo from '../DoubleLogo'
 import FormattedName from '../FormattedName'
 import QuestionHelper from '../QuestionHelper'
@@ -144,10 +144,10 @@ const getPairMetrics = (pairData) => {
       hasWnova: false
     }
   }
-  const token0Id = pairData.token0?.id?.toLowerCase?.() || ''
-  const token1Id = pairData.token1?.id?.toLowerCase?.() || ''
-  const isToken0Wnova = token0Id === WRAPPED_NATIVE_ADDRESS
-  const isToken1Wnova = token1Id === WRAPPED_NATIVE_ADDRESS
+  const token0Id = normAddr(pairData.token0?.id)
+  const token1Id = normAddr(pairData.token1?.id)
+  const isToken0Wnova = isAddrEq(token0Id, WRAPPED_NATIVE_ADDRESS)
+  const isToken1Wnova = isAddrEq(token1Id, WRAPPED_NATIVE_ADDRESS)
   const reserve0 = toNum(pairData.reserve0, NaN)
   const reserve1 = toNum(pairData.reserve1, NaN)
   const reserveWnova = isToken0Wnova ? reserve0 : isToken1Wnova ? reserve1 : NaN
@@ -159,7 +159,7 @@ const getPairMetrics = (pairData) => {
   const totalVol0 = toNum(pairData.volumeToken0, NaN)
   const totalVol1 = toNum(pairData.volumeToken1, NaN)
 
-  const liquidity = Number.isFinite(reserveWnova) && reserveWnova > 0 ? reserveWnova : null
+  const liquidity = Number.isFinite(reserveWnova) ? reserveWnova : null
 
   const volume24h = isToken0Wnova
     ? Number.isFinite(oneDayVol0) && oneDayVol0 > 0

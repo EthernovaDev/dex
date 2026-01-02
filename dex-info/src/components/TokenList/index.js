@@ -9,14 +9,14 @@ import { CustomLink } from '../Link'
 import Row from '../Row'
 import { Divider } from '..'
 
-import { formattedNum, formattedPercent, formatPrice, isFiniteNum, toNum } from '../../utils'
+import { formattedNum, formattedPercent, formatPrice, isFiniteNum, toNum, normAddr, isAddrEq } from '../../utils'
 import { useMedia } from 'react-use'
 import { withRouter } from 'react-router-dom'
 import { TOKEN_BLACKLIST } from '../../constants'
 import FormattedName from '../FormattedName'
 import { TYPE } from '../../Theme'
 import { WRAPPED_NATIVE_ADDRESS, TONY_ADDRESS, PAIR_ADDRESS } from '../../constants/urls'
-import { usePairData } from '../../contexts/PairData'
+import { useAllPairData, usePairData } from '../../contexts/PairData'
 
 dayjs.extend(utc)
 
@@ -124,7 +124,7 @@ const SORT_FIELD = {
 
 const getTokenMetrics = (token) => {
   if (!token) return { price: null, liquidity: null, volume: null }
-  const isWnova = token.id?.toLowerCase?.() === WRAPPED_NATIVE_ADDRESS
+  const isWnova = isAddrEq(token.id, WRAPPED_NATIVE_ADDRESS)
   const price = toNum(token.priceETH ?? token.derivedETH ?? (isWnova ? 1 : null), null)
   let liquidity = toNum(token.totalLiquidityETH ?? null, null)
   if (!Number.isFinite(liquidity) || liquidity === 0) {
@@ -160,27 +160,121 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
   const below1080 = useMedia('(max-width: 1080px)')
   const below680 = useMedia('(max-width: 680px)')
   const below600 = useMedia('(max-width: 600px)')
+  const allPairs = useAllPairData()
   const pinnedPair = usePairData(PAIR_ADDRESS)
-  const pinnedToken0 = pinnedPair?.token0?.id?.toLowerCase?.()
-  const pinnedToken1 = pinnedPair?.token1?.id?.toLowerCase?.()
+  const wnovaLower = normAddr(WRAPPED_NATIVE_ADDRESS)
+  const tonyLower = normAddr(TONY_ADDRESS)
+
+  const pairMetrics = useMemo(() => {
+    const metricsByToken = {}
+    let totalWnovaLiquidity = 0
+    let totalWnovaVolume = 0
+    if (!allPairs || !wnovaLower) {
+      return { metricsByToken, totalWnovaLiquidity, totalWnovaVolume }
+    }
+    Object.values(allPairs).forEach((pair) => {
+      const token0Id = normAddr(pair?.token0?.id)
+      const token1Id = normAddr(pair?.token1?.id)
+      if (!token0Id || !token1Id) return
+      const isToken0Wnova = isAddrEq(token0Id, wnovaLower)
+      const isToken1Wnova = isAddrEq(token1Id, wnovaLower)
+      if (!isToken0Wnova && !isToken1Wnova) return
+
+      const reserve0 = toNum(pair?.reserve0 ?? null, NaN)
+      const reserve1 = toNum(pair?.reserve1 ?? null, NaN)
+      if (!Number.isFinite(reserve0) || !Number.isFinite(reserve1)) return
+
+      const reserveWnova = isToken0Wnova ? reserve0 : reserve1
+      const reserveToken = isToken0Wnova ? reserve1 : reserve0
+      const tokenId = isToken0Wnova ? token1Id : token0Id
+
+      const priceWnova = reserveToken > 0 ? reserveWnova / reserveToken : NaN
+      const volToken0 = toNum(pair?.oneDayVolumeToken0 ?? pair?.volumeToken0 ?? null, NaN)
+      const volToken1 = toNum(pair?.oneDayVolumeToken1 ?? pair?.volumeToken1 ?? null, NaN)
+      const volumeWnova = isToken0Wnova
+        ? Number.isFinite(volToken0)
+          ? volToken0
+          : 0
+        : Number.isFinite(volToken1)
+        ? volToken1
+        : 0
+
+      if (Number.isFinite(reserveWnova)) totalWnovaLiquidity += reserveWnova
+      if (Number.isFinite(volumeWnova)) totalWnovaVolume += volumeWnova
+
+      const existing = metricsByToken[tokenId] || {
+        liquidityWnova: 0,
+        volume24hWnova: 0,
+        priceWnova: null,
+        bestReserveWnova: 0,
+      }
+      const nextLiquidity = existing.liquidityWnova + (Number.isFinite(reserveWnova) ? reserveWnova : 0)
+      const nextVolume = existing.volume24hWnova + (Number.isFinite(volumeWnova) ? volumeWnova : 0)
+      let price = existing.priceWnova
+      let bestReserveWnova = existing.bestReserveWnova
+      if (Number.isFinite(reserveWnova) && reserveWnova > bestReserveWnova && Number.isFinite(priceWnova)) {
+        price = priceWnova
+        bestReserveWnova = reserveWnova
+      }
+
+      metricsByToken[tokenId] = {
+        liquidityWnova: nextLiquidity,
+        volume24hWnova: nextVolume,
+        priceWnova: price,
+        bestReserveWnova,
+      }
+    })
+
+    if (wnovaLower) {
+      const existing = metricsByToken[wnovaLower] || {
+        liquidityWnova: 0,
+        volume24hWnova: 0,
+        priceWnova: 1,
+        bestReserveWnova: 0,
+      }
+      metricsByToken[wnovaLower] = {
+        liquidityWnova: totalWnovaLiquidity || existing.liquidityWnova,
+        volume24hWnova: totalWnovaVolume || existing.volume24hWnova,
+        priceWnova: 1,
+        bestReserveWnova: Math.max(existing.bestReserveWnova || 0, totalWnovaLiquidity || 0),
+      }
+    }
+
+    return { metricsByToken, totalWnovaLiquidity, totalWnovaVolume }
+  }, [allPairs, wnovaLower])
+
+  const metricsByToken = pairMetrics.metricsByToken || {}
+
+  const pinnedToken0 = normAddr(pinnedPair?.token0?.id)
+  const pinnedToken1 = normAddr(pinnedPair?.token1?.id)
   const reserve0 = toNum(pinnedPair?.reserve0 ?? null, 0)
   const reserve1 = toNum(pinnedPair?.reserve1 ?? null, 0)
-  const isToken0Wnova = pinnedToken0 === WRAPPED_NATIVE_ADDRESS
-  const isToken1Wnova = pinnedToken1 === WRAPPED_NATIVE_ADDRESS
+  const isToken0Wnova = isAddrEq(pinnedToken0, wnovaLower)
+  const isToken1Wnova = isAddrEq(pinnedToken1, wnovaLower)
   const reserveWnova = isToken0Wnova ? reserve0 : isToken1Wnova ? reserve1 : 0
   const reserveTony = isToken0Wnova ? reserve1 : isToken1Wnova ? reserve0 : 0
-  const tonyPriceWnova = reserveWnova > 0 && reserveTony > 0 ? reserveWnova / reserveTony : 0
-  let pairVolumeWnova = 0
-  if (isToken0Wnova) {
-    pairVolumeWnova = toNum(
-      pinnedPair?.oneDayVolumeToken0 ?? pinnedPair?.oneDayVolumeETH ?? pinnedPair?.volumeToken0 ?? null,
-      0
-    )
-  } else if (isToken1Wnova) {
-    pairVolumeWnova = toNum(
-      pinnedPair?.oneDayVolumeToken1 ?? pinnedPair?.oneDayVolumeETH ?? pinnedPair?.volumeToken1 ?? null,
-      0
-    )
+  const tonyPriceWnova =
+    Number.isFinite(metricsByToken?.[tonyLower]?.priceWnova) && metricsByToken?.[tonyLower]?.priceWnova > 0
+      ? metricsByToken[tonyLower].priceWnova
+      : reserveWnova > 0 && reserveTony > 0
+      ? reserveWnova / reserveTony
+      : 0
+  let pairVolumeWnova =
+    Number.isFinite(metricsByToken?.[tonyLower]?.volume24hWnova) && metricsByToken?.[tonyLower]?.volume24hWnova > 0
+      ? metricsByToken[tonyLower].volume24hWnova
+      : 0
+  if (!pairVolumeWnova) {
+    if (isToken0Wnova) {
+      pairVolumeWnova = toNum(
+        pinnedPair?.oneDayVolumeToken0 ?? pinnedPair?.oneDayVolumeETH ?? pinnedPair?.volumeToken0 ?? null,
+        0
+      )
+    } else if (isToken1Wnova) {
+      pairVolumeWnova = toNum(
+        pinnedPair?.oneDayVolumeToken1 ?? pinnedPair?.oneDayVolumeETH ?? pinnedPair?.volumeToken1 ?? null,
+        0
+      )
+    }
   }
   const debug =
     typeof window !== 'undefined' && window.location && window.location.search && window.location.search.includes('debug=1')
@@ -200,26 +294,71 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
         .map((key) => tokens[key])
 
     const applyOverrides = (token) => {
-      const tokenId = token?.id?.toLowerCase?.()
+      const tokenId = normAddr(token?.id)
       if (!tokenId) return token
-      if (tokenId === WRAPPED_NATIVE_ADDRESS) {
+      const metrics = metricsByToken?.[tokenId]
+
+      if (isAddrEq(tokenId, wnovaLower)) {
         return {
           ...token,
           derivedETH: 1,
           priceETH: 1,
-          totalLiquidityETH: reserveWnova > 0 ? reserveWnova : token.totalLiquidityETH ?? 0,
-          oneDayVolumeETH: pairVolumeWnova > 0 ? pairVolumeWnova : token.oneDayVolumeETH ?? 0,
+          totalLiquidityETH: Number.isFinite(metrics?.liquidityWnova)
+            ? metrics.liquidityWnova
+            : reserveWnova > 0
+            ? reserveWnova
+            : token.totalLiquidityETH ?? 0,
+          oneDayVolumeETH: Number.isFinite(metrics?.volume24hWnova)
+            ? metrics.volume24hWnova
+            : pairVolumeWnova > 0
+            ? pairVolumeWnova
+            : token.oneDayVolumeETH ?? 0,
           priceChangeETH: token.priceChangeETH ?? 0,
         }
       }
-      if (tokenId === TONY_ADDRESS) {
+      if (isAddrEq(tokenId, tonyLower)) {
         return {
           ...token,
-          derivedETH: tonyPriceWnova || token.derivedETH || 0,
-          priceETH: tonyPriceWnova || token.priceETH || 0,
-          totalLiquidityETH: reserveWnova > 0 ? reserveWnova : token.totalLiquidityETH ?? 0,
-          oneDayVolumeETH: pairVolumeWnova > 0 ? pairVolumeWnova : token.oneDayVolumeETH ?? 0,
+          derivedETH:
+            (Number.isFinite(metrics?.priceWnova) && metrics.priceWnova) ||
+            tonyPriceWnova ||
+            token.derivedETH ||
+            0,
+          priceETH:
+            (Number.isFinite(metrics?.priceWnova) && metrics.priceWnova) ||
+            tonyPriceWnova ||
+            token.priceETH ||
+            0,
+          totalLiquidityETH:
+            Number.isFinite(metrics?.liquidityWnova) && metrics.liquidityWnova > 0
+              ? metrics.liquidityWnova
+              : reserveWnova > 0
+              ? reserveWnova
+              : token.totalLiquidityETH ?? 0,
+          oneDayVolumeETH:
+            Number.isFinite(metrics?.volume24hWnova) && metrics.volume24hWnova > 0
+              ? metrics.volume24hWnova
+              : pairVolumeWnova > 0
+              ? pairVolumeWnova
+              : token.oneDayVolumeETH ?? 0,
           priceChangeETH: token.priceChangeETH ?? 0,
+        }
+      }
+      if (metrics) {
+        return {
+          ...token,
+          derivedETH:
+            Number.isFinite(metrics.priceWnova) && metrics.priceWnova > 0 ? metrics.priceWnova : token.derivedETH,
+          priceETH:
+            Number.isFinite(metrics.priceWnova) && metrics.priceWnova > 0 ? metrics.priceWnova : token.priceETH,
+          totalLiquidityETH:
+            Number.isFinite(metrics.liquidityWnova) && metrics.liquidityWnova >= 0
+              ? metrics.liquidityWnova
+              : token.totalLiquidityETH,
+          oneDayVolumeETH:
+            Number.isFinite(metrics.volume24hWnova) && metrics.volume24hWnova >= 0
+              ? metrics.volume24hWnova
+              : token.oneDayVolumeETH,
         }
       }
       return token
@@ -230,38 +369,66 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
     }
 
     const fallback = []
-    if (WRAPPED_NATIVE_ADDRESS) {
+    if (wnovaLower) {
       fallback.push(
         applyOverrides({
-          id: WRAPPED_NATIVE_ADDRESS,
+          id: wnovaLower,
           symbol: 'WNOVA',
           name: 'Wrapped NOVA',
           derivedETH: 1,
           priceETH: 1,
           totalLiquidity: 0,
-          totalLiquidityETH: reserveWnova > 0 ? reserveWnova : 0,
-          oneDayVolumeETH: pairVolumeWnova > 0 ? pairVolumeWnova : 0,
+          totalLiquidityETH:
+            Number.isFinite(metricsByToken?.[wnovaLower]?.liquidityWnova) && metricsByToken[wnovaLower].liquidityWnova > 0
+              ? metricsByToken[wnovaLower].liquidityWnova
+              : reserveWnova > 0
+              ? reserveWnova
+              : 0,
+          oneDayVolumeETH:
+            Number.isFinite(metricsByToken?.[wnovaLower]?.volume24hWnova) && metricsByToken[wnovaLower].volume24hWnova > 0
+              ? metricsByToken[wnovaLower].volume24hWnova
+              : pairVolumeWnova > 0
+              ? pairVolumeWnova
+              : 0,
           priceChangeETH: 0,
         })
       )
     }
-    if (TONY_ADDRESS) {
+    if (tonyLower) {
       fallback.push(
         applyOverrides({
-          id: TONY_ADDRESS,
+          id: tonyLower,
           symbol: 'TONY',
           name: 'STARK - IRON MAN',
           derivedETH: tonyPriceWnova || 0,
           priceETH: tonyPriceWnova || 0,
           totalLiquidity: 0,
-          totalLiquidityETH: reserveWnova > 0 ? reserveWnova : 0,
-          oneDayVolumeETH: pairVolumeWnova > 0 ? pairVolumeWnova : 0,
+          totalLiquidityETH:
+            Number.isFinite(metricsByToken?.[tonyLower]?.liquidityWnova) && metricsByToken[tonyLower].liquidityWnova > 0
+              ? metricsByToken[tonyLower].liquidityWnova
+              : reserveWnova > 0
+              ? reserveWnova
+              : 0,
+          oneDayVolumeETH:
+            Number.isFinite(metricsByToken?.[tonyLower]?.volume24hWnova) && metricsByToken[tonyLower].volume24hWnova > 0
+              ? metricsByToken[tonyLower].volume24hWnova
+              : pairVolumeWnova > 0
+              ? pairVolumeWnova
+              : 0,
           priceChangeETH: 0,
         })
       )
     }
     return fallback
-  }, [tokens, reserveWnova, pairVolumeWnova, tonyPriceWnova])
+  }, [
+    tokens,
+    reserveWnova,
+    pairVolumeWnova,
+    tonyPriceWnova,
+    metricsByToken,
+    wnovaLower,
+    tonyLower,
+  ])
 
   const tokensWithMetrics = useMemo(() => {
     return (formattedTokens || []).map((token) => ({

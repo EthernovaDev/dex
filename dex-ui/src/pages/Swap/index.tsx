@@ -338,6 +338,31 @@ export default function Swap() {
         }
       }
     })
+    const grossInput = slippageAmounts?.[Field.INPUT] ?? null
+    const netInput = inputIsWnova && grossInput ? applyTreasuryFee(grossInput) : trade?.inputAmount ?? null
+    const feeWnovaAmount =
+      inputIsWnova && grossInput ? treasuryFeeFromGross(grossInput) : outputIsWnova && trade?.outputAmount
+        ? treasuryFeeFromGross(trade.outputAmount)
+        : null
+    emitDebug({
+      lastSwapContext: {
+        router: swapRouterAddress || SWAP_ROUTER_ADDRESS,
+        spender: swapRouterAddress || SWAP_ROUTER_ADDRESS,
+        tokenIn: inputCurrency instanceof Token ? inputCurrency.address : inputCurrency === ETHER ? 'NATIVE' : null,
+        tokenOut: outputCurrency instanceof Token ? outputCurrency.address : outputCurrency === ETHER ? 'NATIVE' : null,
+        amountInUser: typedValue || null,
+        amountInGross: grossInput?.toExact?.() ?? null,
+        amountInNet: netInput?.toExact?.() ?? null,
+        feeWnova: feeWnovaAmount?.toExact?.() ?? null,
+        minOut: slippageAmounts?.[Field.OUTPUT]?.toExact?.() ?? null,
+        slippageBps: allowedSlippage ?? null,
+        deadline: deadline ?? null,
+        path: trade?.route?.path?.map(token => token.address) ?? null,
+        allowance: swapAllowance?.toExact?.() ?? null,
+        balance: currencyBalances?.[Field.INPUT]?.toExact?.() ?? null,
+        willTransferFromTotal: grossInput?.toExact?.() ?? null
+      }
+    })
   }, [
     debugEnabled,
     typedValue,
@@ -361,7 +386,10 @@ export default function Swap() {
     trade,
     allowedSlippage,
     outputIsWnova,
-    displayInputAmount
+    displayInputAmount,
+    inputIsWnova,
+    currencyBalances,
+    deadline
   ])
 
   // check whether the user has approved the router on the input token
@@ -499,6 +527,7 @@ export default function Swap() {
             txHash={txHash}
             recipient={recipient}
             allowedSlippage={allowedSlippage}
+            deadline={deadline}
             onConfirm={handleSwap}
             swapErrorMessage={swapErrorMessage}
             onDismiss={handleConfirmDismiss}

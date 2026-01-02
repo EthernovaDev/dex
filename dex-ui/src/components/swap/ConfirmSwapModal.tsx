@@ -29,6 +29,7 @@ export default function ConfirmSwapModal({
   originalTrade,
   onAcceptChanges,
   allowedSlippage,
+  deadline,
   onConfirm,
   onDismiss,
   recipient,
@@ -44,6 +45,7 @@ export default function ConfirmSwapModal({
   txHash: string | undefined
   recipient: string | null
   allowedSlippage: number
+  deadline: number
   onAcceptChanges: () => void
   onConfirm: () => void
   swapErrorMessage: string | undefined
@@ -74,9 +76,11 @@ export default function ConfirmSwapModal({
         disabledConfirm={showAcceptChanges}
         swapErrorMessage={swapErrorMessage}
         allowedSlippage={allowedSlippage}
+        recipient={recipient}
+        deadline={deadline}
       />
     ) : null
-  }, [allowedSlippage, onConfirm, showAcceptChanges, swapErrorMessage, trade])
+  }, [allowedSlippage, onConfirm, showAcceptChanges, swapErrorMessage, trade, recipient, deadline])
 
   // text to show while loading
   const inputSymbol =

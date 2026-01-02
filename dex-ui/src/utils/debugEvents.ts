@@ -43,6 +43,29 @@ export type DebugEventDetail = {
     provider?: string | null
     rpcUrl?: string | null
   } | null
+  lastSwapContext?: {
+    router?: string | null
+    spender?: string | null
+    tokenIn?: string | null
+    tokenOut?: string | null
+    amountInUser?: string | null
+    amountInGross?: string | null
+    amountInNet?: string | null
+    feeWnova?: string | null
+    minOut?: string | null
+    slippageBps?: number | null
+    deadline?: number | null
+    path?: string[] | null
+    allowance?: string | null
+    balance?: string | null
+    willTransferFromTotal?: string | null
+  } | null
+  lastSwapSimulation?: {
+    status?: 'idle' | 'ok' | 'reverted' | 'error'
+    reason?: string | null
+    data?: string | null
+    time?: string | null
+  } | null
   rpcStats?: {
     lastUrl?: string
     lastMethod?: string

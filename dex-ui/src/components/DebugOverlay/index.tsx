@@ -98,6 +98,9 @@ export default function DebugOverlay() {
   const rpcStats = debugState.rpcStats
   const readRpcHost = rpcStats?.lastUrl || '—'
   const readRpcWarning = typeof readRpcHost === 'string' && /infura|mainnet/i.test(readRpcHost)
+  const swapContext = debugState.lastSwapContext
+  const swapSim = debugState.lastSwapSimulation
+  const formatAmount = (value?: string | null) => (value && value.length ? value : '—')
 
   return (
     <Wrapper>
@@ -202,6 +205,62 @@ export default function DebugOverlay() {
           {debugState.lastPositionState
             ? `${debugState.lastPositionState.name} (${debugState.lastPositionState.time})`
             : '—'}
+        </Value>
+      </Row>
+      <Title style={{ marginTop: '10px' }}>Swap Debug</Title>
+      <Row>
+        <Label>Swap router</Label>
+        <Value>{swapContext?.router || '—'}</Value>
+      </Row>
+      <Row>
+        <Label>Approve spender</Label>
+        <Value>{swapContext?.spender || '—'}</Value>
+      </Row>
+      <Row>
+        <Label>Token in / out</Label>
+        <Value>
+          {swapContext?.tokenIn || '—'} / {swapContext?.tokenOut || '—'}
+        </Value>
+      </Row>
+      <Row>
+        <Label>Amount in (user/gross/net)</Label>
+        <Value>
+          {formatAmount(swapContext?.amountInUser)} / {formatAmount(swapContext?.amountInGross)} /{' '}
+          {formatAmount(swapContext?.amountInNet)}
+        </Value>
+      </Row>
+      <Row>
+        <Label>Fee WNOVA</Label>
+        <Value>{formatAmount(swapContext?.feeWnova)}</Value>
+      </Row>
+      <Row>
+        <Label>MinOut</Label>
+        <Value>{formatAmount(swapContext?.minOut)}</Value>
+      </Row>
+      <Row>
+        <Label>Slippage / Deadline</Label>
+        <Value>
+          {swapContext?.slippageBps ?? '—'} / {swapContext?.deadline ?? '—'}
+        </Value>
+      </Row>
+      <Row>
+        <Label>Path</Label>
+        <Value>{swapContext?.path?.join(' -> ') || '—'}</Value>
+      </Row>
+      <Row>
+        <Label>Allowance / Balance</Label>
+        <Value>
+          {formatAmount(swapContext?.allowance)} / {formatAmount(swapContext?.balance)}
+        </Value>
+      </Row>
+      <Row>
+        <Label>TransferFrom total</Label>
+        <Value>{formatAmount(swapContext?.willTransferFromTotal)}</Value>
+      </Row>
+      <Row>
+        <Label>Simulate</Label>
+        <Value>
+          {swapSim?.status ? `${swapSim.status}${swapSim.reason ? `: ${swapSim.reason}` : ''}` : '—'}
         </Value>
       </Row>
     </Wrapper>

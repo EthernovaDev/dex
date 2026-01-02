@@ -68,7 +68,7 @@ function extractSwapErrorMessage(error: any): string {
  * @param deadline the deadline for the trade
  * @param recipientAddressOrName
  */
-function useSwapCallArguments(
+export function useSwapCallArguments(
   trade: Trade | undefined, // trade to execute, required
   allowedSlippage: number = INITIAL_ALLOWED_SLIPPAGE, // in bips
   deadline: number = DEFAULT_DEADLINE_FROM_NOW, // in seconds from now

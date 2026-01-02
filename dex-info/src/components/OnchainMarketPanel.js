@@ -128,12 +128,12 @@ const RetryButton = styled.button`
 `
 
 const EmptyState = styled.div`
-  padding: 18px 0 6px;
+  padding: 8px 0 4px;
   font-size: 12px;
   color: rgba(255, 255, 255, 0.65);
 `
 
-const CHART_HEIGHT = 320
+const CHART_HEIGHT = 280
 
 const TIMEFRAMES = [
   { label: '1H', intervalSec: 3600, lookbackBlocks: 60000 },

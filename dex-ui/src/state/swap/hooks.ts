@@ -20,8 +20,9 @@ import { Field, replaceSwapState, selectCurrency, setRecipient, switchCurrencies
 import { SwapState } from './reducer'
 import useToggledVersion from '../../hooks/useToggledVersion'
 import { useUserSlippageTolerance } from '../user/hooks'
-import { computeSlippageAdjustedAmounts } from '../../utils/prices'
+import { computeSlippageAdjustedAmounts, computeSwapSlippageAmounts } from '../../utils/prices'
 import { BAD_RECIPIENT_ADDRESSES as BAD_RECIPIENTS } from '../../constants/addresses'
+import { applyTreasuryFee, grossUpForTreasury, isWnovaCurrency } from '../../utils/treasuryFee'
 
 export function useSwapState(): AppState['swap'] {
   return useSelector<AppState, AppState['swap']>(state => state.swap)
@@ -140,8 +141,22 @@ export function useDerivedSwapInfo(): {
   const isExactIn: boolean = independentField === Field.INPUT
   const parsedAmount = tryParseAmount(typedValue, (isExactIn ? inputCurrency : outputCurrency) ?? undefined)
 
-  const bestTradeExactIn = useTradeExactIn(isExactIn ? parsedAmount : undefined, outputCurrency ?? undefined)
-  const bestTradeExactOut = useTradeExactOut(inputCurrency ?? undefined, !isExactIn ? parsedAmount : undefined)
+  const inputIsWnova = isWnovaCurrency(inputCurrency ?? undefined)
+  const outputIsWnova = isWnovaCurrency(outputCurrency ?? undefined)
+
+  const tradeAmount = useMemo(() => {
+    if (!parsedAmount) return undefined
+    if (isExactIn && inputIsWnova) {
+      return applyTreasuryFee(parsedAmount)
+    }
+    if (!isExactIn && outputIsWnova) {
+      return grossUpForTreasury(parsedAmount)
+    }
+    return parsedAmount
+  }, [parsedAmount, isExactIn, inputIsWnova, outputIsWnova])
+
+  const bestTradeExactIn = useTradeExactIn(isExactIn ? tradeAmount : undefined, outputCurrency ?? undefined)
+  const bestTradeExactOut = useTradeExactOut(inputCurrency ?? undefined, !isExactIn ? tradeAmount : undefined)
 
   const pairLookup = usePairLookup(inputCurrency ?? undefined, outputCurrency ?? undefined)
   const fallbackPair = useMemo(() => {
@@ -239,7 +254,7 @@ export function useDerivedSwapInfo(): {
 
   const [allowedSlippage] = useUserSlippageTolerance()
 
-  const slippageAdjustedAmounts = v2Trade && allowedSlippage && computeSlippageAdjustedAmounts(v2Trade, allowedSlippage)
+  const slippageAdjustedAmounts = v2Trade && allowedSlippage && computeSwapSlippageAmounts(v2Trade, allowedSlippage)
 
   const slippageAdjustedAmountsV1 =
     v1Trade && allowedSlippage && computeSlippageAdjustedAmounts(v1Trade, allowedSlippage)

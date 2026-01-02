@@ -1,10 +1,10 @@
-import { Currency, ETHER, JSBI, Percent, Token, Trade, TradeType } from '@im33357/uniswap-v2-sdk'
+import { ETHER, Trade, TradeType } from '@im33357/uniswap-v2-sdk'
 import React, { useContext } from 'react'
 import { ThemeContext } from 'styled-components'
 import { Field } from '../../state/swap/actions'
 import { useUserSlippageTolerance } from '../../state/user/hooks'
 import { TYPE } from '../../theme'
-import { computeSlippageAdjustedAmounts, computeTradePriceBreakdown } from '../../utils/prices'
+import { computeSwapSlippageAmounts, computeTradePriceBreakdown } from '../../utils/prices'
 import { AutoColumn } from '../Column'
 import QuestionHelper from '../QuestionHelper'
 import { RowBetween, RowFixed } from '../Row'
@@ -12,26 +12,23 @@ import FormattedPriceImpact from './FormattedPriceImpact'
 import { SectionBreak } from './styleds'
 import SwapRoute from './SwapRoute'
 import { NATIVE_SYMBOL } from '../../constants/ethernova'
-import { TREASURY_FEE_BPS, WNOVA } from '../../constants'
+import { grossUpForTreasury, isWnovaCurrency, treasuryFeeFromGross } from '../../utils/treasuryFee'
 
 function TradeSummary({ trade, allowedSlippage }: { trade: Trade; allowedSlippage: number }) {
   const theme = useContext(ThemeContext)
   const { priceImpactWithoutFee, realizedLPFee } = computeTradePriceBreakdown(trade)
   const isExactIn = trade.tradeType === TradeType.EXACT_INPUT
-  const slippageAdjustedAmounts = computeSlippageAdjustedAmounts(trade, allowedSlippage)
+  const slippageAdjustedAmounts = computeSwapSlippageAmounts(trade, allowedSlippage)
   const inputSymbol = trade.inputAmount.currency === ETHER ? NATIVE_SYMBOL : trade.inputAmount.currency.symbol
   const outputSymbol = trade.outputAmount.currency === ETHER ? NATIVE_SYMBOL : trade.outputAmount.currency.symbol
-  const treasuryFeePercent = new Percent(JSBI.BigInt(TREASURY_FEE_BPS), JSBI.BigInt(10000))
-
-  const isWnova = (currency: Currency) =>
-    currency === ETHER || (currency instanceof Token && currency.address === WNOVA.address)
-
-  const treasuryFeeAmount =
-    isWnova(trade.inputAmount.currency)
-      ? trade.inputAmount.multiply(treasuryFeePercent)
-      : isWnova(trade.outputAmount.currency)
-      ? trade.outputAmount.multiply(treasuryFeePercent)
-      : null
+  const inputIsWnova = isWnovaCurrency(trade.inputAmount.currency)
+  const outputIsWnova = isWnovaCurrency(trade.outputAmount.currency)
+  const grossInput = inputIsWnova ? grossUpForTreasury(trade.inputAmount) : null
+  const treasuryFeeAmount = inputIsWnova
+    ? treasuryFeeFromGross(grossInput ?? trade.inputAmount)
+    : outputIsWnova
+    ? treasuryFeeFromGross(trade.outputAmount)
+    : null
 
   return (
     <>
@@ -86,6 +83,20 @@ function TradeSummary({ trade, allowedSlippage }: { trade: Trade; allowedSlippag
             {treasuryFeeAmount ? `${treasuryFeeAmount.toSignificant(4)} ${NATIVE_SYMBOL}` : `1% ${NATIVE_SYMBOL}`}
           </TYPE.black>
         </RowBetween>
+
+        {inputIsWnova && (
+          <RowBetween>
+            <RowFixed>
+              <TYPE.black fontSize={14} fontWeight={400} color={theme.text2}>
+                Amount swapped (after fee)
+              </TYPE.black>
+              <QuestionHelper text="Net WNOVA sent to the pool after the 1% protocol fee." />
+            </RowFixed>
+            <TYPE.black fontSize={14} color={theme.text1}>
+              {trade.inputAmount.toSignificant(4)} {NATIVE_SYMBOL}
+            </TYPE.black>
+          </RowBetween>
+        )}
       </AutoColumn>
     </>
   )

@@ -1,8 +1,9 @@
 import { BLOCKED_PRICE_IMPACT_NON_EXPERT } from '../constants'
-import { CurrencyAmount, Fraction, JSBI, Percent, TokenAmount, Trade } from '@im33357/uniswap-v2-sdk'
+import { CurrencyAmount, Fraction, JSBI, Percent, TokenAmount, Trade, TradeType } from '@im33357/uniswap-v2-sdk'
 import { ALLOWED_PRICE_IMPACT_HIGH, ALLOWED_PRICE_IMPACT_LOW, ALLOWED_PRICE_IMPACT_MEDIUM } from '../constants'
 import { Field } from '../state/swap/actions'
-import { basisPointsToPercent } from './index'
+import { basisPointsToPercent, calculateSlippageAmount } from './index'
+import { applyTreasuryFee, grossUpForTreasury, isWnovaCurrency } from './treasuryFee'
 
 const BASE_FEE = new Percent(JSBI.BigInt(30), JSBI.BigInt(10000))
 const ONE_HUNDRED_PERCENT = new Percent(JSBI.BigInt(10000), JSBI.BigInt(10000))
@@ -51,6 +52,38 @@ export function computeSlippageAdjustedAmounts(
   return {
     [Field.INPUT]: trade?.maximumAmountIn(pct),
     [Field.OUTPUT]: trade?.minimumAmountOut(pct)
+  }
+}
+
+export function computeSwapSlippageAmounts(
+  trade: Trade | undefined,
+  allowedSlippage: number
+): { [field in Field]?: CurrencyAmount } {
+  if (!trade) return {}
+
+  const inputIsWnova = isWnovaCurrency(trade.inputAmount.currency)
+  const outputIsWnova = isWnovaCurrency(trade.outputAmount.currency)
+
+  if (trade.tradeType === TradeType.EXACT_INPUT) {
+    const inputGross = inputIsWnova ? grossUpForTreasury(trade.inputAmount) : trade.inputAmount
+    const outputNet = outputIsWnova ? applyTreasuryFee(trade.outputAmount) : trade.outputAmount
+    const [minOutRaw] = calculateSlippageAmount(outputNet, allowedSlippage)
+    const minOut =
+      outputNet instanceof TokenAmount ? new TokenAmount(outputNet.token, minOutRaw) : CurrencyAmount.ether(minOutRaw)
+    return {
+      [Field.INPUT]: inputGross,
+      [Field.OUTPUT]: minOut
+    }
+  }
+
+  const outputGross = trade.outputAmount
+  const inputGross = inputIsWnova ? grossUpForTreasury(trade.inputAmount) : trade.inputAmount
+  const [, maxInRaw] = calculateSlippageAmount(inputGross, allowedSlippage)
+  const maxIn =
+    inputGross instanceof TokenAmount ? new TokenAmount(inputGross.token, maxInRaw) : CurrencyAmount.ether(maxInRaw)
+  return {
+    [Field.INPUT]: maxIn,
+    [Field.OUTPUT]: outputGross
   }
 }
 

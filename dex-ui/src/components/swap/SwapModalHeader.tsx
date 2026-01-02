@@ -7,7 +7,8 @@ import { Field } from '../../state/swap/actions'
 import { TYPE } from '../../theme'
 import { ButtonPrimary } from '../Button'
 import { isAddress, shortenAddress } from '../../utils'
-import { computeSlippageAdjustedAmounts, computeTradePriceBreakdown, warningSeverity } from '../../utils/prices'
+import { computeSwapSlippageAmounts, computeTradePriceBreakdown, warningSeverity } from '../../utils/prices'
+import { applyTreasuryFee, isWnovaCurrency } from '../../utils/treasuryFee'
 import { AutoColumn } from '../Column'
 import CurrencyLogo from '../CurrencyLogo'
 import { RowBetween, RowFixed } from '../Row'
@@ -27,7 +28,7 @@ export default function SwapModalHeader({
   showAcceptChanges: boolean
   onAcceptChanges: () => void
 }) {
-  const slippageAdjustedAmounts = useMemo(() => computeSlippageAdjustedAmounts(trade, allowedSlippage), [
+  const slippageAdjustedAmounts = useMemo(() => computeSwapSlippageAmounts(trade, allowedSlippage), [
     trade,
     allowedSlippage
   ])
@@ -35,6 +36,8 @@ export default function SwapModalHeader({
   const priceImpactSeverity = warningSeverity(priceImpactWithoutFee)
   const inputSymbol = trade.inputAmount.currency === ETHER ? NATIVE_SYMBOL : trade.inputAmount.currency.symbol
   const outputSymbol = trade.outputAmount.currency === ETHER ? NATIVE_SYMBOL : trade.outputAmount.currency.symbol
+  const outputIsWnova = isWnovaCurrency(trade.outputAmount.currency)
+  const displayOutputAmount = outputIsWnova ? applyTreasuryFee(trade.outputAmount) : trade.outputAmount
 
   const theme = useContext(ThemeContext)
 
@@ -74,7 +77,7 @@ export default function SwapModalHeader({
                 : ''
             }
           >
-            {trade.outputAmount.toSignificant(6)}
+            {displayOutputAmount.toSignificant(6)}
           </TruncatedText>
         </RowFixed>
         <RowFixed gap={'0px'}>

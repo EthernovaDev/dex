@@ -37,6 +37,8 @@ import useToggledVersion, { Version } from '../../hooks/useToggledVersion'
 import useWrapCallback, { WrapType } from '../../hooks/useWrapCallback'
 import { useToggleSettingsMenu, useWalletModalToggle } from '../../state/application/hooks'
 import { emitDebug } from '../../utils/debugEvents'
+import { applyTreasuryFee, grossUpForTreasury, isWnovaCurrency, treasuryFeeFromGross } from '../../utils/treasuryFee'
+import { computeSwapSlippageAmounts } from '../../utils/prices'
 import { getRouterContract } from '../../utils'
 import { Field } from '../../state/swap/actions'
 import {
@@ -168,14 +170,33 @@ export default function Swap() {
       ? Version.v2
       : undefined
 
+  const inputIsWnova = isWnovaCurrency(inputCurrency)
+  const outputIsWnova = isWnovaCurrency(outputCurrency)
+
+  const displayInputAmount = useMemo(() => {
+    if (showWrap) return parsedAmount
+    if (independentField === Field.INPUT) return parsedAmount
+    if (!trade?.inputAmount) return undefined
+    if (!inputIsWnova) return trade.inputAmount
+    return grossUpForTreasury(trade.inputAmount)
+  }, [showWrap, parsedAmount, independentField, trade, inputIsWnova])
+
+  const displayOutputAmount = useMemo(() => {
+    if (showWrap) return parsedAmount
+    if (independentField === Field.OUTPUT) return parsedAmount
+    if (!trade?.outputAmount) return undefined
+    if (!outputIsWnova) return trade.outputAmount
+    return applyTreasuryFee(trade.outputAmount)
+  }, [showWrap, parsedAmount, independentField, trade, outputIsWnova])
+
   const parsedAmounts = showWrap
     ? {
         [Field.INPUT]: parsedAmount,
         [Field.OUTPUT]: parsedAmount
       }
     : {
-        [Field.INPUT]: independentField === Field.INPUT ? parsedAmount : trade?.inputAmount,
-        [Field.OUTPUT]: independentField === Field.OUTPUT ? parsedAmount : trade?.outputAmount
+        [Field.INPUT]: displayInputAmount,
+        [Field.OUTPUT]: displayOutputAmount
       }
 
   const { onSwitchTokens, onCurrencySelection, onUserInput, onChangeRecipient } = useSwapActionHandlers()
@@ -249,12 +270,32 @@ export default function Swap() {
   )
   useEffect(() => {
     if (!debugEnabled) return
+    const slippageAmounts = trade ? computeSwapSlippageAmounts(trade, allowedSlippage) : undefined
+    const outputNet = trade?.outputAmount
+      ? outputIsWnova
+        ? applyTreasuryFee(trade.outputAmount)
+        : trade.outputAmount
+      : null
+    const inputGross = displayInputAmount
+    const inputNet = trade?.inputAmount ?? null
+    const treasuryFee =
+      inputIsWnova && inputGross ? treasuryFeeFromGross(inputGross) : outputIsWnova && trade?.outputAmount
+        ? treasuryFeeFromGross(trade.outputAmount)
+        : null
     console.debug('[Swap debug]', {
       typedValue,
       independentField,
       parsedAmounts,
       inputCurrency: inputCurrency?.symbol,
       outputCurrency: outputCurrency?.symbol,
+      tradeType: trade?.tradeType,
+      inputGross: inputGross?.toExact?.() ?? null,
+      inputNet: inputNet?.toExact?.() ?? null,
+      treasuryFee: treasuryFee?.toExact?.() ?? null,
+      outputGross: trade?.outputAmount?.toExact?.() ?? null,
+      outputNet: outputNet?.toExact?.() ?? null,
+      minOut: slippageAmounts?.[Field.OUTPUT]?.toExact?.() ?? null,
+      maxIn: slippageAmounts?.[Field.INPUT]?.toExact?.() ?? null,
       pairLookupStatus: pairLookup.status,
       pairAddress: pairLookup.pairAddress,
       token0: pairLookup.token0,
@@ -316,7 +357,11 @@ export default function Swap() {
     chainId,
     account,
     library,
-    config.rpcUrl
+    config.rpcUrl,
+    trade,
+    allowedSlippage,
+    outputIsWnova,
+    displayInputAmount
   ])
 
   // check whether the user has approved the router on the input token

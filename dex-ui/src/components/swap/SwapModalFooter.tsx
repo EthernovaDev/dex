@@ -6,7 +6,7 @@ import { ThemeContext } from 'styled-components'
 import { Field } from '../../state/swap/actions'
 import { TYPE } from '../../theme'
 import {
-  computeSlippageAdjustedAmounts,
+  computeSwapSlippageAmounts,
   computeTradePriceBreakdown,
   formatExecutionPrice,
   warningSeverity
@@ -34,7 +34,7 @@ export default function SwapModalFooter({
 }) {
   const [showInverted, setShowInverted] = useState<boolean>(false)
   const theme = useContext(ThemeContext)
-  const slippageAdjustedAmounts = useMemo(() => computeSlippageAdjustedAmounts(trade, allowedSlippage), [
+  const slippageAdjustedAmounts = useMemo(() => computeSwapSlippageAmounts(trade, allowedSlippage), [
     allowedSlippage,
     trade
   ])

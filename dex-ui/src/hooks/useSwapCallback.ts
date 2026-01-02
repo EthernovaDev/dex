@@ -2,7 +2,7 @@ import { BigNumber } from '@ethersproject/bignumber'
 import { Contract } from '@ethersproject/contracts'
 import { JSBI, Percent, Router, SwapParameters, Trade, TradeType } from '@im33357/uniswap-v2-sdk'
 import { useMemo } from 'react'
-import { BIPS_BASE, DEFAULT_DEADLINE_FROM_NOW, INITIAL_ALLOWED_SLIPPAGE, TREASURY_FEE_BPS } from '../constants'
+import { BIPS_BASE, DEFAULT_DEADLINE_FROM_NOW, INITIAL_ALLOWED_SLIPPAGE } from '../constants'
 import { getTradeVersion, useV1TradeExchangeAddress } from '../data/V1'
 import { useTransactionAdder } from '../state/transactions/hooks'
 import { calculateGasMargin, getRouterContract, isAddress, shortenAddress } from '../utils'
@@ -13,6 +13,8 @@ import { useV1ExchangeContract } from './useContract'
 import useENS from './useENS'
 import { Version } from './useToggledVersion'
 import { useSwapRouterAddress } from './useSwapRouterAddress'
+import { computeSwapSlippageAmounts } from '../utils/prices'
+import { Field } from '../state/swap/actions'
 
 export enum SwapCallbackState {
   INVALID,
@@ -92,8 +94,7 @@ function useSwapCallArguments(
     }
 
     const swapMethods = []
-    const effectiveSlippage =
-      tradeVersion === Version.v2 ? allowedSlippage + TREASURY_FEE_BPS : allowedSlippage
+    const effectiveSlippage = allowedSlippage
 
     switch (tradeVersion) {
       case Version.v2:
@@ -127,7 +128,44 @@ function useSwapCallArguments(
         )
         break
     }
-    return swapMethods.map(parameters => ({ parameters, contract }))
+    if (tradeVersion !== Version.v2 || swapMethods.length === 0 || !trade) {
+      return swapMethods.map(parameters => ({ parameters, contract }))
+    }
+
+    const slippageAmounts = computeSwapSlippageAmounts(trade, allowedSlippage)
+
+    const adjustParams = (parameters: SwapParameters): SwapParameters => {
+      const args = [...parameters.args]
+      let value = parameters.value
+
+      if (trade.tradeType === TradeType.EXACT_INPUT) {
+        const grossIn = slippageAmounts[Field.INPUT]
+        const minOut = slippageAmounts[Field.OUTPUT]
+
+        if (parameters.methodName === 'swapExactETHForTokens' || parameters.methodName === 'swapExactETHForTokensSupportingFeeOnTransferTokens') {
+          if (minOut) args[0] = minOut.raw.toString()
+          if (grossIn) value = grossIn.raw.toString()
+        } else {
+          if (grossIn) args[0] = grossIn.raw.toString()
+          if (minOut) args[1] = minOut.raw.toString()
+        }
+      } else {
+        const maxIn = slippageAmounts[Field.INPUT]
+        const netOut = slippageAmounts[Field.OUTPUT]
+
+        if (parameters.methodName === 'swapETHForExactTokens') {
+          if (netOut) args[0] = netOut.raw.toString()
+          if (maxIn) value = maxIn.raw.toString()
+        } else {
+          if (netOut) args[0] = netOut.raw.toString()
+          if (maxIn) args[1] = maxIn.raw.toString()
+        }
+      }
+
+      return { ...parameters, args, value }
+    }
+
+    return swapMethods.map(parameters => ({ parameters: adjustParams(parameters), contract }))
   }, [account, allowedSlippage, chainId, deadline, library, recipient, trade, v1Exchange, swapRouterAddress])
 }
 

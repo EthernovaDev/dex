@@ -7,6 +7,7 @@ import TransactionConfirmationModal, {
 import SwapModalFooter from './SwapModalFooter'
 import SwapModalHeader from './SwapModalHeader'
 import { NATIVE_SYMBOL } from '../../constants/ethernova'
+import { applyTreasuryFee, isWnovaCurrency } from '../../utils/treasuryFee'
 
 /**
  * Returns true if the trade requires a confirmation of details before we can submit it
@@ -82,7 +83,10 @@ export default function ConfirmSwapModal({
     trade?.inputAmount?.currency === ETHER ? NATIVE_SYMBOL : trade?.inputAmount?.currency?.symbol
   const outputSymbol =
     trade?.outputAmount?.currency === ETHER ? NATIVE_SYMBOL : trade?.outputAmount?.currency?.symbol
-  const pendingText = `Swapping ${trade?.inputAmount?.toSignificant(6)} ${inputSymbol} for ${trade?.outputAmount?.toSignificant(
+  const pendingOutput = trade?.outputAmount && isWnovaCurrency(trade.outputAmount.currency)
+    ? applyTreasuryFee(trade.outputAmount)
+    : trade?.outputAmount
+  const pendingText = `Swapping ${trade?.inputAmount?.toSignificant(6)} ${inputSymbol} for ${pendingOutput?.toSignificant(
     6
   )} ${outputSymbol}`
 

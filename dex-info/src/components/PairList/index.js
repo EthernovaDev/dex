@@ -148,10 +148,14 @@ const getPairMetrics = (pairData) => {
   const token1Id = normAddr(pairData.token1?.id)
   const isToken0Wnova = isAddrEq(token0Id, WRAPPED_NATIVE_ADDRESS)
   const isToken1Wnova = isAddrEq(token1Id, WRAPPED_NATIVE_ADDRESS)
+  const hasWnova = isToken0Wnova || isToken1Wnova
   const reserve0 = toNum(pairData.reserve0, NaN)
   const reserve1 = toNum(pairData.reserve1, NaN)
   const reserveWnova = isToken0Wnova ? reserve0 : isToken1Wnova ? reserve1 : NaN
+  const reserveEth = toNum(pairData.reserveETH ?? pairData.trackedReserveETH ?? null, NaN)
 
+  const oneDayVolEth = toNum(pairData.oneDayVolumeETH ?? null, NaN)
+  const oneWeekVolEth = toNum(pairData.oneWeekVolumeETH ?? null, NaN)
   const oneDayVol0 = toNum(pairData.oneDayVolumeToken0, NaN)
   const oneDayVol1 = toNum(pairData.oneDayVolumeToken1, NaN)
   const oneWeekVol0 = toNum(pairData.oneWeekVolumeToken0, NaN)
@@ -159,32 +163,40 @@ const getPairMetrics = (pairData) => {
   const totalVol0 = toNum(pairData.volumeToken0, NaN)
   const totalVol1 = toNum(pairData.volumeToken1, NaN)
 
-  const liquidity = Number.isFinite(reserveWnova) ? reserveWnova : null
+  const liquidity = Number.isFinite(reserveWnova)
+    ? reserveWnova
+    : hasWnova && Number.isFinite(reserveEth)
+    ? reserveEth
+    : null
 
-  const volume24h = isToken0Wnova
-    ? Number.isFinite(oneDayVol0) && oneDayVol0 > 0
-      ? oneDayVol0
-      : Number.isFinite(totalVol0) && totalVol0 > 0
-      ? totalVol0
-      : 0
-    : isToken1Wnova
-    ? Number.isFinite(oneDayVol1) && oneDayVol1 > 0
+  const volume24h = hasWnova
+    ? Number.isFinite(oneDayVolEth) && oneDayVolEth >= 0
+      ? oneDayVolEth
+      : isToken0Wnova
+      ? Number.isFinite(oneDayVol0) && oneDayVol0 >= 0
+        ? oneDayVol0
+        : Number.isFinite(totalVol0) && totalVol0 >= 0
+        ? totalVol0
+        : 0
+      : Number.isFinite(oneDayVol1) && oneDayVol1 >= 0
       ? oneDayVol1
-      : Number.isFinite(totalVol1) && totalVol1 > 0
+      : Number.isFinite(totalVol1) && totalVol1 >= 0
       ? totalVol1
       : 0
     : null
 
-  const volume7d = isToken0Wnova
-    ? Number.isFinite(oneWeekVol0) && oneWeekVol0 > 0
-      ? oneWeekVol0
-      : Number.isFinite(totalVol0) && totalVol0 > 0
-      ? totalVol0
-      : 0
-    : isToken1Wnova
-    ? Number.isFinite(oneWeekVol1) && oneWeekVol1 > 0
+  const volume7d = hasWnova
+    ? Number.isFinite(oneWeekVolEth) && oneWeekVolEth >= 0
+      ? oneWeekVolEth
+      : isToken0Wnova
+      ? Number.isFinite(oneWeekVol0) && oneWeekVol0 >= 0
+        ? oneWeekVol0
+        : Number.isFinite(totalVol0) && totalVol0 >= 0
+        ? totalVol0
+        : 0
+      : Number.isFinite(oneWeekVol1) && oneWeekVol1 >= 0
       ? oneWeekVol1
-      : Number.isFinite(totalVol1) && totalVol1 > 0
+      : Number.isFinite(totalVol1) && totalVol1 >= 0
       ? totalVol1
       : 0
     : null
@@ -204,7 +216,7 @@ const getPairMetrics = (pairData) => {
     fees24h,
     protocolFees24h,
     apy,
-    hasWnova: isToken0Wnova || isToken1Wnova
+    hasWnova
   }
 }
 

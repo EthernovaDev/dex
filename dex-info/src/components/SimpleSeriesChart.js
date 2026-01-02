@@ -77,12 +77,12 @@ export default function SimpleSeriesChart({
       rightPriceScale: {
         borderVisible: false,
         visible: true,
-        scaleMargins: { top: type === 'histogram' ? 0.2 : 0.18, bottom: 0.08 },
+        scaleMargins: { top: type === 'histogram' ? 0.2 : 0.12, bottom: 0.08 },
       },
       timeScale: {
         borderVisible: false,
-        rightOffset: 6,
-        barSpacing: 8,
+        rightOffset: 4,
+        barSpacing: 6,
         fixLeftEdge: true,
         fixRightEdge: true,
       },
@@ -110,8 +110,8 @@ export default function SimpleSeriesChart({
     toolTip.style.position = 'absolute'
     toolTip.style.pointerEvents = 'none'
     toolTip.style.display = 'block'
-    toolTip.style.left = '10px'
-    toolTip.style.top = '8px'
+    toolTip.style.left = '12px'
+    toolTip.style.top = '10px'
     toolTip.style.backgroundColor = 'rgba(8, 12, 22, 0.75)'
     toolTip.style.border = '1px solid rgba(255, 255, 255, 0.12)'
     toolTip.style.borderRadius = '10px'
@@ -134,7 +134,8 @@ export default function SimpleSeriesChart({
         return
       }
       const val = param.seriesPrices.get(series)
-      toolTip.innerHTML = valueFormatter(val ?? 0)
+      const timeLabel = param.time ? new Date(param.time * 1000).toLocaleString() : ''
+      toolTip.innerHTML = `<div>${valueFormatter(val ?? 0)}</div>${timeLabel ? `<div style="opacity:0.65;font-size:11px;">${timeLabel}</div>` : ''}`
     })
 
     chart.timeScale().fitContent()

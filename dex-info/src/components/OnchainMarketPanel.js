@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import styled from 'styled-components'
-import CandleStickChart from './CandleChart'
 import SimpleSeriesChart from './SimpleSeriesChart'
 import LocalLoader from './LocalLoader'
 import Panel from './Panel'
@@ -12,16 +11,20 @@ import BigNumber from 'bignumber.js'
 const HeaderRow = styled.div`
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   flex-wrap: wrap;
   gap: 12px;
 `
 
 const StatsRow = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
   margin-top: 12px;
+
+  @media screen and (max-width: 640px) {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
 `
 
 const StatCard = styled.div`
@@ -34,9 +37,9 @@ const StatCard = styled.div`
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 4px;
+  gap: 6px;
   line-height: 1.3;
-  min-height: 78px;
+  min-height: 86px;
 `
 
 const StatLabel = styled.div`
@@ -293,17 +296,15 @@ export default function OnchainMarketPanel({
   const activeTrades = useSubgraph ? subgraphSeries.trades : useOnchain ? trades : []
   const activeLastPrice = useSubgraph ? subgraphSeries.lastPrice : useOnchain ? lastPrice : null
 
-  const markers = useMemo(() => {
-    if (!activeTrades || !activeTrades.length) return []
-    return activeTrades.slice(0, 50).map((trade) => ({
-      time: trade.timestamp,
-      position: trade.side === 'buy' ? 'belowBar' : 'aboveBar',
-      color: trade.side === 'buy' ? '#22c55e' : '#ef4444',
-      shape: trade.side === 'buy' ? 'circle' : 'circle',
-      size: 1,
-      text: '',
-    }))
-  }, [activeTrades])
+  const priceSeries = useMemo(() => {
+    if (!activeCandles || !activeCandles.length) return []
+    return activeCandles
+      .map((candle) => ({
+        time: Number(candle.timestamp),
+        value: Number(candle.close ?? candle.open ?? 0),
+      }))
+      .filter((entry) => Number.isFinite(entry.time) && Number.isFinite(entry.value))
+  }, [activeCandles])
 
   const volumeSeries = useMemo(() => {
     if (!activeCandles || !activeCandles.length) return []
@@ -415,14 +416,12 @@ export default function OnchainMarketPanel({
       <div id="novadex-candle-chart" ref={ref} style={{ marginTop: '12px' }} data-testid="market-candle-chart">
         {activeStatus === 'loading' && !activeCandles?.length ? (
           <LocalLoader />
-        ) : chartTab === 'price' && activeCandles && activeCandles.length ? (
-          <CandleStickChart
-            data={activeCandles}
-            base={activeLastPrice || 0}
+        ) : chartTab === 'price' && priceSeries.length ? (
+          <SimpleSeriesChart
+            data={priceSeries}
             width={width}
             height={CHART_HEIGHT}
-            showVolume={showVolume}
-            markers={markers}
+            type="area"
             valueFormatter={(val) => formatPrice(val)}
           />
         ) : chartTab === 'volume' && volumeSeries.length ? (

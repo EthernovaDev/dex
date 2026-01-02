@@ -141,6 +141,7 @@ const WarningGrouping = styled.div`
 `
 
 function PairPage({ pairAddress, history }) {
+  const pairId = normAddr(pairAddress) || pairAddress
   const {
     token0,
     token1,
@@ -151,15 +152,15 @@ function PairPage({ pairAddress, history }) {
     oneDayVolumeETH,
     volumeChangeETH,
     liquidityChangeETH,
-  } = usePairData(pairAddress)
+  } = usePairData(pairId)
 
   useEffect(() => {
     document.querySelector('body').scrollTo(0, 0)
   }, [])
 
-  const transactions = usePairTransactions(pairAddress)
-  const pairChartData = usePairChartData(pairAddress)
-  const backgroundColor = useColor(pairAddress)
+  const transactions = usePairTransactions(pairId)
+  const pairChartData = usePairChartData(pairId)
+  const backgroundColor = useColor(pairId)
 
   const wnovaLower = normAddr(WNOVA_ADDRESS)
   const token0Id = normAddr(token0?.id)
@@ -225,16 +226,16 @@ function PairPage({ pairAddress, history }) {
 
   const listedTokens = useListedTokens()
 
-  if (PAIR_BLACKLIST.includes(pairAddress)) {
+  if (PAIR_BLACKLIST.includes(pairId)) {
     return (
       <BlockedWrapper>
         <BlockedMessageWrapper>
           <AutoColumn gap="1rem" justify="center">
             <TYPE.light style={{ textAlign: 'center' }}>
-              {BLOCKED_WARNINGS[pairAddress] ?? `This pair is not supported.`}
+              {BLOCKED_WARNINGS[pairId] ?? `This pair is not supported.`}
             </TYPE.light>
-            <Link external={true} href={`${explorerBase}/address/${pairAddress}`}>{`More about ${shortenAddress(
-              pairAddress
+            <Link external={true} href={`${explorerBase}/address/${pairId}`}>{`More about ${shortenAddress(
+              pairId
             )}`}</Link>
           </AutoColumn>
         </BlockedMessageWrapper>
@@ -250,12 +251,13 @@ function PairPage({ pairAddress, history }) {
         type={'pair'}
         show={!dismissed && listedTokens && !(listedTokens.includes(token0?.id) && listedTokens.includes(token1?.id))}
         setShow={markAsDismissed}
-        address={pairAddress}
+        address={pairId}
       />
       <ContentWrapperLarge>
         <RowBetween>
           <TYPE.body>
-            <BasicLink to="/pairs">{'Pairs '}</BasicLink>→ {token0?.symbol}-{token1?.symbol}
+            <BasicLink to="/pairs">{'Pairs '}</BasicLink>→{' '}
+            {token0?.symbol && token1?.symbol ? `${token0.symbol}-${token1.symbol}` : 'Loading'}
           </TYPE.body>
           {!below600 && <Search small={true} />}
         </RowBetween>
@@ -269,7 +271,7 @@ function PairPage({ pairAddress, history }) {
             factoryAddress={FACTORY_ADDRESS}
             wnovaAddress={WNOVA_ADDRESS}
             tonyAddress={TONY_ADDRESS}
-            pairAddress={pairAddress}
+            pairAddress={pairId}
             reserveWnova={Number.isFinite(reserveWnova) ? reserveWnova : null}
             liquiditySeries={liquiditySeries}
             swaps={transactions?.swaps || []}
@@ -293,9 +295,9 @@ function PairPage({ pairAddress, history }) {
                     <TYPE.main fontSize={below1080 ? '1.5rem' : '2rem'} style={{ margin: '0 1rem' }}>
                       {token0 && token1 ? (
                         <>
-                          <HoverSpan onClick={() => history.push(`/token/${token0?.id}`)}>{token0.symbol}</HoverSpan>
+                          <HoverSpan onClick={() => history.push(`/token/${token0Id}`)}>{token0.symbol}</HoverSpan>
                           <span>-</span>
-                          <HoverSpan onClick={() => history.push(`/token/${token1?.id}`)}>
+                          <HoverSpan onClick={() => history.push(`/token/${token1Id}`)}>
                             {token1.symbol}
                           </HoverSpan>{' '}
                           Pair
@@ -313,8 +315,8 @@ function PairPage({ pairAddress, history }) {
                     flexDirection: below1080 ? 'row-reverse' : 'initial',
                   }}
                 >
-                  {!!!savedPairs[pairAddress] && !below1080 ? (
-                    <Hover onClick={() => addPair(pairAddress, token0.id, token1.id, token0.symbol, token1.symbol)}>
+                  {!!!savedPairs[pairId] && !below1080 ? (
+                    <Hover onClick={() => addPair(pairId, token0.id, token1.id, token0.symbol, token1.symbol)}>
                       <StyledIcon>
                         <PlusCircle style={{ marginRight: '0.5rem' }} />
                       </StyledIcon>
@@ -462,10 +464,10 @@ function PairPage({ pairAddress, history }) {
                   }}
                 >
                   <PairChart
-                    address={pairAddress}
+                    address={pairId}
                     color={backgroundColor}
-                    base0={reserve1 / reserve0}
-                    base1={reserve0 / reserve1}
+                    base0={isFiniteNum(reserve0) && isFiniteNum(reserve1) && reserve0 > 0 ? reserve1 / reserve0 : 0}
+                    base1={isFiniteNum(reserve0) && isFiniteNum(reserve1) && reserve1 > 0 ? reserve0 / reserve1 : 0}
                   />
                 </Panel>
               </PanelWrapper>
@@ -504,16 +506,15 @@ function PairPage({ pairAddress, history }) {
                     <TYPE.main>Pair Address</TYPE.main>
                     <AutoRow align="flex-end">
                       <TYPE.main style={{ marginTop: '.5rem' }}>
-                        {pairAddress.slice(0, 6) + '...' + pairAddress.slice(38, 42)}
+                        {pairId.slice(0, 6) + '...' + pairId.slice(38, 42)}
                       </TYPE.main>
-                      <CopyHelper toCopy={pairAddress} />
+                      <CopyHelper toCopy={pairId} />
                     </AutoRow>
                   </Column>
                   <Column>
                     <TYPE.main>
                       <RowFixed>
-                        <FormattedName text={token0?.symbol ?? ''} maxCharacters={8} />{' '}
-                        <span style={{ marginLeft: '4px' }}>Address</span>
+                        <span>{token0?.symbol ? `${token0.symbol} Address` : 'Token0 Address'}</span>
                       </RowFixed>
                     </TYPE.main>
                     <AutoRow align="flex-end">
@@ -526,8 +527,7 @@ function PairPage({ pairAddress, history }) {
                   <Column>
                     <TYPE.main>
                       <RowFixed>
-                        <FormattedName text={token1?.symbol ?? ''} maxCharacters={8} />{' '}
-                        <span style={{ marginLeft: '4px' }}>Address</span>
+                        <span>{token1?.symbol ? `${token1.symbol} Address` : 'Token1 Address'}</span>
                       </RowFixed>
                     </TYPE.main>
                     <AutoRow align="flex-end">
@@ -538,7 +538,7 @@ function PairPage({ pairAddress, history }) {
                     </AutoRow>
                   </Column>
                   <ButtonLight color={backgroundColor}>
-                    <Link color={backgroundColor} external href={`${explorerBase}/address/${pairAddress}`}>
+                    <Link color={backgroundColor} external href={`${explorerBase}/address/${pairId}`}>
                       View on Explorer ↗
                     </Link>
                   </ButtonLight>

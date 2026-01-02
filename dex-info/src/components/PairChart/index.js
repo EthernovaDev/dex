@@ -3,7 +3,7 @@ import styled from 'styled-components'
 import { Area, XAxis, YAxis, ResponsiveContainer, Tooltip, AreaChart, BarChart, Bar } from 'recharts'
 import { RowBetween, AutoRow } from '../Row'
 
-import { toK, toNiceDate, toNiceDateYear, formattedNum, getTimeframe } from '../../utils'
+import { toK, toNiceDate, toNiceDateYear, formattedNum, formatPrice, getTimeframe } from '../../utils'
 import BigNumber from 'bignumber.js'
 import { OptionButton } from '../ButtonStyled'
 import { darken } from 'polished'
@@ -12,7 +12,7 @@ import { timeframeOptions } from '../../constants'
 import { useMedia } from 'react-use'
 import { EmptyCard } from '..'
 import DropdownSelect from '../DropdownSelect'
-import CandleStickChart from '../CandleChart'
+import SimpleSeriesChart from '../SimpleSeriesChart'
 import LocalLoader from '../LocalLoader'
 import { useDarkModeManager } from '../../contexts/LocalStorage'
 import { WRAPPED_NATIVE_ADDRESS } from '../../constants/urls'
@@ -51,15 +51,15 @@ const PairChart = ({ address, color, base0, base1 }) => {
   // update the width on a window resize
   const ref = useRef()
   const isClient = typeof window === 'object'
-  const [width, setWidth] = useState(ref?.current?.container?.clientWidth)
-  const [height, setHeight] = useState(ref?.current?.container?.clientHeight)
+  const [width, setWidth] = useState(ref?.current?.clientWidth)
+  const [height, setHeight] = useState(ref?.current?.clientHeight)
   useEffect(() => {
     if (!isClient) {
       return false
     }
     function handleResize() {
-      setWidth(ref?.current?.container?.clientWidth ?? width)
-      setHeight(ref?.current?.container?.clientHeight ?? height)
+      setWidth(ref?.current?.clientWidth ?? width)
+      setHeight(ref?.current?.clientHeight ?? height)
     }
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
@@ -117,6 +117,29 @@ const PairChart = ({ address, color, base0, base1 }) => {
     })
   }, [chartData, isWnovaPair, token0Id, pairData, token1Id])
 
+  const rateSeries0 = React.useMemo(() => {
+    if (!hourlyRate0 || !hourlyRate0.length) return []
+    return hourlyRate0
+      .map((entry) => ({
+        time: Number(entry.timestamp),
+        value: Number(entry.close ?? entry.open ?? 0),
+      }))
+      .filter((entry) => Number.isFinite(entry.time) && Number.isFinite(entry.value))
+  }, [hourlyRate0])
+
+  const rateSeries1 = React.useMemo(() => {
+    if (!hourlyRate1 || !hourlyRate1.length) return []
+    return hourlyRate1
+      .map((entry) => ({
+        time: Number(entry.timestamp),
+        value: Number(entry.close ?? entry.open ?? 0),
+      }))
+      .filter((entry) => Number.isFinite(entry.time) && Number.isFinite(entry.value))
+  }, [hourlyRate1])
+
+  const chartWidth = width || 520
+  const chartHeight = height || 320
+
   if (!chartDataMapped) {
     return (
       <ChartWrapper>
@@ -131,26 +154,6 @@ const PairChart = ({ address, color, base0, base1 }) => {
         <EmptyCard height="300px">No historical data yet.</EmptyCard>{' '}
       </ChartWrapper>
     )
-  }
-
-  /**
-   * Used to format values on chart on scroll
-   * Needs to be raw html for chart API to parse styles
-   * @param {*} val
-   */
-  function valueFormatter(val) {
-    if (chartFilter === CHART_VIEW.RATE0) {
-      return (
-        formattedNum(val) +
-        `<span style="font-size: 12px; margin-left: 4px;">${formattedSymbol1}/${formattedSymbol0}<span>`
-      )
-    }
-    if (chartFilter === CHART_VIEW.RATE1) {
-      return (
-        formattedNum(val) +
-        `<span style="font-size: 12px; margin-left: 4px;">${formattedSymbol0}/${formattedSymbol1}<span>`
-      )
-    }
   }
 
   const aspect = below1080 ? 60 / 20 : below1600 ? 60 / 28 : 60 / 22
@@ -285,31 +288,31 @@ const PairChart = ({ address, color, base0, base1 }) => {
       )}
 
       {chartFilter === CHART_VIEW.RATE1 &&
-        (hourlyRate1 ? (
-          <ResponsiveContainer aspect={aspect} ref={ref}>
-            <CandleStickChart
-              data={hourlyRate1}
-              base={base0}
-              margin={false}
-              width={width}
-              valueFormatter={valueFormatter}
+        (rateSeries1.length ? (
+          <div ref={ref}>
+            <SimpleSeriesChart
+              data={rateSeries1}
+              width={chartWidth}
+              height={chartHeight}
+              type="area"
+              valueFormatter={(val) => formatPrice(val)}
             />
-          </ResponsiveContainer>
+          </div>
         ) : (
           <LocalLoader />
         ))}
 
       {chartFilter === CHART_VIEW.RATE0 &&
-        (hourlyRate0 ? (
-          <ResponsiveContainer aspect={aspect} ref={ref}>
-            <CandleStickChart
-              data={hourlyRate0}
-              base={base1}
-              margin={false}
-              width={width}
-              valueFormatter={valueFormatter}
+        (rateSeries0.length ? (
+          <div ref={ref}>
+            <SimpleSeriesChart
+              data={rateSeries0}
+              width={chartWidth}
+              height={chartHeight}
+              type="area"
+              valueFormatter={(val) => formatPrice(val)}
             />
-          </ResponsiveContainer>
+          </div>
         ) : (
           <LocalLoader />
         ))}

@@ -22,6 +22,28 @@ const StyledNativeLogo = styled.div`
   }
 `
 
+const FallbackLogo = styled.div`
+  width: ${({ size }) => size};
+  height: ${({ size }) => size};
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(${({ size }) => size} / 2.3);
+  color: rgba(255, 255, 255, 0.92);
+  background: ${({ $bg }) => $bg};
+  border: 1px solid rgba(255, 255, 255, 0.08);
+`
+
+const colorFromAddress = (addr) => {
+  if (!addr) return 'rgba(148, 163, 184, 0.25)'
+  const clean = addr.replace(/^0x/, '')
+  const seed = parseInt(clean.slice(0, 6), 16)
+  if (!Number.isFinite(seed)) return 'rgba(148, 163, 184, 0.25)'
+  const hue = seed % 360
+  return `hsl(${hue}, 70%, 40%)`
+}
+
 export default function TokenLogo({ address, header = false, size = '24px', ...rest }) {
   const [error, setError] = useState(false)
 
@@ -34,9 +56,9 @@ export default function TokenLogo({ address, header = false, size = '24px', ...r
   if (error || (normalized && BAD_IMAGES[normalized])) {
     return (
       <Inline>
-        <span {...rest} alt={''} style={{ fontSize: size }} role="img" aria-label="face">
-          🤔
-        </span>
+        <FallbackLogo size={size} $bg={colorFromAddress(normalized)} {...rest}>
+          ?
+        </FallbackLogo>
       </Inline>
     )
   }
@@ -56,11 +78,12 @@ export default function TokenLogo({ address, header = false, size = '24px', ...r
     )
   }
 
+  const label = normalized ? normalized.slice(2, 4).toUpperCase() : '?'
   return (
     <Inline>
-      <span {...rest} alt={''} style={{ fontSize: size }} role="img" aria-label="token">
-        ◼︎
-      </span>
+      <FallbackLogo size={size} $bg={colorFromAddress(normalized)} {...rest}>
+        {label}
+      </FallbackLogo>
     </Inline>
   )
 }

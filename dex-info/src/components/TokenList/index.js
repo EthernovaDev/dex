@@ -189,9 +189,12 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
       const tokenId = isToken0Wnova ? token1Id : token0Id
 
       const priceWnova = reserveToken > 0 ? reserveWnova / reserveToken : NaN
+      const volEth = toNum(pair?.oneDayVolumeETH ?? pair?.volumeETH ?? null, NaN)
       const volToken0 = toNum(pair?.oneDayVolumeToken0 ?? pair?.volumeToken0 ?? null, NaN)
       const volToken1 = toNum(pair?.oneDayVolumeToken1 ?? pair?.volumeToken1 ?? null, NaN)
-      const volumeWnova = isToken0Wnova
+      const volumeWnova = Number.isFinite(volEth)
+        ? volEth
+        : isToken0Wnova
         ? Number.isFinite(volToken0)
           ? volToken0
           : 0

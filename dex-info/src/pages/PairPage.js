@@ -159,6 +159,7 @@ function PairPage({ pairAddress, history }) {
   }, [])
 
   const transactions = usePairTransactions(pairId)
+  const swapsCount = transactions?.swaps?.length || 0
   const pairChartData = usePairChartData(pairId)
   const backgroundColor = useColor(pairId)
 
@@ -278,6 +279,9 @@ function PairPage({ pairAddress, history }) {
             liquiditySeries={liquiditySeries}
             swaps={transactions?.swaps || []}
             allowOnchain={!subgraphReady}
+            testIdPrefix="pair-market"
+            recentTradesTestId="pair-recent-trades"
+            recentTradesEmptyTestId="pair-recent-trades-empty"
           />
           <DashboardWrapper>
             <AutoColumn gap="40px" style={{ marginBottom: '1.5rem' }}>
@@ -475,7 +479,14 @@ function PairPage({ pairAddress, history }) {
               </PanelWrapper>
               <TYPE.main fontSize={'1.125rem'} style={{ marginTop: '3rem' }}>
                 Transactions
-              </TYPE.main>{' '}
+              </TYPE.main>
+              <span
+                data-testid="pair-swaps-count"
+                data-value={swapsCount}
+                style={{ position: 'absolute', left: '-9999px', top: 'auto', width: 1, height: 1, overflow: 'hidden' }}
+              >
+                {swapsCount}
+              </span>
               <Panel
                 style={{
                   marginTop: '1.5rem',

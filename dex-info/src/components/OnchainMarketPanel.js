@@ -161,6 +161,9 @@ export default function OnchainMarketPanel({
   swaps,
   showVolume = true,
   allowOnchain = true,
+  testIdPrefix = 'market',
+  recentTradesTestId,
+  recentTradesEmptyTestId,
 }) {
   const [timeframe, setTimeframe] = useState(TIMEFRAMES[0])
   const [chartTab, setChartTab] = useState(CHART_TABS[0].key)
@@ -373,6 +376,12 @@ export default function OnchainMarketPanel({
   }, [liquiditySeries, reserveWnova, activeCandles])
 
   const ref = useRef()
+  const idPrefix = testIdPrefix || 'market'
+  const chartTestId = `${idPrefix}-chart`
+  const emptyTestId = `${idPrefix}-empty`
+  const hasDataTestId = `${idPrefix}-has-data`
+  const tradesTestId = recentTradesTestId || `${idPrefix}-recent-trades`
+  const tradesEmptyTestId = recentTradesEmptyTestId || `${idPrefix}-recent-trades-empty`
   const [width, setWidth] = useState(520)
 
   useEffect(() => {
@@ -403,6 +412,12 @@ export default function OnchainMarketPanel({
   const volumeValue = isFiniteNum(volume24h) ? `${formattedNum(volume24h, false)} WNOVA` : '—'
   const tradesValue = Number.isFinite(trades24h.length) ? trades24h.length : '—'
 
+
+  const hasMarketData = Boolean(
+    (priceSeriesFinal && priceSeriesFinal.length) ||
+      (volumeSeriesFinal && volumeSeriesFinal.length) ||
+      (liquiditySeriesFinal && liquiditySeriesFinal.length)
+  )
 
   return (
     <Panel style={{ marginBottom: '1.5rem' }}>
@@ -455,7 +470,7 @@ export default function OnchainMarketPanel({
           </TimeframeButton>
         ))}
       </TimeframeRow>
-      <div id="novadex-candle-chart" ref={ref} style={{ marginTop: '12px' }} data-testid="market-candle-chart">
+      <div id="novadex-candle-chart" ref={ref} style={{ marginTop: '12px' }} data-testid={chartTestId}>
         {activeStatus === 'loading' && !activeCandles?.length ? (
           <LocalLoader />
         ) : chartTab === 'price' && priceSeriesFinal.length ? (
@@ -483,8 +498,9 @@ export default function OnchainMarketPanel({
             valueFormatter={(val) => formattedNum(val, false)}
           />
         ) : (
-          <EmptyState>No on-chain swaps yet.</EmptyState>
+          <EmptyState data-testid={emptyTestId}>No on-chain swaps yet.</EmptyState>
         )}
+        {hasMarketData ? <span data-testid={hasDataTestId} style={{ display: 'none' }} /> : null}
       </div>
       {activeStatus === 'error' && !useSubgraph ? (
         <>
@@ -492,7 +508,7 @@ export default function OnchainMarketPanel({
           <RetryButton onClick={refresh}>Retry</RetryButton>
         </>
       ) : null}
-      <TradeList>
+      <TradeList data-testid={tradesTestId}>
         <TYPE.main fontSize={'0.95rem'}>Recent trades</TYPE.main>
         {activeTrades && activeTrades.length ? (
           activeTrades.map((trade) => {
@@ -514,7 +530,7 @@ export default function OnchainMarketPanel({
             )
           })
         ) : (
-          <EmptyState>No trades yet.</EmptyState>
+          <EmptyState data-testid={tradesEmptyTestId}>No trades yet.</EmptyState>
         )}
       </TradeList>
     </Panel>

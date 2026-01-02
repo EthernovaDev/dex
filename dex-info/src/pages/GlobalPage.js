@@ -169,6 +169,7 @@ function GlobalPage() {
             swaps={pairSwaps}
             showVolume={false}
             allowOnchain={!subgraphReady}
+            testIdPrefix="overview-market"
           />
           {below800 && ( // mobile card
             <Box mb={20}>

@@ -102,7 +102,7 @@ export default function GlobalStats() {
 
           {!below1180 && (
             <TYPE.main mr={'1rem'}>
-              Transactions (24H): <Medium>{localNumber(txns24h)}</Medium>
+              Transactions (24H): <Medium data-testid="overview-tx24h">{localNumber(txns24h)}</Medium>
             </TYPE.main>
           )}
           {!below1024 && (

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useCallback } from 'react'
-import { createChart, CrosshairMode } from 'lightweight-charts'
+import { createChart, CrosshairMode, LineStyle } from 'lightweight-charts'
 import { formattedNum } from '../utils'
 import { useDarkModeManager } from '../contexts/LocalStorage'
 
@@ -20,7 +20,19 @@ export default function SimpleSeriesChart({
   const seriesRef = useRef(null)
   const tooltipRef = useRef(null)
   const [darkMode] = useDarkModeManager()
-  const textColor = darkMode ? 'white' : 'black'
+  const textColor = darkMode ? 'rgba(235, 237, 245, 0.95)' : 'rgba(15, 23, 42, 0.9)'
+  const gridColor = darkMode ? 'rgba(148, 163, 184, 0.07)' : 'rgba(15, 23, 42, 0.08)'
+  const timeFormatter = useCallback((time) => {
+    const ts = typeof time === 'number' ? time * 1000 : Date.parse(time)
+    if (!Number.isFinite(ts)) return ''
+    const date = new Date(ts)
+    const now = Date.now()
+    const diff = Math.abs(now - date.getTime())
+    if (diff < 36 * 3600 * 1000) {
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }
+    return date.toLocaleDateString([], { month: 'short', day: '2-digit' })
+  }, [])
 
   const formattedData = useMemo(() => {
     return (
@@ -66,18 +78,18 @@ export default function SimpleSeriesChart({
         fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, sans-serif',
       },
       grid: {
-        vertLines: { color: 'rgba(148, 163, 184, 0.08)' },
-        horzLines: { color: 'rgba(148, 163, 184, 0.08)' },
+        vertLines: { color: gridColor, style: LineStyle.Dotted },
+        horzLines: { color: gridColor, style: LineStyle.Dotted },
       },
       crosshair: {
         mode: CrosshairMode.Normal,
-        vertLine: { color: 'rgba(148, 163, 184, 0.35)', width: 1 },
-        horzLine: { color: 'rgba(148, 163, 184, 0.35)' },
+        vertLine: { color: 'rgba(148, 163, 184, 0.3)', width: 1 },
+        horzLine: { color: 'rgba(148, 163, 184, 0.3)' },
       },
       rightPriceScale: {
         borderVisible: false,
         visible: true,
-        scaleMargins: { top: type === 'histogram' ? 0.2 : 0.12, bottom: 0.08 },
+        scaleMargins: { top: type === 'histogram' ? 0.25 : 0.12, bottom: 0.08 },
       },
       timeScale: {
         borderVisible: false,
@@ -85,6 +97,7 @@ export default function SimpleSeriesChart({
         barSpacing: 6,
         fixLeftEdge: true,
         fixRightEdge: true,
+        tickMarkFormatter: timeFormatter,
       },
       localization: { priceFormatter: (val) => valueFormatter(val) },
     })
@@ -96,6 +109,8 @@ export default function SimpleSeriesChart({
             priceFormat: { type: 'volume' },
             priceScaleId: '',
             scaleMargins: { top: 0.82, bottom: 0 },
+            baseLineVisible: true,
+            baseLineColor: 'rgba(148, 163, 184, 0.35)',
           })
         : chart.addAreaSeries({
             topColor: fillTop,
@@ -134,7 +149,7 @@ export default function SimpleSeriesChart({
         return
       }
       const val = param.seriesPrices.get(series)
-      const timeLabel = param.time ? new Date(param.time * 1000).toLocaleString() : ''
+      const timeLabel = param.time ? timeFormatter(param.time) : ''
       toolTip.innerHTML = `<div>${valueFormatter(val ?? 0)}</div>${timeLabel ? `<div style="opacity:0.65;font-size:11px;">${timeLabel}</div>` : ''}`
     })
 

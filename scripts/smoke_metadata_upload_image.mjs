@@ -14,11 +14,34 @@ const fail = (msg) => {
   process.exit(1)
 }
 
-async function fetchJson(url, opts) {
-  const res = await fetch(url, opts)
-  const text = await res.text()
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`)
-  return JSON.parse(text)
+const RETRY_STATUSES = new Set([429, 502, 503, 504])
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+async function fetchJson(url, opts, label = 'request') {
+  let lastErr
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const res = await fetch(url, opts)
+      const text = await res.text()
+      if (!res.ok) {
+        if (RETRY_STATUSES.has(res.status)) {
+          lastErr = new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`)
+          await sleep(300 * attempt)
+          continue
+        }
+        throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`)
+      }
+      return JSON.parse(text)
+    } catch (err) {
+      lastErr = err
+      if (attempt < 3) {
+        await sleep(300 * attempt)
+        continue
+      }
+      break
+    }
+  }
+  throw new Error(`${label} failed after retries: ${lastErr?.message || 'unknown error'}`)
 }
 
 async function main() {
@@ -32,7 +55,7 @@ async function main() {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ address: wallet.address }),
-  })
+  }, 'challenge')
   const signature = await wallet.signMessage(challenge.message)
 
   const pngData = Buffer.from(

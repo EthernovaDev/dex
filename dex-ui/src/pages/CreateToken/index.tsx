@@ -260,6 +260,37 @@ const ERC20_ABI = [
   'function allowance(address owner,address spender) view returns (uint256)'
 ]
 
+const TOKEN_METADATA_KEY = 'novadex:token-metadata'
+const PAIR_METADATA_KEY = 'novadex:pair-metadata'
+
+const saveMetadata = (tokenAddress: string, pairAddress: string | null, payload: Record<string, any>) => {
+  if (typeof window === 'undefined' || !tokenAddress) return
+  try {
+    const tokenKey = tokenAddress.toLowerCase()
+    const existingRaw = window.localStorage.getItem(TOKEN_METADATA_KEY)
+    const existing = existingRaw ? JSON.parse(existingRaw) : {}
+    existing[tokenKey] = { ...(existing[tokenKey] || {}), ...payload }
+    window.localStorage.setItem(TOKEN_METADATA_KEY, JSON.stringify(existing))
+  } catch {
+    // ignore storage errors
+  }
+
+  if (pairAddress) {
+    try {
+      const pairKey = pairAddress.toLowerCase()
+      const pairRaw = window.localStorage.getItem(PAIR_METADATA_KEY)
+      const pairMap = pairRaw ? JSON.parse(pairRaw) : {}
+      pairMap[pairKey] = {
+        ...(pairMap[pairKey] || {}),
+        ...payload.pairMeta,
+      }
+      window.localStorage.setItem(PAIR_METADATA_KEY, JSON.stringify(pairMap))
+    } catch {
+      // ignore storage errors
+    }
+  }
+}
+
 export default function CreateToken() {
   const { account, chainId, library } = useActiveWeb3React()
   const { config } = useEthernovaConfig()
@@ -501,18 +532,50 @@ export default function CreateToken() {
       }
       setTxHash(tx.hash)
       const receipt = await tx.wait(1)
+      let tokenAddress: string | null = null
+      let pairAddress: string | null = null
       for (const log of receipt.logs) {
         try {
           const parsed = factory.interface.parseLog(log)
           if (parsed?.name === 'TokenCreated') {
+            tokenAddress = parsed.args.token
             setCreatedToken(parsed.args.token)
           }
           if (parsed?.name === 'TokenLaunched') {
+            pairAddress = parsed.args.pair
             setCreatedPair(parsed.args.pair)
           }
         } catch {
           // ignore unrelated logs
         }
+      }
+      if (tokenAddress) {
+        const tokenLower = tokenAddress.toLowerCase()
+        const wnovaLower = wnovaAddress?.toLowerCase?.()
+        const pairMeta = pairAddress && wnovaLower
+          ? {
+              token0: tokenLower < wnovaLower ? tokenLower : wnovaLower,
+              token1: tokenLower < wnovaLower ? wnovaLower : tokenLower,
+              symbol0: tokenLower < wnovaLower ? symbol.trim().toUpperCase() : NATIVE_SYMBOL,
+              symbol1: tokenLower < wnovaLower ? NATIVE_SYMBOL : symbol.trim().toUpperCase(),
+              createdAt: Date.now(),
+            }
+          : null
+        saveMetadata(tokenAddress, pairAddress || null, {
+          name: name.trim(),
+          symbol: symbol.trim().toUpperCase(),
+          decimals: parsedDecimals,
+          totalSupply,
+          description: description || '',
+          logo: logoPreview || '',
+          website: website || '',
+          twitter: twitter || '',
+          telegram: telegram || '',
+          discord: discord || '',
+          createdAt: Date.now(),
+          pair: pairAddress || undefined,
+          pairMeta: pairMeta || undefined,
+        })
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Deploy failed'

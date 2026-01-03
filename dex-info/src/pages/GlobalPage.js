@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { withRouter } from 'react-router-dom'
 import { Box } from 'rebass'
 import styled from 'styled-components'
+import { ethers } from 'ethers'
 
 import { RowBetween } from '../components/Row'
 import { AutoColumn } from '../components/Column'
@@ -17,13 +18,26 @@ import { useAllPairData, usePairData } from '../contexts/PairData'
 import { useLatestBlocks } from '../contexts/Application'
 import { useMedia } from 'react-use'
 import Panel from '../components/Panel'
-import { formattedNum, formattedPercent, getReserveWnova, isFiniteNum, normAddr, isAddrEq, calcWnovaPairMetrics } from '../utils'
+import {
+  formattedNum,
+  formattedPercent,
+  getReserveWnova,
+  isFiniteNum,
+  normAddr,
+  isAddrEq,
+  calcWnovaPairMetrics,
+  getPoolLink,
+} from '../utils'
 import { TYPE, ThemedBackground } from '../Theme'
 import { transparentize } from 'polished'
 import { CustomLink } from '../components/Link'
 
 import { PageWrapper, ContentWrapper } from '../components'
 import { useBoostedPairs } from '../hooks/useBoostedPairs'
+import { useOnchainPair } from '../hooks/useOnchainPair'
+import { useOnchainTokenInfo } from '../hooks/useOnchainTokenInfo'
+import { usePairMetadata, useTokenMetadata } from '../hooks/useTokenMetadata'
+import DoubleTokenLogo from '../components/DoubleLogo'
 
 const RPC_URL = process.env.REACT_APP_RPC_URL
 const FACTORY_ADDRESS = process.env.REACT_APP_FACTORY_ADDRESS
@@ -68,6 +82,77 @@ const EmptyState = styled.div`
   color: ${({ theme }) => theme.text2};
   font-size: 0.9rem;
 `
+
+const PairSpotlight = styled(Panel)`
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 1.25rem;
+`
+
+const PairMetaRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`
+
+const MetaTag = styled.span`
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  color: ${({ theme }) => theme.text2};
+`
+
+function BoostedPairCard({ entry, pairData, rpcUrl }) {
+  const onchainPair = useOnchainPair(entry.address, rpcUrl)
+  const pairMeta = usePairMetadata(entry.address)
+
+  const token0Address = pairData?.token0?.id || pairMeta?.token0 || onchainPair?.data?.token0
+  const token1Address = pairData?.token1?.id || pairMeta?.token1 || onchainPair?.data?.token1
+
+  const token0Info = useOnchainTokenInfo(token0Address, token0Address ? rpcUrl : null)
+  const token1Info = useOnchainTokenInfo(token1Address, token1Address ? rpcUrl : null)
+  const token0Meta = useTokenMetadata(token0Address)
+  const token1Meta = useTokenMetadata(token1Address)
+
+  const symbol0 = pairData?.token0?.symbol || pairMeta?.symbol0 || token0Meta?.symbol || token0Info?.info?.symbol || '?'
+  const symbol1 = pairData?.token1?.symbol || pairMeta?.symbol1 || token1Meta?.symbol || token1Info?.info?.symbol || '?'
+  const pairName =
+    token0Address && token1Address ? `${symbol0} / ${symbol1}` : `${entry.address.slice(0, 6)}…${entry.address.slice(-4)}`
+  const timeLeft = Math.max(0, entry.expiresAt - Math.floor(Date.now() / 1000))
+  const hoursLeft = Math.max(1, Math.ceil(timeLeft / 3600))
+  const onchainMissing = onchainPair?.status === 'not_found'
+
+  return (
+    <BoostCard key={entry.address}>
+      <RowBetween>
+        <PairMetaRow>
+          {token0Address && token1Address ? (
+            <DoubleTokenLogo a0={token0Address} a1={token1Address} size={20} margin />
+          ) : null}
+          <TYPE.main>{pairName}</TYPE.main>
+        </PairMetaRow>
+        <CustomLink to={`/pair/${entry.address}`}>View</CustomLink>
+      </RowBetween>
+      <TYPE.light fontSize={12}>
+        Boosted by {entry.booster?.slice(0, 6)}…{entry.booster?.slice(-4)}
+      </TYPE.light>
+      <RowBetween>
+        <TYPE.main fontSize={'1.125rem'}>{hoursLeft}h remaining</TYPE.main>
+        <MetaTag>Boosted</MetaTag>
+      </RowBetween>
+      {onchainMissing && (
+        <TYPE.light fontSize={12} color="text2">
+          Pair contract not found on-chain yet.
+        </TYPE.light>
+      )}
+      {onchainMissing && pairMeta?.token0 && pairMeta?.token1 && (
+        <CustomLink to={getPoolLink(pairMeta.token0, pairMeta.token1)}>Create pool / add liquidity ↗</CustomLink>
+      )}
+    </BoostCard>
+  )
+}
 
 function GlobalPage() {
   // get data for lists and totals
@@ -182,6 +267,14 @@ function GlobalPage() {
     [wnovaPairs]
   )
 
+  const pairOfWeek = useMemo(() => {
+    if (!wnovaPairs.length) return null
+    return wnovaPairs.reduce((best, entry) => {
+      if (!best) return entry
+      return entry.metrics.liquidityWnova > best.metrics.liquidityWnova ? entry : best
+    }, null)
+  }, [wnovaPairs])
+
   const toPairMap = (list) => {
     if (!list || !list.length) return null
     return list.reduce((acc, entry) => {
@@ -205,6 +298,17 @@ function GlobalPage() {
       })
       .filter((entry) => entry.address)
   }, [boostState, pairLookup])
+
+  const boostFeeDisplay = useMemo(() => {
+    const feeRaw = boostState?.config?.feeAmount
+    if (!feeRaw) return '10'
+    try {
+      const parsed = Number(ethers.utils.formatUnits(feeRaw.toString(), 18))
+      return formattedNum(parsed, false)
+    } catch {
+      return '10'
+    }
+  }, [boostState])
 
   return (
     <PageWrapper>
@@ -294,35 +398,54 @@ function GlobalPage() {
           )}
           <SectionHeader>
             <TYPE.main fontSize={'1.125rem'} style={{ whiteSpace: 'nowrap' }}>
-              Boosted (24h)
+              Pair of the Week
+            </TYPE.main>
+            <CustomLink to={'/pairs'}>See all</CustomLink>
+          </SectionHeader>
+          {pairOfWeek ? (
+            <PairSpotlight>
+              <RowBetween>
+                <PairMetaRow>
+                  <DoubleTokenLogo
+                    a0={pairOfWeek.pair.token0.id}
+                    a1={pairOfWeek.pair.token1.id}
+                    size={22}
+                    margin
+                  />
+                  <TYPE.main>
+                    {pairOfWeek.pair.token0.symbol} / {pairOfWeek.pair.token1.symbol}
+                  </TYPE.main>
+                </PairMetaRow>
+                <CustomLink to={`/pair/${pairOfWeek.pair.id}`}>View</CustomLink>
+              </RowBetween>
+              <TYPE.light fontSize={12}>Highest WNOVA liquidity this week.</TYPE.light>
+              <TYPE.main fontSize={'1.125rem'}>
+                {formattedNum(pairOfWeek.metrics.liquidityWnova, false)} WNOVA
+              </TYPE.main>
+            </PairSpotlight>
+          ) : (
+            <Panel>
+              <EmptyState>No pairs with WNOVA liquidity yet.</EmptyState>
+            </Panel>
+          )}
+
+          <SectionHeader>
+            <TYPE.main fontSize={'1.125rem'} style={{ whiteSpace: 'nowrap' }}>
+              Boosted Tokens (24h)
             </TYPE.main>
             <CustomLink to={`/pair/${PAIR_ADDRESS}`}>Boost your pair</CustomLink>
           </SectionHeader>
           {boostedPairs.length ? (
             <BoostedList>
               {boostedPairs.map((entry) => {
-                const pairName = entry.pair
-                  ? `${entry.pair.token0?.symbol || '?'} / ${entry.pair.token1?.symbol || '?'}`
-                  : `${entry.address.slice(0, 6)}…${entry.address.slice(-4)}`
-                const timeLeft = Math.max(0, entry.expiresAt - Math.floor(Date.now() / 1000))
-                const hoursLeft = Math.max(1, Math.ceil(timeLeft / 3600))
-                return (
-                  <BoostCard key={entry.address}>
-                    <RowBetween>
-                      <TYPE.main>{pairName}</TYPE.main>
-                      <CustomLink to={`/pair/${entry.address}`}>View</CustomLink>
-                    </RowBetween>
-                    <TYPE.light fontSize={12}>
-                      Boosted by {entry.booster?.slice(0, 6)}…{entry.booster?.slice(-4)}
-                    </TYPE.light>
-                    <TYPE.main fontSize={'1.125rem'}>{hoursLeft}h remaining</TYPE.main>
-                  </BoostCard>
-                )
+                return <BoostedPairCard key={entry.address} entry={entry} pairData={entry.pair} rpcUrl={RPC_URL} />
               })}
             </BoostedList>
           ) : (
             <Panel>
-              <EmptyState>No boosted pairs yet. Boost your pair for 10 NOVA to appear here.</EmptyState>
+              <EmptyState>
+                No boosted pairs yet. Boost your pair for {boostFeeDisplay} NOVA to appear here for 24h.
+              </EmptyState>
             </Panel>
           )}
 

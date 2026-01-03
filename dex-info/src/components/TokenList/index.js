@@ -26,6 +26,7 @@ import FormattedName from '../FormattedName'
 import { TYPE } from '../../Theme'
 import { WRAPPED_NATIVE_ADDRESS, TONY_ADDRESS, PAIR_ADDRESS } from '../../constants/urls'
 import { useAllPairData, usePairData } from '../../contexts/PairData'
+import { useLocalTokenList } from '../../hooks/useTokenMetadata'
 
 dayjs.extend(utc)
 
@@ -173,6 +174,7 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
   const pinnedPair = usePairData(PAIR_ADDRESS)
   const wnovaLower = normAddr(WRAPPED_NATIVE_ADDRESS)
   const tonyLower = normAddr(TONY_ADDRESS)
+  const localTokens = useLocalTokenList()
 
   const pairMetrics = useMemo(() => {
     const metricsByToken = {}
@@ -281,6 +283,31 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
   }, [tokens, reserveWnova, pairVolumeWnova, tonyPriceWnova])
 
   const formattedTokens = useMemo(() => {
+    const buildLocalTokenEntry = (token) => {
+      const tokenId = normAddr(token.id)
+      if (!tokenId) return null
+      const metrics = metricsByToken?.[tokenId]
+      const isWnovaLocal = isAddrEq(tokenId, wnovaLower)
+      const priceWnova = isFiniteNum(metrics?.priceWnova)
+        ? metrics.priceWnova
+        : isWnovaLocal
+        ? 1
+        : null
+      const liquidityWnova = isFiniteNum(metrics?.liquidityWnova) ? metrics.liquidityWnova : null
+      const volumeWnova = isFiniteNum(metrics?.volume24hWnova) ? metrics.volume24hWnova : null
+      return applyOverrides({
+        id: tokenId,
+        symbol: token.symbol,
+        name: token.name || token.symbol,
+        derivedETH: priceWnova ?? null,
+        priceETH: priceWnova ?? null,
+        totalLiquidity: null,
+        totalLiquidityETH: liquidityWnova ?? null,
+        oneDayVolumeETH: volumeWnova ?? null,
+        priceChangeETH: 0,
+      })
+    }
+
     const fromSubgraph =
       tokens &&
       Object.keys(tokens)
@@ -414,7 +441,10 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
           })
         )
       }
-      return mapped.concat(extra)
+      const localExtras = (localTokens || [])
+        .map((token) => buildLocalTokenEntry(token))
+        .filter((token) => token && token.id && !existingIds.has(token.id))
+      return mapped.concat(extra).concat(localExtras)
     }
 
     const fallback = []
@@ -468,7 +498,10 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
         })
       )
     }
-    return fallback
+    const localExtras = (localTokens || [])
+      .map((token) => buildLocalTokenEntry(token))
+      .filter((token) => token && token.id)
+    return fallback.concat(localExtras)
   }, [
     tokens,
     reserveWnova,
@@ -477,6 +510,7 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
     metricsByToken,
     wnovaLower,
     tonyLower,
+    localTokens,
   ])
 
   const tokensWithMetrics = useMemo(() => {

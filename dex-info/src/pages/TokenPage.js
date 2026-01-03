@@ -47,6 +47,7 @@ import Checkbox from '../components/Checkbox'
 import { shortenAddress } from '../utils'
 import { EXPLORER_URL, WRAPPED_NATIVE_ADDRESS } from '../constants/urls'
 import { useOnchainTokenInfo } from '../hooks/useOnchainTokenInfo'
+import { useTokenMetadata } from '../hooks/useTokenMetadata'
 
 const explorerBase = EXPLORER_URL.replace(/\/+$/, '')
 
@@ -148,6 +149,7 @@ function TokenPage({ address, history }) {
 
   const shouldUseOnchain = allowOnchain && (!subgraphReady || !tokenData)
   const onchainInfo = useOnchainTokenInfo(address, shouldUseOnchain ? rpcUrl : null)
+  const tokenMeta = useTokenMetadata(address)
   const isWrappedNative = isAddrEq(address, WRAPPED_NATIVE_ADDRESS)
   const safeSymbol = symbol || onchainInfo.info?.symbol || (isWrappedNative ? 'WNOVA' : 'UNKNOWN')
   const safeName = name || onchainInfo.info?.name || (isWrappedNative ? 'Wrapped NOVA' : 'Unknown Token')
@@ -194,6 +196,14 @@ function TokenPage({ address, history }) {
   // format for long symbol
   const LENGTH = below1080 ? 10 : 16
   const formattedSymbol = safeSymbol?.length > LENGTH ? safeSymbol.slice(0, LENGTH) + '...' : safeSymbol
+  const showMeta =
+    tokenMeta &&
+    (tokenMeta.description ||
+      tokenMeta.logo ||
+      tokenMeta.website ||
+      tokenMeta.twitter ||
+      tokenMeta.telegram ||
+      tokenMeta.discord)
 
   const [dismissed, markAsDismissed] = usePathDismissed(history.location.pathname)
   const [savedTokens, addToken] = useSavedTokens()
@@ -255,6 +265,45 @@ function TokenPage({ address, history }) {
         </RowBetween>
         <WarningGrouping disabled={!dismissed && listedTokens && !listedTokens.includes(address)}>
           <DashboardWrapper style={{ marginTop: below1080 ? '0' : '1rem' }}>
+            {showMeta && (
+              <Panel style={{ padding: '1.25rem', marginBottom: '1.5rem' }} data-testid="token-profile">
+                <AutoColumn gap="10px">
+                  <RowFixed>
+                    <TokenLogo address={address} size={'28px'} />
+                    <TYPE.main fontSize={'1.1rem'} style={{ marginLeft: '0.5rem' }}>
+                      Token profile
+                    </TYPE.main>
+                  </RowFixed>
+                  {tokenMeta?.description && (
+                    <TYPE.body color="text2" style={{ lineHeight: 1.5 }}>
+                      {tokenMeta.description}
+                    </TYPE.body>
+                  )}
+                  <AutoRow gap="12px" style={{ flexWrap: 'wrap' }}>
+                    {tokenMeta?.website && (
+                      <Link external href={tokenMeta.website}>
+                        Website ↗
+                      </Link>
+                    )}
+                    {tokenMeta?.twitter && (
+                      <Link external href={tokenMeta.twitter}>
+                        X ↗
+                      </Link>
+                    )}
+                    {tokenMeta?.telegram && (
+                      <Link external href={tokenMeta.telegram}>
+                        Telegram ↗
+                      </Link>
+                    )}
+                    {tokenMeta?.discord && (
+                      <Link external href={tokenMeta.discord}>
+                        Discord ↗
+                      </Link>
+                    )}
+                  </AutoRow>
+                </AutoColumn>
+              </Panel>
+            )}
             <RowBetween
               style={{
                 flexWrap: 'wrap',

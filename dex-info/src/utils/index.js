@@ -104,17 +104,23 @@ export function calcWnovaPairMetrics(pair, wnovaAddress = WRAPPED_NATIVE_ADDRESS
 
   const oneDayVol0 = toNum(pair?.oneDayVolumeToken0 ?? null, NaN)
   const oneDayVol1 = toNum(pair?.oneDayVolumeToken1 ?? null, NaN)
+  const oneDayVolEth = toNum(pair?.oneDayVolumeETH ?? null, NaN)
   const oneWeekVol0 = toNum(pair?.oneWeekVolumeToken0 ?? null, NaN)
   const oneWeekVol1 = toNum(pair?.oneWeekVolumeToken1 ?? null, NaN)
   const totalVol0 = toNum(pair?.volumeToken0 ?? null, NaN)
   const totalVol1 = toNum(pair?.volumeToken1 ?? null, NaN)
+  const volume24hOverride = toNum(pair?.volume24hWnova ?? pair?.volume24hWNOVA ?? null, NaN)
 
   let volume24hWnova = NaN
   let volume7dWnova = NaN
-  if (isToken0Wnova) {
+  if (Number.isFinite(volume24hOverride) && volume24hOverride > 0) {
+    volume24hWnova = volume24hOverride
+  } else if (isToken0Wnova) {
     volume24hWnova =
       Number.isFinite(oneDayVol0) && oneDayVol0 > 0
         ? oneDayVol0
+        : Number.isFinite(oneDayVolEth) && oneDayVolEth > 0
+        ? oneDayVolEth
         : Number.isFinite(totalVol0) && totalVol0 > 0
         ? totalVol0
         : NaN
@@ -128,6 +134,8 @@ export function calcWnovaPairMetrics(pair, wnovaAddress = WRAPPED_NATIVE_ADDRESS
     volume24hWnova =
       Number.isFinite(oneDayVol1) && oneDayVol1 > 0
         ? oneDayVol1
+        : Number.isFinite(oneDayVolEth) && oneDayVolEth > 0
+        ? oneDayVolEth
         : Number.isFinite(totalVol1) && totalVol1 > 0
         ? totalVol1
         : NaN

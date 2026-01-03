@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import styled from 'styled-components'
 import NovaLogo from '../../assets/nova.svg'
 import { TONY_ADDRESS, WRAPPED_NATIVE_ADDRESS } from '../../constants/urls'
+import { getTokenMetadata } from '../../utils/localMetadata'
 
 const BAD_IMAGES = {}
 
@@ -46,9 +47,17 @@ const colorFromAddress = (addr) => {
 
 export default function TokenLogo({ address, header = false, size = '24px', ...rest }) {
   const [error, setError] = useState(false)
+  const [customLogo, setCustomLogo] = useState(null)
 
   useEffect(() => {
     setError(false)
+    setCustomLogo(null)
+    if (typeof window === 'undefined') return
+    if (!address) return
+    const meta = getTokenMetadata(address)
+    if (meta?.logo) {
+      setCustomLogo(meta.logo)
+    }
   }, [address])
 
   const normalized = address?.toLowerCase()
@@ -60,6 +69,22 @@ export default function TokenLogo({ address, header = false, size = '24px', ...r
           ?
         </FallbackLogo>
       </Inline>
+    )
+  }
+
+  if (customLogo) {
+    return (
+      <StyledNativeLogo size={size} {...rest}>
+        <img
+          src={customLogo}
+          style={{
+            boxShadow: '0px 6px 10px rgba(0, 0, 0, 0.075)',
+            borderRadius: '24px',
+          }}
+          onError={() => setError(true)}
+          alt=""
+        />
+      </StyledNativeLogo>
     )
   }
 

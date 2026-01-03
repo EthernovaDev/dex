@@ -58,6 +58,15 @@
 - Deploys an ERC-20 token via TokenFactory.
 - Optional: create a WNOVA pair + add initial liquidity in one flow.
 - Outputs token address, pair address, and explorer links; includes “Add to MetaMask”.
+- Token metadata (logo/description/socials) is stored locally in the browser (localStorage) and reused by Analytics.
+  - Key: `novadex:token-metadata`
+  - Pair mapping: `novadex:pair-metadata`
+  - This is off-chain metadata; it does not affect the token contract.
+
+## Boosted Pairs (24h)
+- Boost a pair from its Pair page (Analytics) to appear in the Boosted section for 24h.
+- Fee: 10 NOVA (wrapped to WNOVA) sent to BoostRegistry.
+- If the pair contract is not deployed yet, Analytics will show “Pair not found on-chain” with a CTA to create the pool.
 
 ## Import Pool States
 - If factory.getPair returns zero: UI shows “Pool not found” with CTA “Create pool (add liquidity)”.

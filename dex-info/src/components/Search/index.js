@@ -19,6 +19,7 @@ import { PAIR_SEARCH, TOKEN_SEARCH } from '../../apollo/queries'
 import FormattedName from '../FormattedName'
 import { TYPE } from '../../Theme'
 import { updateNameData } from '../../utils/data'
+import { useLocalTokenList, useLocalPairList } from '../../hooks/useTokenMetadata'
 
 const Container = styled.div`
   height: 48px;
@@ -155,6 +156,8 @@ export const Search = ({ small = false }) => {
 
   let allPairs = useAllPairsInUniswap()
   const allPairData = useAllPairData()
+  const localTokens = useLocalTokenList()
+  const localPairs = useLocalPairList()
 
   const [showMenu, toggleMenu] = useState(false)
   const [value, setValue] = useState('')
@@ -220,6 +223,14 @@ export const Search = ({ small = false }) => {
   }
 
   // add the searched tokens to the list if not found yet
+  const localTokenEntries = (localTokens || [])
+    .filter((token) => token?.id && token?.symbol)
+    .map((token) => ({
+      id: token.id,
+      symbol: token.symbol,
+      name: token.name || token.symbol,
+    }))
+
   allTokens = allTokens.concat(
     searchedTokens.filter((searchedToken) => {
       let included = false
@@ -232,6 +243,9 @@ export const Search = ({ small = false }) => {
       })
       return !included
     })
+  )
+  allTokens = allTokens.concat(
+    localTokenEntries.filter((localToken) => !allTokens.find((token) => token?.id === localToken.id))
   )
 
   let uniqueTokens = []
@@ -256,6 +270,26 @@ export const Search = ({ small = false }) => {
       })
       return !included
     })
+  )
+
+  const localPairEntries = (localPairs || [])
+    .filter((pair) => pair?.id && pair?.token0 && pair?.token1)
+    .map((pair) => ({
+      id: pair.id,
+      token0: {
+        id: pair.token0,
+        symbol: pair.symbol0 || 'TOKEN0',
+        name: pair.symbol0 || 'Token0',
+      },
+      token1: {
+        id: pair.token1,
+        symbol: pair.symbol1 || 'TOKEN1',
+        name: pair.symbol1 || 'Token1',
+      },
+    }))
+
+  allPairs = allPairs.concat(
+    localPairEntries.filter((localPair) => !allPairs.find((pair) => pair?.id === localPair.id))
   )
 
   let uniquePairs = []

@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/rules-of-hooks */
 import React, { useEffect, useState } from 'react'
 import { withRouter } from 'react-router-dom'
 import 'feather-icons'
@@ -59,6 +58,7 @@ import { TREASURY_FEE_BPS } from '../constants/base'
 import { useOnchainPair } from '../hooks/useOnchainPair'
 import { useOnchainTokenInfo } from '../hooks/useOnchainTokenInfo'
 import { usePairBoostInfo, useBoostRegistryConfig } from '../hooks/useBoostedPairs'
+import { useTokenMetadata, usePairMetadata } from '../hooks/useTokenMetadata'
 import { ethers } from 'ethers'
 
 const explorerBase = EXPLORER_URL.replace(/\/+$/, '')
@@ -169,6 +169,7 @@ function PairPageContent({ pairId, history }) {
   const onchainPair = useOnchainPair(pairId, RPC_URL)
   const token0Info = useOnchainTokenInfo(onchainPair?.data?.token0, RPC_URL)
   const token1Info = useOnchainTokenInfo(onchainPair?.data?.token1, RPC_URL)
+  const pairMeta = usePairMetadata(pairId)
   const onchainPairData = React.useMemo(() => {
     if (!onchainPair?.data?.token0 || !onchainPair?.data?.token1) return null
     const token0Address = onchainPair.data.token0
@@ -227,6 +228,8 @@ function PairPageContent({ pairId, history }) {
   const wnovaLower = normAddr(WNOVA_ADDRESS)
   const token0Id = normAddr(token0?.id)
   const token1Id = normAddr(token1?.id)
+  const token0Meta = useTokenMetadata(token0?.id)
+  const token1Meta = useTokenMetadata(token1?.id)
   const isToken0Wnova = isAddrEq(token0Id, wnovaLower)
   const isToken1Wnova = isAddrEq(token1Id, wnovaLower)
   const reserveWnova = isToken0Wnova ? reserve0 : isToken1Wnova ? reserve1 : null
@@ -434,17 +437,31 @@ function PairPageContent({ pairId, history }) {
 
   const pairLoaded = Boolean(token0?.id && token1?.id)
   const showIndexWarning = pairOverrideChecked && !pairOverride && !pairData
-  const pairNotIndexed = showIndexWarning && !pairLoaded && !onchainPairData
+  const onchainMissing = onchainPair?.status === 'not_found'
+  const pairNotIndexed = (showIndexWarning && !pairLoaded && !onchainPairData) || (isNotFound && !onchainPairData)
 
-  if (pairNotIndexed || (isNotFound && !onchainPairData)) {
+  if (pairNotIndexed) {
     return (
       <PageWrapper>
         <ContentWrapperLarge>
           <Panel style={{ padding: '2rem' }} data-testid="pair-not-indexed">
-            <TYPE.main fontSize="1.25rem">Pair not indexed yet</TYPE.main>
+            <TYPE.main fontSize="1.25rem">{onchainMissing ? 'Pair not found on-chain' : 'Pair not indexed yet'}</TYPE.main>
             <TYPE.light style={{ marginTop: '0.5rem' }}>
-              This pair is not available in the subgraph yet. It may still be syncing.
+              {onchainMissing
+                ? 'The pair contract was not found on-chain. Create the pool and add liquidity first.'
+                : 'This pair is not available in the subgraph yet. It may still be syncing.'}
             </TYPE.light>
+            {boostActive && (
+              <TYPE.light style={{ marginTop: '0.5rem' }} color="text2">
+                Boosted · {boostRemainingHours}h remaining
+              </TYPE.light>
+            )}
+            {pairMeta?.token0 && pairMeta?.token1 && (
+              <TYPE.light style={{ marginTop: '0.5rem' }}>
+                Token0: {pairMeta.symbol0 || shortenAddress(pairMeta.token0)} · Token1:{' '}
+                {pairMeta.symbol1 || shortenAddress(pairMeta.token1)}
+              </TYPE.light>
+            )}
             <Link
               external
               href={`${explorerBase}/address/${pairId}`}
@@ -452,6 +469,15 @@ function PairPageContent({ pairId, history }) {
             >
               View on Explorer ↗
             </Link>
+            {pairMeta?.token0 && pairMeta?.token1 && (
+              <Link
+                external
+                href={getPoolLink(pairMeta.token0, pairMeta.token1)}
+                style={{ marginTop: '0.5rem', display: 'inline-flex' }}
+              >
+                Create pool / add liquidity ↗
+              </Link>
+            )}
             {pairOverrideError ? (
               <TYPE.light style={{ marginTop: '0.75rem' }}>
                 Subgraph error: {pairOverrideError?.message || 'unknown'}
@@ -745,6 +771,77 @@ function PairPageContent({ pairId, history }) {
                     </Hover>
                   </AutoColumn>
                 </Panel>
+                {(token0Meta || token1Meta) && (
+                  <Panel style={{ height: '100%' }}>
+                    <AutoColumn gap="12px">
+                      <TYPE.main>Token profiles</TYPE.main>
+                      {token0Meta && (
+                        <AutoColumn gap="6px">
+                          <TYPE.main fontSize={14}>{token0?.symbol || 'Token0'}</TYPE.main>
+                          {token0Meta.description && (
+                            <TYPE.light fontSize={12} color="text2">
+                              {token0Meta.description}
+                            </TYPE.light>
+                          )}
+                          <AutoRow gap="10px" style={{ flexWrap: 'wrap' }}>
+                            {token0Meta.website && (
+                              <Link external href={token0Meta.website}>
+                                Website ↗
+                              </Link>
+                            )}
+                            {token0Meta.twitter && (
+                              <Link external href={token0Meta.twitter}>
+                                X ↗
+                              </Link>
+                            )}
+                            {token0Meta.telegram && (
+                              <Link external href={token0Meta.telegram}>
+                                Telegram ↗
+                              </Link>
+                            )}
+                            {token0Meta.discord && (
+                              <Link external href={token0Meta.discord}>
+                                Discord ↗
+                              </Link>
+                            )}
+                          </AutoRow>
+                        </AutoColumn>
+                      )}
+                      {token1Meta && (
+                        <AutoColumn gap="6px" style={{ marginTop: 8 }}>
+                          <TYPE.main fontSize={14}>{token1?.symbol || 'Token1'}</TYPE.main>
+                          {token1Meta.description && (
+                            <TYPE.light fontSize={12} color="text2">
+                              {token1Meta.description}
+                            </TYPE.light>
+                          )}
+                          <AutoRow gap="10px" style={{ flexWrap: 'wrap' }}>
+                            {token1Meta.website && (
+                              <Link external href={token1Meta.website}>
+                                Website ↗
+                              </Link>
+                            )}
+                            {token1Meta.twitter && (
+                              <Link external href={token1Meta.twitter}>
+                                X ↗
+                              </Link>
+                            )}
+                            {token1Meta.telegram && (
+                              <Link external href={token1Meta.telegram}>
+                                Telegram ↗
+                              </Link>
+                            )}
+                            {token1Meta.discord && (
+                              <Link external href={token1Meta.discord}>
+                                Discord ↗
+                              </Link>
+                            )}
+                          </AutoRow>
+                        </AutoColumn>
+                      )}
+                    </AutoColumn>
+                  </Panel>
+                )}
                 <Panel
                   style={{
                     gridColumn: below1080 ? '1' : '2/4',

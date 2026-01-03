@@ -75,6 +75,10 @@ export function useOnchainPair(pairAddress, rpcUrl) {
           'latest',
         ])
 
+        if (!token0Raw || token0Raw === '0x' || !token1Raw || token1Raw === '0x' || !reservesRaw || reservesRaw === '0x') {
+          throw new Error('Pair not deployed')
+        }
+
         const token0 = utils.getAddress(utils.defaultAbiCoder.decode(['address'], token0Raw)[0])
         const token1 = utils.getAddress(utils.defaultAbiCoder.decode(['address'], token1Raw)[0])
         const [reserve0, reserve1] = utils.defaultAbiCoder.decode(['uint112', 'uint112', 'uint32'], reservesRaw)
@@ -93,7 +97,8 @@ export function useOnchainPair(pairAddress, rpcUrl) {
         }
       } catch (err) {
         if (!cancelled && requestRef.current === requestId) {
-          setState((prev) => ({ ...prev, status: prev.data ? 'ok' : 'error', error: err?.message || 'RPC error' }))
+          const message = err?.message || 'RPC error'
+          setState((prev) => ({ ...prev, status: prev.data ? 'ok' : message === 'Pair not deployed' ? 'not_found' : 'error', error: message }))
         }
       }
     }

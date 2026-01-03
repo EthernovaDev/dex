@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+/opt/novadex/dex/scripts/require_clean_worktree.sh
+
 ENV_FILE="/opt/novadex/.env"
 if [ ! -f "$ENV_FILE" ]; then
   echo "[ERROR] Missing $ENV_FILE" >&2

@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/rules-of-hooks */
 import React, { useEffect, useState } from 'react'
 import { withRouter } from 'react-router-dom'
 import 'feather-icons'
@@ -159,8 +160,7 @@ const WarningGrouping = styled.div`
   pointer-events: ${({ disabled }) => disabled && 'none'};
 `
 
-function PairPage({ pairAddress, history }) {
-  const pairId = normAddr(pairAddress) || pairAddress
+function PairPageContent({ pairId, history }) {
   const pairData = usePairData(pairId)
   const isNotFound = Boolean(pairData?.__notFound)
   const [pairOverride, setPairOverride] = useState(null)
@@ -212,83 +212,6 @@ function PairPage({ pairAddress, history }) {
     volumeChangeETH,
     liquidityChangeETH,
   } = activePair || {}
-
-  useEffect(() => {
-    document.querySelector('body').scrollTo(0, 0)
-  }, [])
-
-  const switchToEthernova = async (ethereum) => {
-    const chainIdHex = '0x12fd1'
-    const params = {
-      chainId: chainIdHex,
-      chainName: 'Ethernova',
-      rpcUrls: ['https://rpc.ethnova.net'],
-      nativeCurrency: { name: 'NOVA', symbol: 'NOVA', decimals: 18 },
-      blockExplorerUrls: ['https://explorer.ethnova.net'],
-    }
-    try {
-      await ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: chainIdHex }] })
-    } catch (err) {
-      if (err?.code === 4902) {
-        await ethereum.request({ method: 'wallet_addEthereumChain', params: [params] })
-      } else {
-        throw err
-      }
-    }
-  }
-
-  const handleBoost = async () => {
-    if (!BOOST_REGISTRY_ADDRESS) {
-      setBoostStatus({ state: 'error', error: 'Boost registry not configured', tx: null })
-      return
-    }
-    if (!pairId) {
-      setBoostStatus({ state: 'error', error: 'Missing pair address', tx: null })
-      return
-    }
-    if (!window?.ethereum) {
-      setBoostStatus({ state: 'error', error: 'No wallet detected', tx: null })
-      return
-    }
-
-    try {
-      setBoostStatus({ state: 'pending', error: null, tx: null })
-      await window.ethereum.request({ method: 'eth_requestAccounts' })
-      await switchToEthernova(window.ethereum)
-      const provider = new ethers.providers.Web3Provider(window.ethereum)
-      const network = await provider.getNetwork()
-      if (Number(network.chainId) !== 77777) {
-        throw new Error('Wrong network: switch to Ethernova')
-      }
-      const signer = provider.getSigner()
-      const account = await signer.getAddress()
-
-      const boostContract = new ethers.Contract(BOOST_REGISTRY_ADDRESS, BOOST_ABI, signer)
-      const wnovaContract = new ethers.Contract(WNOVA_ADDRESS, ERC20_ABI, signer)
-
-      const feeAmount = boostFeeAmount
-      const novaBalance = await provider.getBalance(account)
-      let tx
-
-      if (novaBalance.gte(feeAmount)) {
-        tx = await boostContract.boostPair(pairId, BOOST_DURATION, { value: feeAmount })
-      } else {
-        const allowance = await wnovaContract.allowance(account, BOOST_REGISTRY_ADDRESS)
-        if (allowance.lt(feeAmount)) {
-          const approveTx = await wnovaContract.approve(BOOST_REGISTRY_ADDRESS, feeAmount)
-          await approveTx.wait(1)
-        }
-        tx = await boostContract.boostPair(pairId, BOOST_DURATION)
-      }
-
-      setBoostStatus({ state: 'submitted', error: null, tx: tx.hash })
-      await tx.wait(1)
-      setBoostStatus({ state: 'confirmed', error: null, tx: tx.hash })
-    } catch (err) {
-      const message = err?.message || 'Boost failed'
-      setBoostStatus({ state: 'error', error: message, tx: null })
-    }
-  }
 
   const transactions = usePairTransactions(pairId)
   const hasTransactions = Boolean(
@@ -436,25 +359,82 @@ function PairPage({ pairAddress, history }) {
     }
   }, [pairId])
 
-  const isValidPair = Boolean(pairId && isAddress(pairId))
+  const switchToEthernova = async (ethereum) => {
+    const chainIdHex = '0x12fd1'
+    const params = {
+      chainId: chainIdHex,
+      chainName: 'Ethernova',
+      rpcUrls: ['https://rpc.ethnova.net'],
+      nativeCurrency: { name: 'NOVA', symbol: 'NOVA', decimals: 18 },
+      blockExplorerUrls: ['https://explorer.ethnova.net'],
+    }
+    try {
+      await ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: chainIdHex }] })
+    } catch (err) {
+      if (err?.code === 4902) {
+        await ethereum.request({ method: 'wallet_addEthereumChain', params: [params] })
+      } else {
+        throw err
+      }
+    }
+  }
+
+  const handleBoost = async () => {
+    if (!BOOST_REGISTRY_ADDRESS) {
+      setBoostStatus({ state: 'error', error: 'Boost registry not configured', tx: null })
+      return
+    }
+    if (!pairId) {
+      setBoostStatus({ state: 'error', error: 'Missing pair address', tx: null })
+      return
+    }
+    if (!window?.ethereum) {
+      setBoostStatus({ state: 'error', error: 'No wallet detected', tx: null })
+      return
+    }
+
+    try {
+      setBoostStatus({ state: 'pending', error: null, tx: null })
+      await window.ethereum.request({ method: 'eth_requestAccounts' })
+      await switchToEthernova(window.ethereum)
+      const provider = new ethers.providers.Web3Provider(window.ethereum)
+      const network = await provider.getNetwork()
+      if (Number(network.chainId) !== 77777) {
+        throw new Error('Wrong network: switch to Ethernova')
+      }
+      const signer = provider.getSigner()
+      const account = await signer.getAddress()
+
+      const boostContract = new ethers.Contract(BOOST_REGISTRY_ADDRESS, BOOST_ABI, signer)
+      const wnovaContract = new ethers.Contract(WNOVA_ADDRESS, ERC20_ABI, signer)
+
+      const feeAmount = boostFeeAmount
+      const novaBalance = await provider.getBalance(account)
+      let tx
+
+      if (novaBalance.gte(feeAmount)) {
+        tx = await boostContract.boostPair(pairId, BOOST_DURATION, { value: feeAmount })
+      } else {
+        const allowance = await wnovaContract.allowance(account, BOOST_REGISTRY_ADDRESS)
+        if (allowance.lt(feeAmount)) {
+          const approveTx = await wnovaContract.approve(BOOST_REGISTRY_ADDRESS, feeAmount)
+          await approveTx.wait(1)
+        }
+        tx = await boostContract.boostPair(pairId, BOOST_DURATION)
+      }
+
+      setBoostStatus({ state: 'submitted', error: null, tx: tx.hash })
+      await tx.wait(1)
+      setBoostStatus({ state: 'confirmed', error: null, tx: tx.hash })
+    } catch (err) {
+      const message = err?.message || 'Boost failed'
+      setBoostStatus({ state: 'error', error: message, tx: null })
+    }
+  }
+
   const pairLoaded = Boolean(token0?.id && token1?.id)
   const showIndexWarning = pairOverrideChecked && !pairOverride && !pairData
   const pairNotIndexed = showIndexWarning && !pairLoaded && !onchainPairData
-
-  if (!isValidPair) {
-    return (
-      <PageWrapper>
-        <ContentWrapperLarge>
-          <Panel style={{ padding: '2rem' }}>
-            <TYPE.main fontSize="1.25rem">Invalid pair address</TYPE.main>
-            <TYPE.light style={{ marginTop: '0.5rem' }}>
-              The pair address in the URL is not a valid EVM address.
-            </TYPE.light>
-          </Panel>
-        </ContentWrapperLarge>
-      </PageWrapper>
-    )
-  }
 
   if (pairNotIndexed || (isNotFound && !onchainPairData)) {
     return (
@@ -873,6 +853,28 @@ function PairPage({ pairAddress, history }) {
       </ContentWrapperLarge>
     </PageWrapper>
   )
+}
+
+function PairPage({ pairAddress, history }) {
+  const pairId = normAddr(pairAddress) || pairAddress
+  const isValidPair = Boolean(pairId && isAddress(pairId))
+
+  if (!isValidPair) {
+    return (
+      <PageWrapper>
+        <ContentWrapperLarge>
+          <Panel style={{ padding: '2rem' }}>
+            <TYPE.main fontSize="1.25rem">Invalid pair address</TYPE.main>
+            <TYPE.light style={{ marginTop: '0.5rem' }}>
+              The pair address in the URL is not a valid EVM address.
+            </TYPE.light>
+          </Panel>
+        </ContentWrapperLarge>
+      </PageWrapper>
+    )
+  }
+
+  return <PairPageContent pairId={pairId} history={history} />
 }
 
 export default withRouter(PairPage)

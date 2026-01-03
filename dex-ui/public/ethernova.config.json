@@ -19,12 +19,13 @@
   },
   "contracts": {
     "factory": "0x80d81D354557A5acDda0a2e3f6c2D563b9Ca4E15",
-    "router": "0x5473551e02954EF90B5F3c2201dBdE5bb0691612",
-    "swapRouter": "0x5473551e02954EF90B5F3c2201dBdE5bb0691612",
+    "router": "0x82182daF75473de4EA53bB7961ba945107eA1c9C",
+    "swapRouter": "0x82182daF75473de4EA53bB7961ba945107eA1c9C",
     "liquidityRouter": "0xa295E35c8384C74588a9608743FB69a7e2cF64da",
     "multicall2": "0x1e43D57fB3E86f81AC8C20b396Ab939FbEB3a545",
     "pair": "0xcbcBFC021644d4e819eBF2dE40B0CAF4Dcb9E5d1",
-    "tokenFactory": "0xfAE9CEaDc547fE115af1DfE6A73f6f0386a878AA"
+    "tokenFactory": "0xfAE9CEaDc547fE115af1DfE6A73f6f0386a878AA",
+    "boostRegistry": "0xd77c78F49C59aB0BccF131a71F63B125352D5240"
   },
   "startBlock": 70636
 }

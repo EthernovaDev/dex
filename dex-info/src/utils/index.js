@@ -90,6 +90,80 @@ export function getLiquidityWnova(pair, wnovaAddress = WRAPPED_NATIVE_ADDRESS) {
   return reserveWnova
 }
 
+export function calcWnovaPairMetrics(pair, wnovaAddress = WRAPPED_NATIVE_ADDRESS) {
+  const wnovaLower = normAddr(wnovaAddress)
+  const token0Id = normAddr(pair?.token0?.id)
+  const token1Id = normAddr(pair?.token1?.id)
+  const isToken0Wnova = isAddrEq(token0Id, wnovaLower)
+  const isToken1Wnova = isAddrEq(token1Id, wnovaLower)
+  const hasWnova = isToken0Wnova || isToken1Wnova
+  const reserve0 = toNum(pair?.reserve0 ?? null, NaN)
+  const reserve1 = toNum(pair?.reserve1 ?? null, NaN)
+  const reserveWnova = isToken0Wnova ? reserve0 : isToken1Wnova ? reserve1 : NaN
+  const reserveOther = isToken0Wnova ? reserve1 : isToken1Wnova ? reserve0 : NaN
+
+  const oneDayVol0 = toNum(pair?.oneDayVolumeToken0 ?? null, NaN)
+  const oneDayVol1 = toNum(pair?.oneDayVolumeToken1 ?? null, NaN)
+  const oneWeekVol0 = toNum(pair?.oneWeekVolumeToken0 ?? null, NaN)
+  const oneWeekVol1 = toNum(pair?.oneWeekVolumeToken1 ?? null, NaN)
+  const totalVol0 = toNum(pair?.volumeToken0 ?? null, NaN)
+  const totalVol1 = toNum(pair?.volumeToken1 ?? null, NaN)
+
+  let volume24hWnova = NaN
+  let volume7dWnova = NaN
+  if (isToken0Wnova) {
+    volume24hWnova =
+      Number.isFinite(oneDayVol0) && oneDayVol0 > 0
+        ? oneDayVol0
+        : Number.isFinite(totalVol0) && totalVol0 > 0
+        ? totalVol0
+        : NaN
+    volume7dWnova =
+      Number.isFinite(oneWeekVol0) && oneWeekVol0 > 0
+        ? oneWeekVol0
+        : Number.isFinite(totalVol0) && totalVol0 > 0
+        ? totalVol0
+        : NaN
+  } else if (isToken1Wnova) {
+    volume24hWnova =
+      Number.isFinite(oneDayVol1) && oneDayVol1 > 0
+        ? oneDayVol1
+        : Number.isFinite(totalVol1) && totalVol1 > 0
+        ? totalVol1
+        : NaN
+    volume7dWnova =
+      Number.isFinite(oneWeekVol1) && oneWeekVol1 > 0
+        ? oneWeekVol1
+        : Number.isFinite(totalVol1) && totalVol1 > 0
+        ? totalVol1
+        : NaN
+  }
+
+  const priceTokenPerWnova =
+    Number.isFinite(reserveWnova) && reserveWnova > 0 && Number.isFinite(reserveOther)
+      ? reserveOther / reserveWnova
+      : NaN
+  const priceWnovaPerToken =
+    Number.isFinite(reserveOther) && reserveOther > 0 && Number.isFinite(reserveWnova)
+      ? reserveWnova / reserveOther
+      : NaN
+
+  const liquidityWnova = Number.isFinite(reserveWnova) && reserveWnova > 0 ? reserveWnova : NaN
+
+  return {
+    hasWnova,
+    isToken0Wnova,
+    isToken1Wnova,
+    reserveWnova,
+    reserveOther,
+    volume24hWnova,
+    volume7dWnova,
+    priceTokenPerWnova,
+    priceWnovaPerToken,
+    liquidityWnova
+  }
+}
+
 export const toNiceDate = (date) => {
   let x = dayjs.utc(dayjs.unix(date)).format('MMM DD')
   return x

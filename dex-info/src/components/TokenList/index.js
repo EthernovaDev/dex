@@ -9,7 +9,16 @@ import { CustomLink } from '../Link'
 import Row from '../Row'
 import { Divider } from '..'
 
-import { formattedNum, formattedPercent, formatPrice, isFiniteNum, toNum, normAddr, isAddrEq } from '../../utils'
+import {
+  formattedNum,
+  formattedPercent,
+  formatPrice,
+  isFiniteNum,
+  toNum,
+  normAddr,
+  isAddrEq,
+  calcWnovaPairMetrics
+} from '../../utils'
 import { useMedia } from 'react-use'
 import { withRouter } from 'react-router-dom'
 import { TOKEN_BLACKLIST } from '../../constants'
@@ -176,42 +185,26 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
       const token0Id = normAddr(pair?.token0?.id)
       const token1Id = normAddr(pair?.token1?.id)
       if (!token0Id || !token1Id) return
-      const isToken0Wnova = isAddrEq(token0Id, wnovaLower)
-      const isToken1Wnova = isAddrEq(token1Id, wnovaLower)
-      if (!isToken0Wnova && !isToken1Wnova) return
 
-      const reserve0 = toNum(pair?.reserve0 ?? null, NaN)
-      const reserve1 = toNum(pair?.reserve1 ?? null, NaN)
-      if (!Number.isFinite(reserve0) || !Number.isFinite(reserve1)) return
+      const metrics = calcWnovaPairMetrics(pair, wnovaLower)
+      if (!metrics.hasWnova) return
+      const tokenId = metrics.isToken0Wnova ? token1Id : token0Id
 
-      const reserveWnova = isToken0Wnova ? reserve0 : reserve1
-      const reserveToken = isToken0Wnova ? reserve1 : reserve0
-      const tokenId = isToken0Wnova ? token1Id : token0Id
+      const reserveWnova = metrics.reserveWnova
+      const liquidityWnova = metrics.liquidityWnova
+      const volumeWnova = metrics.volume24hWnova
+      const priceWnova = metrics.priceWnovaPerToken
 
-      const priceWnova = reserveToken > 0 ? reserveWnova / reserveToken : NaN
-      const volEth = toNum(pair?.oneDayVolumeETH ?? pair?.volumeETH ?? null, NaN)
-      const volToken0 = toNum(pair?.oneDayVolumeToken0 ?? pair?.volumeToken0 ?? null, NaN)
-      const volToken1 = toNum(pair?.oneDayVolumeToken1 ?? pair?.volumeToken1 ?? null, NaN)
-      const volumeWnova = Number.isFinite(volEth)
-        ? volEth
-        : isToken0Wnova
-        ? Number.isFinite(volToken0)
-          ? volToken0
-          : 0
-        : Number.isFinite(volToken1)
-        ? volToken1
-        : 0
-
-      if (Number.isFinite(reserveWnova)) totalWnovaLiquidity += reserveWnova
+      if (Number.isFinite(liquidityWnova)) totalWnovaLiquidity += liquidityWnova
       if (Number.isFinite(volumeWnova)) totalWnovaVolume += volumeWnova
 
       const existing = metricsByToken[tokenId] || {
         liquidityWnova: 0,
         volume24hWnova: 0,
         priceWnova: null,
-        bestReserveWnova: 0,
+        bestReserveWnova: 0
       }
-      const nextLiquidity = existing.liquidityWnova + (Number.isFinite(reserveWnova) ? reserveWnova : 0)
+      const nextLiquidity = existing.liquidityWnova + (Number.isFinite(liquidityWnova) ? liquidityWnova : 0)
       const nextVolume = existing.volume24hWnova + (Number.isFinite(volumeWnova) ? volumeWnova : 0)
       let price = existing.priceWnova
       let bestReserveWnova = existing.bestReserveWnova
@@ -368,7 +361,60 @@ function TopTokenList({ tokens, itemMax = 10, useTracked = false }) {
     }
 
     if (fromSubgraph && fromSubgraph.length) {
-      return fromSubgraph.map(applyOverrides)
+      const mapped = fromSubgraph.map(applyOverrides)
+      const existingIds = new Set(mapped.map((token) => normAddr(token?.id)).filter(Boolean))
+      const extra = []
+      if (wnovaLower && !existingIds.has(wnovaLower)) {
+        extra.push(
+          applyOverrides({
+            id: wnovaLower,
+            symbol: 'WNOVA',
+            name: 'Wrapped NOVA',
+            derivedETH: 1,
+            priceETH: 1,
+            totalLiquidity: 0,
+            totalLiquidityETH:
+              Number.isFinite(metricsByToken?.[wnovaLower]?.liquidityWnova) && metricsByToken[wnovaLower].liquidityWnova > 0
+                ? metricsByToken[wnovaLower].liquidityWnova
+                : reserveWnova > 0
+                ? reserveWnova
+                : 0,
+            oneDayVolumeETH:
+              Number.isFinite(metricsByToken?.[wnovaLower]?.volume24hWnova) && metricsByToken[wnovaLower].volume24hWnova > 0
+                ? metricsByToken[wnovaLower].volume24hWnova
+                : pairVolumeWnova > 0
+                ? pairVolumeWnova
+                : 0,
+            priceChangeETH: 0,
+          })
+        )
+      }
+      if (tonyLower && !existingIds.has(tonyLower)) {
+        extra.push(
+          applyOverrides({
+            id: tonyLower,
+            symbol: 'TONY',
+            name: 'STARK - IRON MAN',
+            derivedETH: tonyPriceWnova || 0,
+            priceETH: tonyPriceWnova || 0,
+            totalLiquidity: 0,
+            totalLiquidityETH:
+              Number.isFinite(metricsByToken?.[tonyLower]?.liquidityWnova) && metricsByToken[tonyLower].liquidityWnova > 0
+                ? metricsByToken[tonyLower].liquidityWnova
+                : reserveWnova > 0
+                ? reserveWnova
+                : 0,
+            oneDayVolumeETH:
+              Number.isFinite(metricsByToken?.[tonyLower]?.volume24hWnova) && metricsByToken[tonyLower].volume24hWnova > 0
+                ? metricsByToken[tonyLower].volume24hWnova
+                : pairVolumeWnova > 0
+                ? pairVolumeWnova
+                : 0,
+            priceChangeETH: 0,
+          })
+        )
+      }
+      return mapped.concat(extra)
     }
 
     const fallback = []

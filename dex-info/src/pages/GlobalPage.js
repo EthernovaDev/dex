@@ -3,10 +3,9 @@ import { withRouter } from 'react-router-dom'
 import { Box } from 'rebass'
 import styled from 'styled-components'
 
-import { AutoRow, RowBetween } from '../components/Row'
+import { RowBetween } from '../components/Row'
 import { AutoColumn } from '../components/Column'
 import PairList from '../components/PairList'
-import TopTokenList from '../components/TokenList'
 import TxnList from '../components/TxnList'
 import GlobalChart from '../components/GlobalChart'
 import Search from '../components/Search'
@@ -18,32 +17,19 @@ import { useAllPairData, usePairData } from '../contexts/PairData'
 import { useLatestBlocks } from '../contexts/Application'
 import { useMedia } from 'react-use'
 import Panel from '../components/Panel'
-import { useAllTokenData } from '../contexts/TokenData'
-import { formattedNum, formattedPercent, getReserveWnova, isFiniteNum, normAddr, isAddrEq } from '../utils'
+import { formattedNum, formattedPercent, getReserveWnova, isFiniteNum, normAddr, isAddrEq, calcWnovaPairMetrics } from '../utils'
 import { TYPE, ThemedBackground } from '../Theme'
 import { transparentize } from 'polished'
 import { CustomLink } from '../components/Link'
 
 import { PageWrapper, ContentWrapper } from '../components'
-import CheckBox from '../components/Checkbox'
-import QuestionHelper from '../components/QuestionHelper'
+import { useBoostedPairs } from '../hooks/useBoostedPairs'
 
 const RPC_URL = process.env.REACT_APP_RPC_URL
 const FACTORY_ADDRESS = process.env.REACT_APP_FACTORY_ADDRESS
 const WNOVA_ADDRESS = process.env.REACT_APP_WNOVA_ADDRESS
 const TONY_ADDRESS = process.env.REACT_APP_TONY_ADDRESS
 const PAIR_ADDRESS = process.env.REACT_APP_PAIR_ADDRESS
-
-const ListOptions = styled(AutoRow)`
-  height: 40px;
-  width: 100%;
-  font-size: 1.25rem;
-  font-weight: 600;
-
-  @media screen and (max-width: 640px) {
-    font-size: 1rem;
-  }
-`
 
 const GridRow = styled.div`
   display: grid;
@@ -55,10 +41,37 @@ const GridRow = styled.div`
   justify-content: space-between;
 `
 
+const SectionHeader = styled(RowBetween)`
+  margin-top: 2rem;
+  margin-bottom: 0.5rem;
+`
+
+const BoostedList = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+
+  @media screen and (max-width: 900px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const BoostCard = styled(Panel)`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 120px;
+`
+
+const EmptyState = styled.div`
+  padding: 1rem;
+  color: ${({ theme }) => theme.text2};
+  font-size: 0.9rem;
+`
+
 function GlobalPage() {
   // get data for lists and totals
   const allPairs = useAllPairData()
-  const allTokens = useAllTokenData()
   const transactions = useGlobalTransactions()
   const pinnedPair = usePairData(PAIR_ADDRESS)
   const [latestBlock] = useLatestBlocks()
@@ -78,9 +91,10 @@ function GlobalPage() {
   }, [])
 
   // for tracked data on pairs
-  const [useTracked, setUseTracked] = useState(true)
+  const [useTracked] = useState(true)
   const wnovaLower = normAddr(WNOVA_ADDRESS)
   const tonyLower = normAddr(TONY_ADDRESS)
+  const boostState = useBoostedPairs(RPC_URL, 60000)
   const pairSwaps = useMemo(() => {
     if (!transactions?.swaps?.length || !wnovaLower || !tonyLower) return []
     return transactions.swaps.filter((swap) => {
@@ -144,6 +158,53 @@ function GlobalPage() {
     : reserveWnova > 0
     ? reserveWnova
     : totalLiquidityETH || 0
+
+  const pairLookup = useMemo(() => {
+    if (!allPairs) return {}
+    const lookup = {}
+    Object.keys(allPairs).forEach((key) => {
+      lookup[normAddr(key)] = allPairs[key]
+    })
+    return lookup
+  }, [allPairs])
+
+  const wnovaPairs = useMemo(() => {
+    if (!allPairs || !wnovaLower) return []
+    return Object.values(allPairs)
+      .map((pair) => ({ pair, metrics: calcWnovaPairMetrics(pair, WNOVA_ADDRESS) }))
+      .filter((entry) => entry.metrics.hasWnova && isFiniteNum(entry.metrics.liquidityWnova))
+  }, [allPairs, wnovaLower])
+
+  const hotPairs = useMemo(() => wnovaPairs.filter((entry) => entry.metrics.liquidityWnova >= 100), [wnovaPairs])
+
+  const trendingPairs = useMemo(
+    () => wnovaPairs.filter((entry) => entry.metrics.liquidityWnova >= 50 && entry.metrics.liquidityWnova < 100),
+    [wnovaPairs]
+  )
+
+  const toPairMap = (list) => {
+    if (!list || !list.length) return null
+    return list.reduce((acc, entry) => {
+      acc[entry.pair.id] = entry.pair
+      return acc
+    }, {})
+  }
+
+  const boostedPairs = useMemo(() => {
+    const boosted = boostState?.boosted || []
+    if (!boosted.length) return []
+    return boosted
+      .map((item) => {
+        const pair = pairLookup[normAddr(item.pair)]
+        return {
+          pair,
+          address: item.pair,
+          booster: item.booster,
+          expiresAt: item.expiresAt,
+        }
+      })
+      .filter((entry) => entry.address)
+  }, [boostState, pairLookup])
 
   return (
     <PageWrapper>
@@ -231,35 +292,66 @@ function GlobalPage() {
               </Panel>
             </AutoColumn>
           )}
-          <ListOptions gap="10px" style={{ marginTop: '2rem', marginBottom: '.5rem' }}>
-            <RowBetween>
-              <TYPE.main fontSize={'1.125rem'} style={{ whiteSpace: 'nowrap' }}>
-                Top Tokens
-              </TYPE.main>
-              <CustomLink to={'/tokens'}>See All</CustomLink>
-            </RowBetween>
-          </ListOptions>
+          <SectionHeader>
+            <TYPE.main fontSize={'1.125rem'} style={{ whiteSpace: 'nowrap' }}>
+              Boosted (24h)
+            </TYPE.main>
+            <CustomLink to={`/pair/${PAIR_ADDRESS}`}>Boost your pair</CustomLink>
+          </SectionHeader>
+          {boostedPairs.length ? (
+            <BoostedList>
+              {boostedPairs.map((entry) => {
+                const pairName = entry.pair
+                  ? `${entry.pair.token0?.symbol || '?'} / ${entry.pair.token1?.symbol || '?'}`
+                  : `${entry.address.slice(0, 6)}…${entry.address.slice(-4)}`
+                const timeLeft = Math.max(0, entry.expiresAt - Math.floor(Date.now() / 1000))
+                const hoursLeft = Math.max(1, Math.ceil(timeLeft / 3600))
+                return (
+                  <BoostCard key={entry.address}>
+                    <RowBetween>
+                      <TYPE.main>{pairName}</TYPE.main>
+                      <CustomLink to={`/pair/${entry.address}`}>View</CustomLink>
+                    </RowBetween>
+                    <TYPE.light fontSize={12}>
+                      Boosted by {entry.booster?.slice(0, 6)}…{entry.booster?.slice(-4)}
+                    </TYPE.light>
+                    <TYPE.main fontSize={'1.125rem'}>{hoursLeft}h remaining</TYPE.main>
+                  </BoostCard>
+                )
+              })}
+            </BoostedList>
+          ) : (
+            <Panel>
+              <EmptyState>No boosted pairs yet. Boost your pair for 10 NOVA to appear here.</EmptyState>
+            </Panel>
+          )}
+
+          <SectionHeader>
+            <TYPE.main fontSize={'1.125rem'} style={{ whiteSpace: 'nowrap' }}>
+              Hot (≥ 100 WNOVA)
+            </TYPE.main>
+            <CustomLink to={'/pairs'}>See all</CustomLink>
+          </SectionHeader>
           <Panel style={{ marginTop: '6px', padding: '1.125rem 0 ' }}>
-            <TopTokenList tokens={allTokens} />
+            {hotPairs.length ? (
+              <PairList pairs={toPairMap(hotPairs)} useTracked={useTracked} maxItems={10} />
+            ) : (
+              <EmptyState>No pairs with ≥100 WNOVA liquidity yet.</EmptyState>
+            )}
           </Panel>
-          <ListOptions gap="10px" style={{ marginTop: '2rem', marginBottom: '.5rem' }}>
-            <RowBetween>
-              <TYPE.main fontSize={'1rem'} style={{ whiteSpace: 'nowrap' }}>
-                Top Pairs
-              </TYPE.main>
-              <AutoRow gap="4px" width="100%" justifyContent="flex-end">
-                <CheckBox
-                  checked={useTracked}
-                  setChecked={() => setUseTracked(!useTracked)}
-                  text={'Hide pairs without WNOVA'}
-                />
-                <QuestionHelper text="Values are shown in WNOVA; pairs without WNOVA are still listed but may not have volume estimates." />
-                <CustomLink to={'/pairs'}>See All</CustomLink>
-              </AutoRow>
-            </RowBetween>
-          </ListOptions>
+
+          <SectionHeader>
+            <TYPE.main fontSize={'1.125rem'} style={{ whiteSpace: 'nowrap' }}>
+              Trending (≥ 50 WNOVA)
+            </TYPE.main>
+            <CustomLink to={'/pairs'}>See all</CustomLink>
+          </SectionHeader>
           <Panel style={{ marginTop: '6px', padding: '1.125rem 0 ' }}>
-            <PairList pairs={allPairs} useTracked={useTracked} />
+            {trendingPairs.length ? (
+              <PairList pairs={toPairMap(trendingPairs)} useTracked={useTracked} maxItems={10} />
+            ) : (
+              <EmptyState>No pairs with ≥50 WNOVA liquidity yet.</EmptyState>
+            )}
           </Panel>
           <span>
             <TYPE.main fontSize={'1.125rem'} style={{ marginTop: '2rem' }}>

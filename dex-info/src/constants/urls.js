@@ -10,3 +10,4 @@ export const DEX_URL = process.env.REACT_APP_DEX_URL || origin
 export const WRAPPED_NATIVE_ADDRESS = (process.env.REACT_APP_WNOVA_ADDRESS || '').toLowerCase()
 export const TONY_ADDRESS = (process.env.REACT_APP_TONY_ADDRESS || '').toLowerCase()
 export const PAIR_ADDRESS = (process.env.REACT_APP_PAIR_ADDRESS || '').toLowerCase()
+export const BOOST_REGISTRY_ADDRESS = (process.env.REACT_APP_BOOST_REGISTRY_ADDRESS || '').toLowerCase()

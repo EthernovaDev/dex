@@ -53,14 +53,29 @@ import FormattedName from '../components/FormattedName'
 import { useListedTokens } from '../contexts/Application'
 import HoverText from '../components/HoverText'
 import { UNTRACKED_COPY, PAIR_BLACKLIST, BLOCKED_WARNINGS } from '../constants'
-import { EXPLORER_URL } from '../constants/urls'
+import { EXPLORER_URL, BOOST_REGISTRY_ADDRESS } from '../constants/urls'
 import { TREASURY_FEE_BPS } from '../constants/base'
+import { useOnchainPair } from '../hooks/useOnchainPair'
+import { useOnchainTokenInfo } from '../hooks/useOnchainTokenInfo'
+import { usePairBoostInfo, useBoostRegistryConfig } from '../hooks/useBoostedPairs'
+import { ethers } from 'ethers'
 
 const explorerBase = EXPLORER_URL.replace(/\/+$/, '')
 const RPC_URL = process.env.REACT_APP_RPC_URL
 const FACTORY_ADDRESS = process.env.REACT_APP_FACTORY_ADDRESS
 const WNOVA_ADDRESS = process.env.REACT_APP_WNOVA_ADDRESS
 const TONY_ADDRESS = process.env.REACT_APP_TONY_ADDRESS
+
+const BOOST_ABI = [
+  'function boostPair(address pair, uint256 duration) payable',
+  'function feeAmount() view returns (uint256)',
+]
+const ERC20_ABI = [
+  'function allowance(address owner, address spender) view returns (uint256)',
+  'function approve(address spender, uint256 value) returns (bool)',
+  'function balanceOf(address owner) view returns (uint256)',
+]
+const BOOST_DURATION = 60 * 60 * 24
 
 const DashboardWrapper = styled.div`
   width: 100%;
@@ -151,7 +166,41 @@ function PairPage({ pairAddress, history }) {
   const [pairOverride, setPairOverride] = useState(null)
   const [pairOverrideError, setPairOverrideError] = useState(null)
   const [pairOverrideChecked, setPairOverrideChecked] = useState(false)
-  const activePair = pairOverride || pairData
+  const onchainPair = useOnchainPair(pairId, RPC_URL)
+  const token0Info = useOnchainTokenInfo(onchainPair?.data?.token0, RPC_URL)
+  const token1Info = useOnchainTokenInfo(onchainPair?.data?.token1, RPC_URL)
+  const onchainPairData = React.useMemo(() => {
+    if (!onchainPair?.data?.token0 || !onchainPair?.data?.token1) return null
+    const token0Address = onchainPair.data.token0
+    const token1Address = onchainPair.data.token1
+    const token0Decimals = token0Info?.info?.decimals || 18
+    const token1Decimals = token1Info?.info?.decimals || 18
+    const reserve0 = ethers.utils.formatUnits(onchainPair.data.reserve0, token0Decimals)
+    const reserve1 = ethers.utils.formatUnits(onchainPair.data.reserve1, token1Decimals)
+    return {
+      id: pairId,
+      token0: {
+        id: token0Address,
+        symbol: token0Info?.info?.symbol || 'UNKNOWN',
+        name: token0Info?.info?.name || 'Unknown Token',
+        decimals: token0Decimals,
+      },
+      token1: {
+        id: token1Address,
+        symbol: token1Info?.info?.symbol || 'UNKNOWN',
+        name: token1Info?.info?.name || 'Unknown Token',
+        decimals: token1Decimals,
+      },
+      reserve0,
+      reserve1,
+      volumeToken0: '0',
+      volumeToken1: '0',
+      reserveETH: null,
+      trackedReserveETH: null,
+    }
+  }, [onchainPair, token0Info, token1Info, pairId])
+
+  const activePair = pairOverride || pairData || onchainPairData
   const {
     token0,
     token1,
@@ -167,6 +216,79 @@ function PairPage({ pairAddress, history }) {
   useEffect(() => {
     document.querySelector('body').scrollTo(0, 0)
   }, [])
+
+  const switchToEthernova = async (ethereum) => {
+    const chainIdHex = '0x12fd1'
+    const params = {
+      chainId: chainIdHex,
+      chainName: 'Ethernova',
+      rpcUrls: ['https://rpc.ethnova.net'],
+      nativeCurrency: { name: 'NOVA', symbol: 'NOVA', decimals: 18 },
+      blockExplorerUrls: ['https://explorer.ethnova.net'],
+    }
+    try {
+      await ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: chainIdHex }] })
+    } catch (err) {
+      if (err?.code === 4902) {
+        await ethereum.request({ method: 'wallet_addEthereumChain', params: [params] })
+      } else {
+        throw err
+      }
+    }
+  }
+
+  const handleBoost = async () => {
+    if (!BOOST_REGISTRY_ADDRESS) {
+      setBoostStatus({ state: 'error', error: 'Boost registry not configured', tx: null })
+      return
+    }
+    if (!pairId) {
+      setBoostStatus({ state: 'error', error: 'Missing pair address', tx: null })
+      return
+    }
+    if (!window?.ethereum) {
+      setBoostStatus({ state: 'error', error: 'No wallet detected', tx: null })
+      return
+    }
+
+    try {
+      setBoostStatus({ state: 'pending', error: null, tx: null })
+      await window.ethereum.request({ method: 'eth_requestAccounts' })
+      await switchToEthernova(window.ethereum)
+      const provider = new ethers.providers.Web3Provider(window.ethereum)
+      const network = await provider.getNetwork()
+      if (Number(network.chainId) !== 77777) {
+        throw new Error('Wrong network: switch to Ethernova')
+      }
+      const signer = provider.getSigner()
+      const account = await signer.getAddress()
+
+      const boostContract = new ethers.Contract(BOOST_REGISTRY_ADDRESS, BOOST_ABI, signer)
+      const wnovaContract = new ethers.Contract(WNOVA_ADDRESS, ERC20_ABI, signer)
+
+      const feeAmount = boostFeeAmount
+      const novaBalance = await provider.getBalance(account)
+      let tx
+
+      if (novaBalance.gte(feeAmount)) {
+        tx = await boostContract.boostPair(pairId, BOOST_DURATION, { value: feeAmount })
+      } else {
+        const allowance = await wnovaContract.allowance(account, BOOST_REGISTRY_ADDRESS)
+        if (allowance.lt(feeAmount)) {
+          const approveTx = await wnovaContract.approve(BOOST_REGISTRY_ADDRESS, feeAmount)
+          await approveTx.wait(1)
+        }
+        tx = await boostContract.boostPair(pairId, BOOST_DURATION)
+      }
+
+      setBoostStatus({ state: 'submitted', error: null, tx: tx.hash })
+      await tx.wait(1)
+      setBoostStatus({ state: 'confirmed', error: null, tx: tx.hash })
+    } catch (err) {
+      const message = err?.message || 'Boost failed'
+      setBoostStatus({ state: 'error', error: message, tx: null })
+    }
+  }
 
   const transactions = usePairTransactions(pairId)
   const hasTransactions = Boolean(
@@ -255,6 +377,19 @@ function PairPage({ pairAddress, history }) {
   const below900 = useMedia('(max-width: 900px)')
   const below600 = useMedia('(max-width: 600px)')
 
+  const boostInfoState = usePairBoostInfo(pairId, RPC_URL)
+  const boostConfigState = useBoostRegistryConfig(RPC_URL)
+  const boostFeeAmount = boostConfigState?.config?.feeAmount
+    ? ethers.BigNumber.from(boostConfigState.config.feeAmount)
+    : ethers.utils.parseUnits('10', 18)
+  const boostFeeDisplay = formattedNum(Number(ethers.utils.formatUnits(boostFeeAmount, 18)), false)
+  const boostExpiresAt = boostInfoState?.info?.expiresAt || 0
+  const boostActive = boostExpiresAt > Math.floor(Date.now() / 1000)
+  const boostRemainingHours = boostActive
+    ? Math.max(1, Math.ceil((boostExpiresAt - Math.floor(Date.now() / 1000)) / 3600))
+    : 0
+  const [boostStatus, setBoostStatus] = useState({ state: 'idle', error: null, tx: null })
+
   const [dismissed, markAsDismissed] = usePathDismissed(history.location.pathname)
   const [latestBlock] = useLatestBlocks()
   const subgraphReady = Boolean(latestBlock)
@@ -303,7 +438,8 @@ function PairPage({ pairAddress, history }) {
 
   const isValidPair = Boolean(pairId && isAddress(pairId))
   const pairLoaded = Boolean(token0?.id && token1?.id)
-  const pairNotIndexed = pairOverrideChecked && !pairLoaded && !pairOverride
+  const showIndexWarning = pairOverrideChecked && !pairOverride && !pairData
+  const pairNotIndexed = showIndexWarning && !pairLoaded && !onchainPairData
 
   if (!isValidPair) {
     return (
@@ -320,7 +456,7 @@ function PairPage({ pairAddress, history }) {
     )
   }
 
-  if (pairNotIndexed || isNotFound) {
+  if (pairNotIndexed || (isNotFound && !onchainPairData)) {
     return (
       <PageWrapper>
         <ContentWrapperLarge>
@@ -375,6 +511,14 @@ function PairPage({ pairAddress, history }) {
         address={pairId}
       />
       <ContentWrapperLarge>
+        {showIndexWarning && (
+          <Panel style={{ padding: '1rem', marginBottom: '1rem' }} data-testid="pair-index-warning">
+            <TYPE.main fontSize="0.95rem">Pair not indexed yet — showing on-chain snapshot.</TYPE.main>
+            <TYPE.light fontSize="0.85rem" style={{ marginTop: '0.25rem' }}>
+              Subgraph data may be incomplete until indexing finishes.
+            </TYPE.light>
+          </Panel>
+        )}
         <RowBetween>
           <TYPE.body data-testid="pair-breadcrumb">
             <BasicLink to="/pairs">{'Pairs '}</BasicLink>→{' '}
@@ -382,6 +526,36 @@ function PairPage({ pairAddress, history }) {
           </TYPE.body>
           {!below600 && <Search small={true} />}
         </RowBetween>
+        {BOOST_REGISTRY_ADDRESS && (
+          <Panel style={{ marginTop: '0.75rem', padding: '1rem' }} data-testid="pair-boost-panel">
+            <RowBetween>
+              <TYPE.main>Boost this pair</TYPE.main>
+              {boostActive ? (
+                <TYPE.light fontSize={12}>Boosted ({boostRemainingHours}h left)</TYPE.light>
+              ) : (
+                <TYPE.light fontSize={12}>24h feature</TYPE.light>
+              )}
+            </RowBetween>
+            <TYPE.light fontSize={12} style={{ marginTop: '0.25rem' }}>
+              Pay {boostFeeDisplay} NOVA (wrapped to WNOVA) to pin this pair in Boosted for 24h.
+            </TYPE.light>
+            <RowBetween style={{ marginTop: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <ButtonDark disabled={boostStatus.state === 'pending'} onClick={handleBoost}>
+                {boostStatus.state === 'pending' ? 'Boosting…' : 'Boost pair'}
+              </ButtonDark>
+              {boostStatus.state === 'confirmed' && boostStatus.tx && (
+                <Link external href={`${explorerBase}/tx/${boostStatus.tx}`}>
+                  View tx ↗
+                </Link>
+              )}
+            </RowBetween>
+            {boostStatus.error && (
+              <TYPE.light fontSize={12} color="text2" style={{ marginTop: '0.5rem' }}>
+                {boostStatus.error}
+              </TYPE.light>
+            )}
+          </Panel>
+        )}
         <WarningGrouping
           disabled={
             !dismissed && listedTokens && !(listedTokens.includes(token0?.id) && listedTokens.includes(token1?.id))
@@ -435,6 +609,11 @@ function PairPage({ pairAddress, history }) {
                         ''
                       )}
                     </TYPE.main>
+                    {boostActive && (
+                      <Panel style={{ padding: '6px 10px', borderRadius: '999px' }}>
+                        <TYPE.light fontSize={12}>Boosted · {boostRemainingHours}h</TYPE.light>
+                      </Panel>
+                    )}
                   </RowFixed>
                 </RowFixed>
                 <RowFixed

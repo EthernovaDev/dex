@@ -270,6 +270,7 @@ async function verifyPairOnchain(pairAddress, token0, token1) {
   const [onchain0, onchain1] = await Promise.all([contract.token0(), contract.token1()])
   if (token0 && normAddr(onchain0) !== normAddr(token0)) throw new Error('token0 mismatch')
   if (token1 && normAddr(onchain1) !== normAddr(token1)) throw new Error('token1 mismatch')
+  return { token0: normAddr(onchain0), token1: normAddr(onchain1) }
 }
 
 function buildMetadata(entry) {
@@ -570,7 +571,7 @@ app.post('/api/metadata/pair', authGuard, async (req, res) => {
 
     const token0 = normAddr(req.body?.token0 || '')
     const token1 = normAddr(req.body?.token1 || '')
-    await verifyPairOnchain(pairAddress, token0, token1)
+    const onchainTokens = await verifyPairOnchain(pairAddress, token0, token1)
 
     const now = Math.floor(Date.now() / 1000)
     db.prepare(
@@ -578,8 +579,8 @@ app.post('/api/metadata/pair', authGuard, async (req, res) => {
        VALUES(@address, @token0, @token1, @creator, @metadata_uri, COALESCE(@created_at, @now), @now)`
     ).run({
       address: pairAddress,
-      token0: token0 || verification.token,
-      token1: token1 || '',
+      token0: token0 || onchainTokens?.token0 || verification.token,
+      token1: token1 || onchainTokens?.token1 || '',
       creator: verification.creator,
       metadata_uri: '',
       created_at: now,

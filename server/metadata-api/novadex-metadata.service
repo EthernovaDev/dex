@@ -1,0 +1,23 @@
+[Unit]
+Description=NovaDEX Metadata API (pump-fun)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/novadex/dex
+EnvironmentFile=/etc/novadex/metadata.env
+ExecStart=/usr/bin/node /opt/novadex/dex/server/metadata-api/index.js
+Restart=always
+RestartSec=2
+LimitNOFILE=65535
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/novadex /opt/novadex/dex
+
+[Install]
+WantedBy=multi-user.target

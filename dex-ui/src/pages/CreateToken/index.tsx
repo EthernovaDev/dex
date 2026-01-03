@@ -182,6 +182,43 @@ const TextInput = styled.input`
   }
 `
 
+const TextArea = styled.textarea`
+  background: ${({ theme }) => theme.bg2};
+  border: 1px solid ${({ theme }) => theme.bg3};
+  border-radius: 12px;
+  padding: 12px 14px;
+  color: ${({ theme }) => theme.text1};
+  outline: none;
+  font-size: 14px;
+  width: 100%;
+  min-height: 90px;
+  resize: vertical;
+
+  ::placeholder {
+    color: ${({ theme }) => theme.text3};
+  }
+`
+
+const FileInput = styled.input`
+  color: ${({ theme }) => theme.text2};
+  font-size: 13px;
+`
+
+const PreviewRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+`
+
+const LogoPreview = styled.img`
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  object-fit: cover;
+  border: 1px solid ${({ theme }) => theme.bg3};
+  background: ${({ theme }) => theme.bg2};
+`
+
 const ToggleRow = styled.div`
   display: flex;
   align-items: center;
@@ -230,10 +267,28 @@ export default function CreateToken() {
   const tokenFactoryAddress = config.contracts.tokenFactory ?? ''
   const wnovaAddress = config.tokens.WNOVA.address
 
+  const isValidUrl = useCallback((value: string) => {
+    if (!value) return true
+    try {
+      const url = new URL(value)
+      return url.protocol === 'http:' || url.protocol === 'https:'
+    } catch (err) {
+      return false
+    }
+  }, [])
+
   const [name, setName] = useState('')
   const [symbol, setSymbol] = useState('')
   const [decimals, setDecimals] = useState('18')
   const [totalSupply, setTotalSupply] = useState('')
+  const [description, setDescription] = useState('')
+  const [logoUrl, setLogoUrl] = useState('')
+  const [logoFile, setLogoFile] = useState<File | null>(null)
+  const [logoPreview, setLogoPreview] = useState('')
+  const [website, setWebsite] = useState('')
+  const [twitter, setTwitter] = useState('')
+  const [telegram, setTelegram] = useState('')
+  const [discord, setDiscord] = useState('')
   const [autoList, setAutoList] = useState(false)
   const [tokenAmount, setTokenAmount] = useState('')
   const [wnovaAmount, setWnovaAmount] = useState('')
@@ -244,6 +299,41 @@ export default function CreateToken() {
   const [error, setError] = useState<string | null>(null)
   const [allowance, setAllowance] = useState('0')
   const [approvePending, setApprovePending] = useState(false)
+
+  const isValidSymbol = useMemo(() => {
+    if (!symbol) return false
+    if (symbol.length < 2 || symbol.length > 11) return false
+    return /^[A-Z0-9]+$/.test(symbol)
+  }, [symbol])
+
+  const isValidName = useMemo(() => name.trim().length > 1, [name])
+  const isValidSupply = useMemo(() => {
+    const parsed = Number(totalSupply)
+    return Number.isFinite(parsed) && parsed > 0
+  }, [totalSupply])
+
+  const metadataProfile = useMemo(() => {
+    const profile: Record<string, string> = {}
+    if (description) profile.description = description
+    if (logoPreview) profile.logo = logoPreview
+    if (website) profile.website = website
+    if (twitter) profile.twitter = twitter
+    if (telegram) profile.telegram = telegram
+    if (discord) profile.discord = discord
+    return profile
+  }, [description, logoPreview, website, twitter, telegram, discord])
+
+  const isFormValid =
+    Boolean(account) &&
+    Boolean(tokenFactoryAddress) &&
+    isValidName &&
+    isValidSymbol &&
+    isValidSupply &&
+    isValidUrl(website) &&
+    isValidUrl(twitter) &&
+    isValidUrl(telegram) &&
+    isValidUrl(discord) &&
+    isValidUrl(logoUrl)
 
   const signer = useMemo(() => (account && library ? library.getSigner(account) : null), [account, library])
 
@@ -317,6 +407,24 @@ export default function CreateToken() {
     }
   }, [autoList, tokenAmount, wnovaAmount])
 
+  useEffect(() => {
+    if (!logoFile) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result
+      if (typeof result === 'string') setLogoPreview(result)
+    }
+    reader.readAsDataURL(logoFile)
+  }, [logoFile])
+
+  useEffect(() => {
+    if (logoUrl) {
+      setLogoPreview(logoUrl)
+    } else if (!logoFile) {
+      setLogoPreview('')
+    }
+  }, [logoUrl, logoFile])
+
   const onApprove = useCallback(async () => {
     if (!signer || !account || !wnovaAddress || !tokenFactoryAddress) return
     if (!wnovaAmountRaw) return
@@ -341,12 +449,16 @@ export default function CreateToken() {
       setError('TokenFactory not configured')
       return
     }
-    if (!name.trim() || !symbol.trim()) {
-      setError('Name and symbol are required')
+    if (!isValidName || !isValidSymbol) {
+      setError('Name and ticker are required (2–11 uppercase letters/numbers).')
       return
     }
-    if (!parsedDecimals || !supplyRaw) {
+    if (!isValidSupply || !parsedDecimals || !supplyRaw) {
       setError('Invalid decimals or supply')
+      return
+    }
+    if (!isValidUrl(website) || !isValidUrl(twitter) || !isValidUrl(telegram) || !isValidUrl(discord) || !isValidUrl(logoUrl)) {
+      setError('Please enter valid URLs for optional metadata fields.')
       return
     }
     if (autoList) {
@@ -471,12 +583,34 @@ export default function CreateToken() {
             <Divider />
 
             <Field>
-              <Label>Name</Label>
-              <TextInput placeholder="Nova Meme" value={name} onChange={e => setName(e.target.value)} />
+              <Label>Coin name</Label>
+              <TextInput
+                placeholder="Name your coin"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                data-testid="create-input-name"
+              />
             </Field>
             <Field>
-              <Label>Symbol</Label>
-              <TextInput placeholder="NOVA" value={symbol} onChange={e => setSymbol(e.target.value.toUpperCase())} />
+              <Label>Ticker</Label>
+              <TextInput
+                placeholder="Add a coin ticker (e.g. DOGE)"
+                value={symbol}
+                onChange={e =>
+                  setSymbol(
+                    e.target.value
+                      .toUpperCase()
+                      .replace(/[^A-Z0-9]/g, '')
+                      .slice(0, 11)
+                  )
+                }
+                data-testid="create-input-symbol"
+              />
+              {!isValidSymbol && symbol ? (
+                <TYPE.body fontSize={12} color="#FCA5A5">
+                  Use 2–11 uppercase letters or numbers.
+                </TYPE.body>
+              ) : null}
             </Field>
             <SplitRow>
               <Field style={{ flex: 1 }}>
@@ -498,6 +632,88 @@ export default function CreateToken() {
                 />
               </Field>
             </SplitRow>
+
+            <Field>
+              <Label>Description (Optional)</Label>
+              <TextArea
+                placeholder="Write a short description"
+                value={description}
+                onChange={e => setDescription(e.target.value.slice(0, 200))}
+                data-testid="create-input-description"
+              />
+              <TYPE.body fontSize={12} color="text3">
+                {description.length}/200
+              </TYPE.body>
+            </Field>
+
+            <Field>
+              <Label>Logo / Image (Optional)</Label>
+              <TextInput
+                placeholder="Image URL"
+                value={logoUrl}
+                onChange={e => setLogoUrl(e.target.value)}
+                data-testid="create-input-logo-url"
+              />
+              <FileInput
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={e => setLogoFile(e.target.files?.[0] || null)}
+                data-testid="create-input-logo-file"
+              />
+              {logoPreview ? (
+                <PreviewRow>
+                  <LogoPreview src={logoPreview} alt="Token logo preview" />
+                  <TYPE.body fontSize={12} color="text3">
+                    Logo is off-chain metadata only.
+                  </TYPE.body>
+                </PreviewRow>
+              ) : (
+                <TYPE.body fontSize={12} color="text3">
+                  Logo is off-chain metadata only.
+                </TYPE.body>
+              )}
+            </Field>
+
+            <Field>
+              <Label>Website (Optional)</Label>
+              <TextInput
+                placeholder="Add URL"
+                value={website}
+                onChange={e => setWebsite(e.target.value)}
+                data-testid="create-input-website"
+              />
+            </Field>
+
+            <SplitRow>
+              <Field style={{ flex: 1 }}>
+                <Label>X (Optional)</Label>
+                <TextInput
+                  placeholder="Add URL"
+                  value={twitter}
+                  onChange={e => setTwitter(e.target.value)}
+                  data-testid="create-input-x"
+                />
+              </Field>
+              <Field style={{ flex: 1 }}>
+                <Label>Telegram (Optional)</Label>
+                <TextInput
+                  placeholder="Add URL"
+                  value={telegram}
+                  onChange={e => setTelegram(e.target.value)}
+                  data-testid="create-input-telegram"
+                />
+              </Field>
+            </SplitRow>
+
+            <Field>
+              <Label>Discord (Optional)</Label>
+              <TextInput
+                placeholder="Add URL"
+                value={discord}
+                onChange={e => setDiscord(e.target.value)}
+                data-testid="create-input-discord"
+              />
+            </Field>
 
             <ToggleRow>
               <input type="checkbox" checked={autoList} onChange={e => setAutoList(e.target.checked)} />
@@ -556,7 +772,7 @@ export default function CreateToken() {
 
             <ButtonPrimary
               style={{ marginTop: 16, width: '100%' }}
-              disabled={pending || !account || !tokenFactoryAddress}
+              disabled={pending || !isFormValid}
               onClick={onDeploy}
               data-testid="create-deploy-btn"
             >
@@ -594,6 +810,28 @@ export default function CreateToken() {
                     Add token to MetaMask
                   </ButtonLight>
                 )}
+                {createdToken && Object.keys(metadataProfile).length ? (
+                  <ButtonLight
+                    onClick={() =>
+                      navigator.clipboard.writeText(
+                        JSON.stringify(
+                          {
+                            name,
+                            symbol,
+                            decimals,
+                            totalSupply,
+                            ...metadataProfile,
+                          },
+                          null,
+                          2
+                        )
+                      )
+                    }
+                    style={{ width: '100%' }}
+                  >
+                    Copy Token Profile JSON
+                  </ButtonLight>
+                ) : null}
                 {createdToken && (
                   <ButtonLight as="a" href={`/#/swap?outputCurrency=${createdToken}`} style={{ width: '100%' }}>
                     Go to Swap

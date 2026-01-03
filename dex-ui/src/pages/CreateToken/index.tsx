@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import styled from 'styled-components'
 import { Contract } from '@ethersproject/contracts'
 import { parseUnits } from '@ethersproject/units'
+import { AddressZero } from '@ethersproject/constants'
 import { SwapPoolTabs } from '../../components/NavigationTabs'
 import { ButtonPrimary, ButtonLight } from '../../components/Button'
 import { AutoColumn } from '../../components/Column'
@@ -283,10 +284,19 @@ const ERC20_ABI = [
   'function allowance(address owner,address spender) view returns (uint256)'
 ]
 
+const FACTORY_ABI = [
+  'function getPair(address tokenA,address tokenB) view returns (address pair)'
+]
+
+const PAIR_ABI = [
+  'function getReserves() view returns (uint112,uint112,uint32)'
+]
+
 const TOKEN_METADATA_KEY = 'novadex:token-metadata'
 const PAIR_METADATA_KEY = 'novadex:pair-metadata'
+const METADATA_BASE = '/api/metadata'
 
-const saveMetadata = (tokenAddress: string, pairAddress: string | null, payload: Record<string, any>) => {
+const saveMetadataLocal = (tokenAddress: string, pairAddress: string | null, payload: Record<string, any>) => {
   if (typeof window === 'undefined' || !tokenAddress) return
   try {
     const tokenKey = tokenAddress.toLowerCase()
@@ -314,11 +324,84 @@ const saveMetadata = (tokenAddress: string, pairAddress: string | null, payload:
   }
 }
 
+const fetchSignatureHeaders = async (account: string, signer: any) => {
+  const challengeResp = await fetch(`${METADATA_BASE}/challenge`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ address: account })
+  })
+  const challenge = await challengeResp.json()
+  if (!challenge?.message) {
+    throw new Error('Metadata signature challenge failed')
+  }
+  const signature = await signer.signMessage(challenge.message)
+  return {
+    'x-address': account,
+    'x-signature': signature
+  }
+}
+
+const saveMetadataRemote = async (
+  tokenAddress: string,
+  pairAddress: string | null,
+  payload: Record<string, any>,
+  txHash: string,
+  account: string,
+  signer: any,
+  logoFile: File | null,
+  logoUrl: string
+) => {
+  if (!tokenAddress || !txHash) throw new Error('Missing token address or tx hash')
+  if (!account || !signer) throw new Error('Wallet signature required')
+
+  const tokenHeaders = await fetchSignatureHeaders(account, signer)
+  const form = new FormData()
+  form.append('tokenAddress', tokenAddress)
+  form.append('txHash', txHash)
+  form.append('name', payload.name || '')
+  form.append('symbol', payload.symbol || '')
+  form.append('description', payload.description || '')
+  form.append('website', payload.website || '')
+  form.append('twitter', payload.twitter || '')
+  form.append('telegram', payload.telegram || '')
+  form.append('discord', payload.discord || '')
+  if (pairAddress) form.append('pairAddress', pairAddress)
+  if (logoFile) {
+    form.append('logo', logoFile)
+  } else if (logoUrl) {
+    form.append('logoUrl', logoUrl)
+  }
+
+  const tokenResp = await fetch(`${METADATA_BASE}/token`, {
+    method: 'POST',
+    headers: tokenHeaders,
+    body: form
+  })
+  if (!tokenResp.ok) {
+    const text = await tokenResp.text()
+    throw new Error(text || 'Token metadata save failed')
+  }
+
+  if (pairAddress && payload?.pairMeta) {
+    const pairHeaders = await fetchSignatureHeaders(account, signer)
+    const pairResp = await fetch(`${METADATA_BASE}/pair`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...pairHeaders },
+      body: JSON.stringify({ ...payload.pairMeta, pairAddress, txHash })
+    })
+    if (!pairResp.ok) {
+      const text = await pairResp.text()
+      throw new Error(text || 'Pair metadata save failed')
+    }
+  }
+}
+
 export default function CreateToken() {
   const { account, chainId, library } = useActiveWeb3React()
   const { config } = useEthernovaConfig()
 
   const tokenFactoryAddress = config.contracts.tokenFactory ?? ''
+  const factoryAddress = config.contracts.factory ?? ''
   const wnovaAddress = config.tokens.WNOVA.address
 
   const isValidUrl = useCallback((value: string) => {
@@ -351,6 +434,7 @@ export default function CreateToken() {
   const [createdPair, setCreatedPair] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [metaStatus, setMetaStatus] = useState<{ state: string; error?: string } | null>(null)
   const [allowance, setAllowance] = useState('0')
   const [approvePending, setApprovePending] = useState(false)
 
@@ -573,18 +657,42 @@ export default function CreateToken() {
         }
       }
       if (tokenAddress) {
+        let verifiedPair = pairAddress
+        if (autoList && factoryAddress && wnovaAddress) {
+          try {
+            const pairFactory = new Contract(factoryAddress, FACTORY_ABI, signer)
+            const resolvedPair = await pairFactory.getPair(tokenAddress, wnovaAddress)
+            if (resolvedPair && resolvedPair !== AddressZero) {
+              const pairContract = new Contract(resolvedPair, PAIR_ABI, signer)
+              const reserves = await pairContract.getReserves()
+              if (reserves[0].gt(0) && reserves[1].gt(0)) {
+                verifiedPair = resolvedPair
+                setCreatedPair(resolvedPair)
+              } else {
+                setError('Pool created but has no liquidity yet')
+              }
+            } else {
+              setError('Pool creation failed (pair not found)')
+            }
+          } catch {
+            setError('Pool creation could not be verified')
+          }
+        }
+
         const tokenLower = tokenAddress.toLowerCase()
         const wnovaLower = wnovaAddress?.toLowerCase?.()
-        const pairMeta = pairAddress && wnovaLower
-          ? {
-              token0: tokenLower < wnovaLower ? tokenLower : wnovaLower,
-              token1: tokenLower < wnovaLower ? wnovaLower : tokenLower,
-              symbol0: tokenLower < wnovaLower ? symbol.trim().toUpperCase() : NATIVE_SYMBOL,
-              symbol1: tokenLower < wnovaLower ? NATIVE_SYMBOL : symbol.trim().toUpperCase(),
-              createdAt: Date.now(),
-            }
-          : null
-        saveMetadata(tokenAddress, pairAddress || null, {
+        const pairMeta =
+          verifiedPair && wnovaLower
+            ? {
+                token0: tokenLower < wnovaLower ? tokenLower : wnovaLower,
+                token1: tokenLower < wnovaLower ? wnovaLower : tokenLower,
+                symbol0: tokenLower < wnovaLower ? symbol.trim().toUpperCase() : NATIVE_SYMBOL,
+                symbol1: tokenLower < wnovaLower ? NATIVE_SYMBOL : symbol.trim().toUpperCase(),
+                createdAt: Date.now(),
+              }
+            : null
+
+        const payload = {
           name: name.trim(),
           symbol: symbol.trim().toUpperCase(),
           decimals: parsedDecimals,
@@ -596,9 +704,28 @@ export default function CreateToken() {
           telegram: telegram || '',
           discord: discord || '',
           createdAt: Date.now(),
-          pair: pairAddress || undefined,
+          pair: verifiedPair || undefined,
           pairMeta: pairMeta || undefined,
-        })
+        }
+
+        try {
+          setMetaStatus({ state: 'saving' })
+          await saveMetadataRemote(
+            tokenAddress,
+            verifiedPair || null,
+            payload,
+            tx.hash,
+            account,
+            signer,
+            logoFile,
+            logoUrl
+          )
+          setMetaStatus({ state: 'saved' })
+        } catch (metaErr) {
+          const message = metaErr instanceof Error ? metaErr.message : 'Metadata save failed'
+          setMetaStatus({ state: 'error', error: message })
+          saveMetadataLocal(tokenAddress, verifiedPair || null, payload)
+        }
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Deploy failed'

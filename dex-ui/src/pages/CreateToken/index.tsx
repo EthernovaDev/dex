@@ -155,6 +155,7 @@ const SuccessBlock = styled.div`
   border: 1px solid ${({ theme }) => theme.bg3};
   border-radius: 12px;
   padding: 10px 12px;
+  width: 100%;
 `
 
 const SuccessLabel = styled.div`
@@ -616,6 +617,7 @@ export default function CreateToken() {
 
     setPending(true)
     setError(null)
+    setMetaStatus(null)
     setTxHash(null)
     setCreatedToken(null)
     setCreatedPair(null)
@@ -670,12 +672,15 @@ export default function CreateToken() {
                 setCreatedPair(resolvedPair)
               } else {
                 setError('Pool created but has no liquidity yet')
+                verifiedPair = null
               }
             } else {
               setError('Pool creation failed (pair not found)')
+              verifiedPair = null
             }
           } catch {
             setError('Pool creation could not be verified')
+            verifiedPair = null
           }
         }
 
@@ -733,7 +738,28 @@ export default function CreateToken() {
     } finally {
       setPending(false)
     }
-  }, [account, autoList, name, symbol, parsedDecimals, supplyRaw, tokenAmountRaw, wnovaAmountRaw, tokenFactoryAddress, signer, needsApproval])
+  }, [
+    account,
+    autoList,
+    description,
+    discord,
+    factoryAddress,
+    logoFile,
+    logoUrl,
+    name,
+    needsApproval,
+    parsedDecimals,
+    signer,
+    supplyRaw,
+    symbol,
+    telegram,
+    tokenAmountRaw,
+    tokenFactoryAddress,
+    twitter,
+    website,
+    wnovaAddress,
+    wnovaAmountRaw,
+  ])
 
   const onAddToMetaMask = useCallback(async () => {
     if (!createdToken || !symbol || !parsedDecimals) return
@@ -994,6 +1020,16 @@ export default function CreateToken() {
 
             {(txHash || createdToken || createdPair) && (
               <AutoColumn gap="sm" style={{ marginTop: 16, width: '100%' }} data-testid="create-success">
+                {metaStatus?.state && (
+                  <SuccessBlock>
+                    <SuccessLabel>Metadata</SuccessLabel>
+                    <SuccessValue>
+                      {metaStatus.state === 'saving' && 'Saving metadata...'}
+                      {metaStatus.state === 'saved' && 'Saved ✓'}
+                      {metaStatus.state === 'error' && `Saved locally (remote failed): ${metaStatus.error || ''}`}
+                    </SuccessValue>
+                  </SuccessBlock>
+                )}
                 {txHash && (
                   <SuccessBlock>
                     <SuccessLabel>Transaction</SuccessLabel>
@@ -1059,6 +1095,11 @@ export default function CreateToken() {
                 {createdPair && (
                   <ButtonLight as="a" href={`/info/#/pair/${createdPair}`} style={{ width: '100%' }}>
                     View Pair Analytics
+                  </ButtonLight>
+                )}
+                {createdPair && (
+                  <ButtonLight as="a" href={`/info/#/pair/${createdPair}#boost`} style={{ width: '100%' }}>
+                    Boost this pair (10 NOVA / 24h)
                   </ButtonLight>
                 )}
               </AutoColumn>

@@ -49,8 +49,9 @@ const GridRow = styled.div`
   display: grid;
   width: 100%;
   grid-template-columns: 1fr 1fr;
-  column-gap: 6px;
-  align-items: start;
+  column-gap: 12px;
+  row-gap: 12px;
+  align-items: stretch;
   justify-content: space-between;
 `
 
@@ -214,7 +215,7 @@ function GlobalPage() {
                   <GlobalChart display="liquidity" />
                 </div>
               </Panel>
-              <Panel style={{ height: '100%' }}>
+              <Panel style={{ height: '100%', minHeight: '300px' }}>
                 <div data-testid="chart-volume" style={{ height: '100%' }}>
                   <GlobalChart display="volume" />
                 </div>

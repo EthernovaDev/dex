@@ -123,6 +123,14 @@ done
 echo "[INFO] Building swap UI..."
 $RUN_AS bash -lc "cd ${DEX_UI_DIR} && rm -rf build && NODE_OPTIONS=--openssl-legacy-provider SKIP_PREFLIGHT_CHECK=true yarn build"
 
+echo "[INFO] Writing version stamp..."
+COMMIT_SHA="$(git -C /opt/novadex/dex rev-parse --short HEAD)"
+BUILD_JSON=$(cat <<JSON
+{"commit":"${COMMIT_SHA}","builtAt":"${BUILD_STAMP}"}
+JSON
+)
+echo "${BUILD_JSON}" > "${DEX_UI_DIR}/build/__version.json"
+
 echo "[INFO] Configuring analytics UI env..."
 cat > "${DEX_INFO_DIR}/.env.local" <<EOF
 REACT_APP_SUBGRAPH_URL=https://${DEX_DOMAIN}/info/subgraphs/name/novadex/novadex
@@ -141,6 +149,7 @@ EOF
 
 echo "[INFO] Building analytics UI..."
 $RUN_AS bash -lc "cd ${DEX_INFO_DIR} && corepack enable && yarn install && rm -rf build && NODE_OPTIONS=--openssl-legacy-provider SKIP_PREFLIGHT_CHECK=true yarn build"
+echo "${BUILD_JSON}" > "${DEX_INFO_DIR}/build/__version.json"
 
 echo "[INFO] Creating release snapshot..."
 RELEASES_DIR="/opt/novadex/releases"

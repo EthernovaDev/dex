@@ -52,8 +52,13 @@ async function main() {
     infoPair: false,
     infoOverview: false,
     infoTokens: false,
-    infoPairs: false
+    infoPairs: false,
+    create: false
   }
+  const requireNonZero = process.env.SMOKE_REQUIRE_NONZERO === '1'
+  const minLiqWnova = Number(process.env.SMOKE_MIN_LIQ_WNOVA || '0.1')
+  const minVolWnova = Number(process.env.SMOKE_MIN_VOL24H_WNOVA || '0.001')
+  const pairExpect = (process.env.SMOKE_PAIR_EXPECT || 'TONY-WNOVA').toUpperCase()
 
   let rpcSoft503 = 0
   let rpcOtherErrors = 0
@@ -149,6 +154,14 @@ async function main() {
   const isSoftRpcStatus = status => [429, 502, 503, 504].includes(status)
   const isHardConsole = text => /ChunkLoadError|Loading chunk|Uncaught|TypeError|ReferenceError|Invariant failed/i.test(text)
   const isIgnoredWarning = text => /Redux-LocalStorage-Simple/i.test(text)
+  const parseNumeric = text => {
+    if (!text) return null
+    const cleaned = text.replace(/[,\\s]/g, '')
+    if (!cleaned || cleaned.includes('—')) return null
+    const normalized = cleaned.startsWith('<') ? cleaned.slice(1) : cleaned
+    const value = parseFloat(normalized)
+    return Number.isFinite(value) ? value : null
+  }
 
   console.log(
     `[INFO] RPC thresholds: window=${rpcErrorWindowMs}ms softMax=${rpcSoftMax} consecMax=${rpcConsecMax} logMax=${rpcLogMax}`
@@ -572,6 +585,32 @@ async function main() {
   } else {
     routesRendered.infoTokens = true
   }
+  if (requireNonZero && tokenRows) {
+    const wnovaLower = wnovaAddress ? wnovaAddress.toLowerCase() : ''
+    const tonyLower = tonyAddress ? tonyAddress.toLowerCase() : ''
+    if (wnovaLower) {
+      const wnovaPriceCell = page.locator(`[data-testid="token-price-${wnovaLower}"]`)
+      const wnovaPriceText = (await wnovaPriceCell.count()) ? await wnovaPriceCell.innerText() : ''
+      const wnovaPrice = parseNumeric(wnovaPriceText)
+      if (!Number.isFinite(wnovaPrice) || wnovaPrice === null || wnovaPrice === 0) {
+        addLiquidityFailures.push(`WNOVA price missing or zero in tokens table (${wnovaPriceText})`)
+      }
+    }
+    if (tonyLower) {
+      const liqCell = page.locator(`[data-testid="token-liquidity-${tonyLower}"]`)
+      const volCell = page.locator(`[data-testid="token-volume-${tonyLower}"]`)
+      const liqText = (await liqCell.count()) ? await liqCell.innerText() : ''
+      const volText = (await volCell.count()) ? await volCell.innerText() : ''
+      const liqVal = parseNumeric(liqText)
+      const volVal = parseNumeric(volText)
+      if (!Number.isFinite(liqVal) || liqVal === null || liqVal < minLiqWnova) {
+        addLiquidityFailures.push(`TONY liquidity below threshold (${liqText})`)
+      }
+      if (!Number.isFinite(volVal) || volVal === null || volVal < minVolWnova) {
+        addLiquidityFailures.push(`TONY volume below threshold (${volText})`)
+      }
+    }
+  }
 
   currentRoute = 'info-pairs'
   await page.goto(`${BASE_URL}/info/#/pairs`, { waitUntil: 'domcontentloaded', timeout: 60000 })
@@ -706,6 +745,12 @@ async function main() {
       if ((pairDiagnostics.liqText || '').includes('—')) {
         addLiquidityFailures.push('Top pair liquidity shows — despite existing pool')
       }
+      if (requireNonZero) {
+        const liqValue = parseNumeric(pairDiagnostics.liqText || '')
+        if (!Number.isFinite(liqValue) || liqValue === null || liqValue < minLiqWnova) {
+          addLiquidityFailures.push(`Top pair liquidity below threshold (${pairDiagnostics.liqText || 'n/a'})`)
+        }
+      }
     } else {
       addLiquidityFailures.push('Top pair liquidity cell missing')
     }
@@ -761,6 +806,51 @@ async function main() {
     }
   }
   routesRendered.infoOverview = true
+
+  currentRoute = 'create'
+  await page.goto(`${DEBUG_URL}#/create`, { waitUntil: 'domcontentloaded', timeout: 60000 })
+  await page.waitForTimeout(2000)
+  const createPage = await page.locator('[data-testid="create-page"]').count()
+  if (!createPage) {
+    addLiquidityFailures.push('Create page missing root testid')
+  } else {
+    const panelCount = await page.locator('[data-testid="create-info-panel"]').count()
+    if (!panelCount) {
+      addLiquidityFailures.push('Create info panel missing on desktop view')
+    }
+    const inputChecks = [
+      ['create-input-name', 'Name your coin'],
+      ['create-input-symbol', 'Add a coin ticker'],
+      ['create-input-description', 'Write a short description'],
+      ['create-input-logo-url', 'Image URL'],
+      ['create-input-website', 'Add URL'],
+      ['create-input-x', 'Add URL'],
+      ['create-input-telegram', 'Add URL'],
+      ['create-input-discord', 'Add URL']
+    ]
+    for (const [testId, placeholder] of inputChecks) {
+      const locator = page.locator(`[data-testid="${testId}"]`)
+      if (!(await locator.count())) {
+        addLiquidityFailures.push(`Create input missing: ${testId}`)
+        continue
+      }
+      const value = await locator.inputValue()
+      if (value) {
+        addLiquidityFailures.push(`Create input ${testId} not empty by default`)
+      }
+      if (placeholder) {
+        const attr = await locator.getAttribute('placeholder')
+        if (attr && !attr.includes(placeholder)) {
+          addLiquidityFailures.push(`Create input ${testId} placeholder mismatch (${attr})`)
+        }
+      }
+    }
+    const fileInput = await page.locator('[data-testid="create-input-logo-file"]').count()
+    if (!fileInput) {
+      addLiquidityFailures.push('Create logo file picker missing')
+    }
+    routesRendered.create = true
+  }
 
   const rootHtml = await page.evaluate(() => {
     const root = document.getElementById('root')

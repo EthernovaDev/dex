@@ -186,6 +186,7 @@
 
 ## UI Click Smoke Test (Token Selector)
 - Script: `/opt/novadex/scripts/ui_click_smoke.mjs`
+- Script: `/opt/novadex/scripts/smoke_metrics_sanity.mjs`
 - Uses Playwright to open swap, click “Select a token”, attempt Pool -> Add Liquidity token selection, and loads both Add Liquidity routes (TONY/WNOVA and WNOVA/TONY) to ensure no crash screen appears.
 - Also checks Import Pool does not stay stuck on “Checking position.”
 - Logs and screenshots in: `/opt/novadex/scripts/out/`

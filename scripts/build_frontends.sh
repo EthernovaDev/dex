@@ -34,6 +34,7 @@ FACTORY="$(jq -r '.addresses.factory' "$DEPLOYMENTS")"
 ROUTER="$(jq -r '.addresses.router' "$DEPLOYMENTS")"
 TONY="$(jq -r '.addresses.tony' "$DEPLOYMENTS")"
 MULTICALL="$(jq -r '.addresses.multicall2 // empty' "$DEPLOYMENTS")"
+BOOST_REGISTRY="$(jq -r '.addresses.boostRegistry // empty' "$DEPLOYMENTS")"
 INIT_CODE_HASH="${INIT_CODE_HASH:-0x96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbee326c3e7da348845f}"
 EXPLORER_URL="${EXPLORER_URL:-https://explorer.ethnova.net}"
 
@@ -133,6 +134,7 @@ REACT_APP_WNOVA_ADDRESS=${WNOVA}
 REACT_APP_TONY_ADDRESS=${TONY}
 REACT_APP_FACTORY_ADDRESS=${FACTORY}
 REACT_APP_PAIR_ADDRESS=$(jq -r '.addresses.pair // empty' "$DEPLOYMENTS")
+REACT_APP_BOOST_REGISTRY_ADDRESS=${BOOST_REGISTRY}
 REACT_APP_BUILD_STAMP=${BUILD_STAMP}
 PUBLIC_URL=/info
 EOF

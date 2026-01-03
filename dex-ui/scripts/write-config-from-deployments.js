@@ -46,7 +46,8 @@ const config = {
     liquidityRouter: addresses.router || '',
     multicall2: addresses.multicall2 || '',
     pair: addresses.pair || '',
-    tokenFactory: addresses.tokenFactory || ''
+    tokenFactory: addresses.tokenFactory || '',
+    boostRegistry: addresses.boostRegistry || ''
   },
   startBlock
 }

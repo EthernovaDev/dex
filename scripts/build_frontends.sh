@@ -49,21 +49,32 @@ fi
 
 DEX_UI_REPO="${DEX_UI_REPO:-https://github.com/33357/uniswap-v2-interface.git}"
 DEX_INFO_REPO="${DEX_INFO_REPO:-https://github.com/Uniswap/info.git}"
+MONO_ROOT="/opt/novadex/dex"
+DEX_UI_DIR="${DEX_UI_DIR:-/opt/novadex/dex-ui}"
+DEX_INFO_DIR="${DEX_INFO_DIR:-/opt/novadex/dex-info}"
 
-if [ ! -d /opt/novadex/dex-ui/.git ]; then
-  echo "[INFO] Cloning swap UI repo..."
-  $RUN_AS git clone "$DEX_UI_REPO" /opt/novadex/dex-ui
+if [ -d "${MONO_ROOT}/dex-ui" ]; then
+  DEX_UI_DIR="${MONO_ROOT}/dex-ui"
 fi
 
-if [ ! -d /opt/novadex/dex-info/.git ]; then
+if [ -d "${MONO_ROOT}/dex-info" ]; then
+  DEX_INFO_DIR="${MONO_ROOT}/dex-info"
+fi
+
+if [ ! -d "${DEX_UI_DIR}/.git" ]; then
+  echo "[INFO] Cloning swap UI repo..."
+  $RUN_AS git clone "$DEX_UI_REPO" "$DEX_UI_DIR"
+fi
+
+if [ ! -d "${DEX_INFO_DIR}/.git" ]; then
   echo "[INFO] Cloning analytics UI repo..."
-  $RUN_AS git clone "$DEX_INFO_REPO" /opt/novadex/dex-info
+  $RUN_AS git clone "$DEX_INFO_REPO" "$DEX_INFO_DIR"
 fi
 
 echo "[INFO] Configuring swap UI env..."
 RPC_URLS="${ETHERNOVA_RPC_URLS:-$RPC_URL}"
 BUILD_STAMP="$(date -u +%Y-%m-%dT%H:%MZ)"
-cat > /opt/novadex/dex-ui/.env.local <<EOF
+cat > "${DEX_UI_DIR}/.env.local" <<EOF
 REACT_APP_CHAIN_ID=${CHAIN_ID}
 REACT_APP_NETWORK_URL=${RPC_URL}
 REACT_APP_ETHERNOVA_RPC_URLS=${RPC_URLS}
@@ -77,14 +88,14 @@ REACT_APP_BUILD_STAMP=${BUILD_STAMP}
 EOF
 
 echo "[INFO] Writing runtime config for swap UI..."
-node /opt/novadex/dex-ui/scripts/write-config-from-deployments.js
+node "${DEX_UI_DIR}/scripts/write-config-from-deployments.js"
 
 echo "[INFO] Building swap UI..."
-$RUN_AS bash -lc "cd /opt/novadex/dex-ui && corepack enable && yarn install"
+$RUN_AS bash -lc "cd ${DEX_UI_DIR} && corepack enable && yarn install"
 
 echo "[INFO] Patching Uniswap V2 SDK constants..."
-SDK_DEV="/opt/novadex/dex-ui/node_modules/@im33357/uniswap-v2-sdk/dist/uniswap-v2-sdk.cjs.development.js"
-SDK_PROD="/opt/novadex/dex-ui/node_modules/@im33357/uniswap-v2-sdk/dist/uniswap-v2-sdk.cjs.production.min.js"
+SDK_DEV="${DEX_UI_DIR}/node_modules/@im33357/uniswap-v2-sdk/dist/uniswap-v2-sdk.cjs.development.js"
+SDK_PROD="${DEX_UI_DIR}/node_modules/@im33357/uniswap-v2-sdk/dist/uniswap-v2-sdk.cjs.production.min.js"
 for sdk_file in "$SDK_DEV" "$SDK_PROD"; do
   if [ -f "$sdk_file" ]; then
     python3 - <<PY "$sdk_file" "$FACTORY" "$INIT_CODE_HASH"
@@ -109,10 +120,10 @@ PY
 done
 
 echo "[INFO] Building swap UI..."
-$RUN_AS bash -lc "cd /opt/novadex/dex-ui && rm -rf build && NODE_OPTIONS=--openssl-legacy-provider SKIP_PREFLIGHT_CHECK=true yarn build"
+$RUN_AS bash -lc "cd ${DEX_UI_DIR} && rm -rf build && NODE_OPTIONS=--openssl-legacy-provider SKIP_PREFLIGHT_CHECK=true yarn build"
 
 echo "[INFO] Configuring analytics UI env..."
-cat > /opt/novadex/dex-info/.env.local <<EOF
+cat > "${DEX_INFO_DIR}/.env.local" <<EOF
 REACT_APP_SUBGRAPH_URL=https://${DEX_DOMAIN}/info/subgraphs/name/novadex/novadex
 REACT_APP_BLOCKS_URL=https://${DEX_DOMAIN}/info/subgraphs/name/novadex/blocks
 REACT_APP_EXPLORER_URL=${EXPLORER_URL}
@@ -127,14 +138,14 @@ PUBLIC_URL=/info
 EOF
 
 echo "[INFO] Building analytics UI..."
-$RUN_AS bash -lc "cd /opt/novadex/dex-info && corepack enable && yarn install && rm -rf build && NODE_OPTIONS=--openssl-legacy-provider SKIP_PREFLIGHT_CHECK=true yarn build"
+$RUN_AS bash -lc "cd ${DEX_INFO_DIR} && corepack enable && yarn install && rm -rf build && NODE_OPTIONS=--openssl-legacy-provider SKIP_PREFLIGHT_CHECK=true yarn build"
 
 echo "[INFO] Creating release snapshot..."
 RELEASES_DIR="/opt/novadex/releases"
 TS="$(date -u +%Y%m%d%H%M%S)"
 mkdir -p "${RELEASES_DIR}/${TS}/dex-ui" "${RELEASES_DIR}/${TS}/dex-info" /opt/novadex/current
-cp -a /opt/novadex/dex-ui/build "${RELEASES_DIR}/${TS}/dex-ui/"
-cp -a /opt/novadex/dex-info/build "${RELEASES_DIR}/${TS}/dex-info/"
+cp -a "${DEX_UI_DIR}/build" "${RELEASES_DIR}/${TS}/dex-ui/"
+cp -a "${DEX_INFO_DIR}/build" "${RELEASES_DIR}/${TS}/dex-info/"
 ln -sfn "${RELEASES_DIR}/${TS}/dex-ui" /opt/novadex/current/dex-ui
 ln -sfn "${RELEASES_DIR}/${TS}/dex-info" /opt/novadex/current/dex-info
 

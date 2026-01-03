@@ -73,6 +73,18 @@ if [ -z "$PAIR" ]; then
   exit 1
 fi
 
+PAIR_LOWER="$(echo "$PAIR" | tr '[:upper:]' '[:lower:]')"
+echo "[INFO] Subgraph endpoint: ${GRAPH_URL}"
+echo "[INFO] Pair id (lowercase): ${PAIR_LOWER}"
+echo "[INFO] Checking pair indexed via subgraph..."
+if [ "${SMOKE_REQUIRE_INDEXED_PAIR:-0}" = "1" ]; then
+  SUBGRAPH_URL="${GRAPH_URL}" node /opt/novadex/dex/scripts/smoke_info_pair.mjs "${PAIR_LOWER}"
+else
+  if ! SUBGRAPH_URL="${GRAPH_URL}" node /opt/novadex/dex/scripts/smoke_info_pair.mjs "${PAIR_LOWER}"; then
+    echo "[WARN] Pair not indexed yet (SMOKE_REQUIRE_INDEXED_PAIR=0)"
+  fi
+fi
+
 RESERVES_DATA="0x0902f1ac"
 RPC_RESP="$(curl -sS "$RPC_URL" -H 'content-type: application/json' --data "{\"jsonrpc\":\"2.0\",\"method\":\"eth_call\",\"params\":[{\"to\":\"$PAIR\",\"data\":\"$RESERVES_DATA\"},\"latest\"],\"id\":1}" || true)"
 if command -v rg >/dev/null 2>&1; then

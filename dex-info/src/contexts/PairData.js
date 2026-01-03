@@ -124,10 +124,12 @@ export default function Provider({ children }) {
 
   // update pair specific data
   const update = useCallback((pairAddress, data) => {
+    const pairKey = normAddr(pairAddress) || pairAddress
+    if (!pairKey) return
     dispatch({
       type: UPDATE,
       payload: {
-        pairAddress,
+        pairAddress: pairKey,
         data,
       },
     })
@@ -143,23 +145,29 @@ export default function Provider({ children }) {
   }, [])
 
   const updatePairTxns = useCallback((address, transactions) => {
+    const pairKey = normAddr(address) || address
+    if (!pairKey) return
     dispatch({
       type: UPDATE_PAIR_TXNS,
-      payload: { address, transactions },
+      payload: { address: pairKey, transactions },
     })
   }, [])
 
   const updateChartData = useCallback((address, chartData) => {
+    const pairKey = normAddr(address) || address
+    if (!pairKey) return
     dispatch({
       type: UPDATE_CHART_DATA,
-      payload: { address, chartData },
+      payload: { address: pairKey, chartData },
     })
   }, [])
 
   const updateHourlyData = useCallback((address, hourlyData, timeWindow) => {
+    const pairKey = normAddr(address) || address
+    if (!pairKey) return
     dispatch({
       type: UPDATE_HOURLY_DATA,
-      payload: { address, hourlyData, timeWindow },
+      payload: { address: pairKey, hourlyData, timeWindow },
     })
   }, [])
 
@@ -185,6 +193,11 @@ export default function Provider({ children }) {
 }
 
 async function getBulkPairData(pairList, ethPrice) {
+  const normalizedPairs = Array.isArray(pairList)
+    ? pairList
+        .map((pair) => normAddr(pair) || pair)
+        .filter((pair) => pair && isAddress(pair))
+    : []
   const [t1, t2, tWeek] = getTimestampsForChanges()
   let blocks = []
   const withTimeout = (promise, timeoutMs) =>
@@ -207,7 +220,7 @@ async function getBulkPairData(pairList, ethPrice) {
     let current = await client.query({
       query: PAIRS_BULK,
       variables: {
-        allPairs: pairList,
+        allPairs: normalizedPairs,
       },
       fetchPolicy: 'cache-first',
     })
@@ -219,7 +232,7 @@ async function getBulkPairData(pairList, ethPrice) {
       ;[oneDayResult, twoDayResult, oneWeekResult] = await Promise.all(
         [b1, b2, bWeek].map(async (block) => {
           let result = client.query({
-            query: PAIRS_HISTORICAL_BULK(block, pairList),
+            query: PAIRS_HISTORICAL_BULK(block, normalizedPairs),
             fetchPolicy: 'cache-first',
           })
           return result
@@ -383,13 +396,15 @@ function parseData(data, oneDayData, twoDayData, oneWeekData, ethPrice, oneDayBl
 }
 
 const getPairTransactions = async (pairAddress) => {
+  const pairKey = normAddr(pairAddress) || pairAddress
+  if (!pairKey || !isAddress(pairKey)) return {}
   const transactions = {}
 
   try {
     let result = await client.query({
       query: FILTERED_TRANSACTIONS,
       variables: {
-        allPairs: [pairAddress],
+        allPairs: [pairKey],
       },
       fetchPolicy: 'no-cache',
     })
@@ -404,6 +419,8 @@ const getPairTransactions = async (pairAddress) => {
 }
 
 const getPairChartData = async (pairAddress) => {
+  const pairKey = normAddr(pairAddress) || pairAddress
+  if (!pairKey || !isAddress(pairKey)) return []
   let data = []
   const utcEndTime = dayjs.utc()
   let utcStartTime = utcEndTime.subtract(1, 'year').startOf('minute')
@@ -416,7 +433,7 @@ const getPairChartData = async (pairAddress) => {
       let result = await client.query({
         query: PAIR_CHART,
         variables: {
-          pairAddress: pairAddress,
+          pairAddress: pairKey,
           skip,
         },
         fetchPolicy: 'cache-first',
@@ -503,7 +520,8 @@ const getHourlyRateData = async (pairAddress, startTime, latestBlock) => {
       })
     }
 
-    const result = await splitQuery(HOURLY_PAIR_RATES, client, [pairAddress], blocks, 100)
+    const pairKey = normAddr(pairAddress) || pairAddress
+    const result = await splitQuery(HOURLY_PAIR_RATES, client, [pairKey], blocks, 100)
 
     // format token ETH price results
     let values = []
@@ -660,19 +678,24 @@ export function useDataForList(pairList) {
  */
 export function usePairData(pairAddress) {
   const [state, { update }] = usePairDataContext()
-  const pairData = state?.[pairAddress]
+  const pairKey = normAddr(pairAddress) || pairAddress
+  const pairData = pairKey ? state?.[pairKey] : undefined
 
   useEffect(() => {
     async function fetchData() {
-      if (!pairData && pairAddress) {
-        let data = await getBulkPairData([pairAddress], 1)
-        data && update(pairAddress, data[0])
+      if (!pairData && pairKey) {
+        let data = await getBulkPairData([pairKey], 1)
+        if (Array.isArray(data) && data[0]) {
+          update(pairKey, data[0])
+        } else if (Array.isArray(data)) {
+          update(pairKey, { __notFound: true })
+        }
       }
     }
-    if (!pairData && pairAddress && isAddress(pairAddress)) {
+    if (!pairData && pairKey && isAddress(pairKey)) {
       fetchData()
     }
-  }, [pairAddress, pairData, update])
+  }, [pairKey, pairData, update])
 
   return pairData || {}
 }
@@ -682,32 +705,36 @@ export function usePairData(pairAddress) {
  */
 export function usePairTransactions(pairAddress) {
   const [state, { updatePairTxns }] = usePairDataContext()
-  const pairTxns = state?.[pairAddress]?.txns
+  const pairKey = normAddr(pairAddress) || pairAddress
+  const pairTxns = pairKey ? state?.[pairKey]?.txns : undefined
+  const isNotFound = pairKey ? state?.[pairKey]?.__notFound : false
   useEffect(() => {
     async function checkForTxns() {
-      if (!pairTxns) {
-        let transactions = await getPairTransactions(pairAddress)
-        updatePairTxns(pairAddress, transactions)
+      if (!pairTxns && pairKey && isAddress(pairKey) && !isNotFound) {
+        let transactions = await getPairTransactions(pairKey)
+        updatePairTxns(pairKey, transactions)
       }
     }
     checkForTxns()
-  }, [pairTxns, pairAddress, updatePairTxns])
+  }, [pairTxns, pairKey, isNotFound, updatePairTxns])
   return pairTxns
 }
 
 export function usePairChartData(pairAddress) {
   const [state, { updateChartData }] = usePairDataContext()
-  const chartData = state?.[pairAddress]?.chartData
+  const pairKey = normAddr(pairAddress) || pairAddress
+  const chartData = pairKey ? state?.[pairKey]?.chartData : undefined
+  const isNotFound = pairKey ? state?.[pairKey]?.__notFound : false
 
   useEffect(() => {
     async function checkForChartData() {
-      if (!chartData) {
-        let data = await getPairChartData(pairAddress)
-        updateChartData(pairAddress, data)
+      if (!chartData && pairKey && isAddress(pairKey) && !isNotFound) {
+        let data = await getPairChartData(pairKey)
+        updateChartData(pairKey, data)
       }
     }
     checkForChartData()
-  }, [chartData, pairAddress, updateChartData])
+  }, [chartData, pairKey, isNotFound, updateChartData])
   return chartData
 }
 

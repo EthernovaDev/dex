@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import { withRouter } from 'react-router-dom'
 import 'feather-icons'
 import styled from 'styled-components'
@@ -9,6 +9,7 @@ import {
   StyledIcon,
   BlockedWrapper,
   BlockedMessageWrapper,
+  EmptyCard,
 } from '../components/index'
 import { AutoRow, RowBetween, RowFixed } from '../components/Row'
 import Column, { AutoColumn } from '../components/Column'
@@ -28,11 +29,14 @@ import {
   shortenAddress,
   formatPrice,
   isFiniteNum,
+  isAddress,
   normAddr,
   isAddrEq,
 } from '../utils'
 import { useColor } from '../hooks'
 import { usePairData, usePairTransactions, usePairChartData } from '../contexts/PairData'
+import { client } from '../apollo/client'
+import { PAIR_DATA } from '../apollo/queries'
 import { TYPE, ThemedBackground } from '../Theme'
 import { transparentize } from 'polished'
 import CopyHelper from '../components/Copy'
@@ -142,6 +146,12 @@ const WarningGrouping = styled.div`
 
 function PairPage({ pairAddress, history }) {
   const pairId = normAddr(pairAddress) || pairAddress
+  const pairData = usePairData(pairId)
+  const isNotFound = Boolean(pairData?.__notFound)
+  const [pairOverride, setPairOverride] = useState(null)
+  const [pairOverrideError, setPairOverrideError] = useState(null)
+  const [pairOverrideChecked, setPairOverrideChecked] = useState(false)
+  const activePair = pairOverride || pairData
   const {
     token0,
     token1,
@@ -152,13 +162,19 @@ function PairPage({ pairAddress, history }) {
     oneDayVolumeETH,
     volumeChangeETH,
     liquidityChangeETH,
-  } = usePairData(pairId)
+  } = activePair || {}
 
   useEffect(() => {
     document.querySelector('body').scrollTo(0, 0)
   }, [])
 
   const transactions = usePairTransactions(pairId)
+  const hasTransactions = Boolean(
+    transactions &&
+      ((transactions.mints && transactions.mints.length) ||
+        (transactions.burns && transactions.burns.length) ||
+        (transactions.swaps && transactions.swaps.length))
+  )
   const swapsCount = transactions?.swaps?.length || 0
   const pairChartData = usePairChartData(pairId)
   const backgroundColor = useColor(pairId)
@@ -170,6 +186,25 @@ function PairPage({ pairAddress, history }) {
   const isToken1Wnova = isAddrEq(token1Id, wnovaLower)
   const reserveWnova = isToken0Wnova ? reserve0 : isToken1Wnova ? reserve1 : null
   const reserveTony = isToken0Wnova ? reserve1 : isToken1Wnova ? reserve0 : null
+  const reserveWnovaNum = isFiniteNum(reserveWnova) ? Number(reserveWnova) : null
+  const reserveTonyNum = isFiniteNum(reserveTony) ? Number(reserveTony) : null
+  const volumeWnova24h = React.useMemo(() => {
+    if (!transactions?.swaps?.length || !wnovaLower) return 0
+    const now = Math.floor(Date.now() / 1000)
+    return transactions.swaps.reduce((sum, swap) => {
+      const ts = Number.parseInt(swap?.transaction?.timestamp || swap?.timestamp || 0, 10)
+      if (!ts || now - ts > 86400) return sum
+      const pairToken0 = normAddr(swap?.pair?.token0?.id)
+      const pairToken1 = normAddr(swap?.pair?.token1?.id)
+      const amount0In = Number(swap?.amount0In || 0)
+      const amount0Out = Number(swap?.amount0Out || 0)
+      const amount1In = Number(swap?.amount1In || 0)
+      const amount1Out = Number(swap?.amount1Out || 0)
+      if (isAddrEq(pairToken0, wnovaLower)) return sum + (amount0In > 0 ? amount0In : amount0Out)
+      if (isAddrEq(pairToken1, wnovaLower)) return sum + (amount1In > 0 ? amount1In : amount1Out)
+      return sum
+    }, 0)
+  }, [transactions, wnovaLower])
   const liquiditySeries = React.useMemo(() => {
     if (!pairChartData || !pairChartData.length) return []
     return pairChartData
@@ -184,24 +219,31 @@ function PairPage({ pairAddress, history }) {
     ? liquidityWnova
     : isFiniteNum(reserveETH)
     ? formattedNum(reserveETH, false)
-    : formattedNum(trackedReserveETH, false)
+    : isFiniteNum(trackedReserveETH)
+    ? formattedNum(trackedReserveETH, false)
+    : '—'
   const liquidityChange = formattedPercent(liquidityChangeETH)
 
   // volume
-  const volume = isFiniteNum(oneDayVolumeETH) ? formattedNum(oneDayVolumeETH, false) : '—'
+  const volumeSource = isFiniteNum(volumeWnova24h)
+    ? volumeWnova24h
+    : isFiniteNum(oneDayVolumeETH)
+    ? oneDayVolumeETH
+    : NaN
+  const volume = isFiniteNum(volumeSource) ? formattedNum(volumeSource, false) : '—'
   const volumeChange = formattedPercent(volumeChangeETH)
 
   const showUSDWaning = false
 
   // get fees	  // get fees
-  const fees = isFiniteNum(oneDayVolumeETH) ? formattedNum(oneDayVolumeETH * 0.003, false) : '—'
-  const protocolFees = isFiniteNum(oneDayVolumeETH)
-    ? formattedNum(oneDayVolumeETH * (TREASURY_FEE_BPS / 10000), false)
+  const fees = isFiniteNum(volumeSource) ? formattedNum(volumeSource * 0.003, false) : '—'
+  const protocolFees = isFiniteNum(volumeSource)
+    ? formattedNum(volumeSource * (TREASURY_FEE_BPS / 10000), false)
     : '—'
 
   // rates
-  const token0Rate = isFiniteNum(reserve0) && isFiniteNum(reserve1) ? formatPrice(reserve1 / reserve0) : '-'
-  const token1Rate = isFiniteNum(reserve0) && isFiniteNum(reserve1) ? formatPrice(reserve0 / reserve1) : '-'
+  const token0Rate = isFiniteNum(reserve0) && isFiniteNum(reserve1) ? formatPrice(reserve1 / reserve0) : '—'
+  const token1Rate = isFiniteNum(reserve0) && isFiniteNum(reserve1) ? formatPrice(reserve0 / reserve1) : '—'
 
   // formatted symbols for overflow
   const formattedSymbol0 =
@@ -227,6 +269,83 @@ function PairPage({ pairAddress, history }) {
   const [savedPairs, addPair] = useSavedPairs()
 
   const listedTokens = useListedTokens()
+
+  useEffect(() => {
+    let cancelled = false
+    async function fetchPairOverride() {
+      if (!pairId || !isAddress(pairId)) return
+      setPairOverrideError(null)
+      try {
+        const result = await client.query({
+          query: PAIR_DATA(pairId),
+          fetchPolicy: 'no-cache',
+        })
+        if (cancelled) return
+        const found = result?.data?.pairs?.[0] || null
+        setPairOverride(found)
+        setPairOverrideChecked(true)
+      } catch (err) {
+        if (!cancelled) {
+          setPairOverrideError(err)
+          setPairOverrideChecked(true)
+        }
+      } finally {
+        if (!cancelled) {
+          // no-op
+        }
+      }
+    }
+    fetchPairOverride()
+    return () => {
+      cancelled = true
+    }
+  }, [pairId])
+
+  const isValidPair = Boolean(pairId && isAddress(pairId))
+  const pairLoaded = Boolean(token0?.id && token1?.id)
+  const pairNotIndexed = pairOverrideChecked && !pairLoaded && !pairOverride
+
+  if (!isValidPair) {
+    return (
+      <PageWrapper>
+        <ContentWrapperLarge>
+          <Panel style={{ padding: '2rem' }}>
+            <TYPE.main fontSize="1.25rem">Invalid pair address</TYPE.main>
+            <TYPE.light style={{ marginTop: '0.5rem' }}>
+              The pair address in the URL is not a valid EVM address.
+            </TYPE.light>
+          </Panel>
+        </ContentWrapperLarge>
+      </PageWrapper>
+    )
+  }
+
+  if (pairNotIndexed || isNotFound) {
+    return (
+      <PageWrapper>
+        <ContentWrapperLarge>
+          <Panel style={{ padding: '2rem' }} data-testid="pair-not-indexed">
+            <TYPE.main fontSize="1.25rem">Pair not indexed yet</TYPE.main>
+            <TYPE.light style={{ marginTop: '0.5rem' }}>
+              This pair is not available in the subgraph yet. It may still be syncing.
+            </TYPE.light>
+            <Link
+              external
+              href={`${explorerBase}/address/${pairId}`}
+              style={{ marginTop: '0.75rem', display: 'inline-flex' }}
+            >
+              View on Explorer ↗
+            </Link>
+            {pairOverrideError ? (
+              <TYPE.light style={{ marginTop: '0.75rem' }}>
+                Subgraph error: {pairOverrideError?.message || 'unknown'}
+              </TYPE.light>
+            ) : null}
+          </Panel>
+        </ContentWrapperLarge>
+      </PageWrapper>
+    )
+  }
 
   if (PAIR_BLACKLIST.includes(pairId)) {
     return (
@@ -257,7 +376,7 @@ function PairPage({ pairAddress, history }) {
       />
       <ContentWrapperLarge>
         <RowBetween>
-          <TYPE.body>
+          <TYPE.body data-testid="pair-breadcrumb">
             <BasicLink to="/pairs">{'Pairs '}</BasicLink>→{' '}
             {token0?.symbol && token1?.symbol ? `${token0.symbol}-${token1.symbol}` : 'Loading'}
           </TYPE.body>
@@ -274,8 +393,8 @@ function PairPage({ pairAddress, history }) {
             wnovaAddress={WNOVA_ADDRESS}
             tonyAddress={TONY_ADDRESS}
             pairAddress={pairId}
-            reserveWnova={Number.isFinite(reserveWnova) ? reserveWnova : null}
-            reserveTony={Number.isFinite(reserveTony) ? reserveTony : null}
+            reserveWnova={reserveWnovaNum}
+            reserveTony={reserveTonyNum}
             liquiditySeries={liquiditySeries}
             swaps={transactions?.swaps || []}
             allowOnchain={!subgraphReady}
@@ -298,13 +417,17 @@ function PairPage({ pairAddress, history }) {
                     {token0 && token1 && (
                       <DoubleTokenLogo a0={token0?.id || ''} a1={token1?.id || ''} size={32} margin={true} />
                     )}{' '}
-                    <TYPE.main fontSize={below1080 ? '1.5rem' : '2rem'} style={{ margin: '0 1rem' }}>
-                      {token0 && token1 ? (
-                        <>
-                          <HoverSpan onClick={() => history.push(`/token/${token0Id}`)}>{token0.symbol}</HoverSpan>
-                          <span>-</span>
-                          <HoverSpan onClick={() => history.push(`/token/${token1Id}`)}>
-                            {token1.symbol}
+                    <TYPE.main
+                      fontSize={below1080 ? '1.5rem' : '2rem'}
+                      style={{ margin: '0 1rem' }}
+                      data-testid="pair-title"
+                    >
+                    {token0 && token1 ? (
+                      <>
+                        <HoverSpan onClick={() => history.push(`/token/${token0Id}`)}>{token0.symbol}</HoverSpan>
+                        <span>-</span>
+                        <HoverSpan onClick={() => history.push(`/token/${token1Id}`)}>
+                          {token1.symbol}
                           </HoverSpan>{' '}
                           Pair
                         </>
@@ -444,8 +567,8 @@ function PairPage({ pairAddress, history }) {
                         <TokenLogo address={token0?.id} />
                         <TYPE.main fontSize={20} lineHeight={1} fontWeight={500}>
                           <RowFixed>
-                            {reserve0 ? formattedNum(reserve0) : ''}{' '}
-                            <FormattedName text={token0?.symbol ?? ''} maxCharacters={8} margin={true} />
+                    {isFiniteNum(reserve0) ? formattedNum(reserve0) : '—'}{' '}
+                    <FormattedName text={token0?.symbol ?? ''} maxCharacters={8} margin={true} />
                           </RowFixed>
                         </TYPE.main>
                       </AutoRow>
@@ -455,8 +578,8 @@ function PairPage({ pairAddress, history }) {
                         <TokenLogo address={token1?.id} />
                         <TYPE.main fontSize={20} lineHeight={1} fontWeight={500}>
                           <RowFixed>
-                            {reserve1 ? formattedNum(reserve1) : ''}{' '}
-                            <FormattedName text={token1?.symbol ?? ''} maxCharacters={8} margin={true} />
+                    {isFiniteNum(reserve1) ? formattedNum(reserve1) : '—'}{' '}
+                    <FormattedName text={token1?.symbol ?? ''} maxCharacters={8} margin={true} />
                           </RowFixed>
                         </TYPE.main>
                       </AutoRow>
@@ -492,7 +615,15 @@ function PairPage({ pairAddress, history }) {
                   marginTop: '1.5rem',
                 }}
               >
-                {transactions ? <TxnList transactions={transactions} /> : <Loader />}
+                {transactions ? (
+                  hasTransactions ? (
+                    <TxnList transactions={transactions} />
+                  ) : (
+                    <EmptyCard height="140px">No transactions for this pair yet.</EmptyCard>
+                  )
+                ) : (
+                  <Loader />
+                )}
               </Panel>
               <RowBetween style={{ marginTop: '3rem' }}>
                 <TYPE.main fontSize={'1.125rem'}>Pair Information</TYPE.main>{' '}
@@ -509,9 +640,9 @@ function PairPage({ pairAddress, history }) {
                     <TYPE.main>Pair Name</TYPE.main>
                     <TYPE.main style={{ marginTop: '.5rem' }}>
                       <RowFixed>
-                        <FormattedName text={token0?.symbol ?? ''} maxCharacters={8} />
+                        <FormattedName text={token0?.symbol ?? '—'} maxCharacters={8} />
                         -
-                        <FormattedName text={token1?.symbol ?? ''} maxCharacters={8} />
+                        <FormattedName text={token1?.symbol ?? '—'} maxCharacters={8} />
                       </RowFixed>
                     </TYPE.main>
                   </Column>
@@ -531,10 +662,10 @@ function PairPage({ pairAddress, history }) {
                       </RowFixed>
                     </TYPE.main>
                     <AutoRow align="flex-end">
-                      <TYPE.main style={{ marginTop: '.5rem' }}>
-                        {token0 && token0.id.slice(0, 6) + '...' + token0.id.slice(38, 42)}
+                      <TYPE.main style={{ marginTop: '.5rem' }} data-testid="pair-token0-address">
+                        {token0?.id ? `${token0.id.slice(0, 6)}...${token0.id.slice(38, 42)}` : '—'}
                       </TYPE.main>
-                      <CopyHelper toCopy={token0?.id} />
+                      {token0?.id ? <CopyHelper toCopy={token0?.id} /> : null}
                     </AutoRow>
                   </Column>
                   <Column>
@@ -544,10 +675,10 @@ function PairPage({ pairAddress, history }) {
                       </RowFixed>
                     </TYPE.main>
                     <AutoRow align="flex-end">
-                      <TYPE.main style={{ marginTop: '.5rem' }} fontSize={16}>
-                        {token1 && token1.id.slice(0, 6) + '...' + token1.id.slice(38, 42)}
+                      <TYPE.main style={{ marginTop: '.5rem' }} fontSize={16} data-testid="pair-token1-address">
+                        {token1?.id ? `${token1.id.slice(0, 6)}...${token1.id.slice(38, 42)}` : '—'}
                       </TYPE.main>
-                      <CopyHelper toCopy={token1?.id} />
+                      {token1?.id ? <CopyHelper toCopy={token1?.id} /> : null}
                     </AutoRow>
                   </Column>
                   <ButtonLight color={backgroundColor}>

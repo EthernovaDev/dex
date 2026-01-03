@@ -391,6 +391,10 @@ function PairPageContent({ pairId, history }) {
       setBoostStatus({ state: 'error', error: 'Missing pair address', tx: null })
       return
     }
+    if (onchainPair?.status === 'not_found') {
+      setBoostStatus({ state: 'error', error: 'Pair contract not found on-chain', tx: null })
+      return
+    }
     if (!window?.ethereum) {
       setBoostStatus({ state: 'error', error: 'No wallet detected', tx: null })
       return

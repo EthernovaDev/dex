@@ -38,6 +38,7 @@ import { useOnchainPair } from '../hooks/useOnchainPair'
 import { useOnchainTokenInfo } from '../hooks/useOnchainTokenInfo'
 import { usePairMetadata, useTokenMetadata } from '../hooks/useTokenMetadata'
 import DoubleTokenLogo from '../components/DoubleLogo'
+import CopyHelper from '../components/Copy'
 
 const RPC_URL = process.env.REACT_APP_RPC_URL
 const FACTORY_ADDRESS = process.env.REACT_APP_FACTORY_ADDRESS
@@ -96,6 +97,18 @@ const PairMetaRow = styled.div`
   gap: 8px;
 `
 
+const PairAddressRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: ${({ theme }) => theme.text2};
+`
+
+const PairAddressText = styled.span`
+  word-break: break-all;
+`
+
 const MetaTag = styled.span`
   padding: 4px 8px;
   border-radius: 999px;
@@ -138,6 +151,13 @@ function BoostedPairCard({ entry, pairData, rpcUrl }) {
       <TYPE.light fontSize={12}>
         Boosted by {entry.booster?.slice(0, 6)}…{entry.booster?.slice(-4)}
       </TYPE.light>
+      <PairAddressRow>
+        <PairAddressText>{entry.address}</PairAddressText>
+        <CopyHelper toCopy={entry.address} />
+        {token0Address && token1Address && (
+          <CustomLink to={getPoolLink(token0Address, token1Address)}>Add liquidity ↗</CustomLink>
+        )}
+      </PairAddressRow>
       <RowBetween>
         <TYPE.main fontSize={'1.125rem'}>{hoursLeft}h remaining</TYPE.main>
         <MetaTag>Boosted</MetaTag>

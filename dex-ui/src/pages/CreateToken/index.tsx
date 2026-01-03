@@ -146,6 +146,29 @@ const SummaryCard = styled.div`
   gap: 6px;
 `
 
+const SuccessBlock = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: ${({ theme }) => theme.bg2};
+  border: 1px solid ${({ theme }) => theme.bg3};
+  border-radius: 12px;
+  padding: 10px 12px;
+`
+
+const SuccessLabel = styled.div`
+  font-size: 12px;
+  color: ${({ theme }) => theme.text2};
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+`
+
+const SuccessValue = styled.div`
+  font-size: 13px;
+  color: ${({ theme }) => theme.text1};
+  word-break: break-all;
+`
+
 const SplitRow = styled(RowBetween)`
   gap: 12px;
 
@@ -845,28 +868,34 @@ export default function CreateToken() {
             {(txHash || createdToken || createdPair) && (
               <AutoColumn gap="sm" style={{ marginTop: 16, width: '100%' }} data-testid="create-success">
                 {txHash && (
-                  <TYPE.body>
-                    Tx:{' '}
-                    <a href={`${config.explorerUrl}/tx/${txHash}`} target="_blank" rel="noopener noreferrer">
-                      {txHash}
-                    </a>
-                  </TYPE.body>
+                  <SuccessBlock>
+                    <SuccessLabel>Transaction</SuccessLabel>
+                    <SuccessValue>
+                      <a href={`${config.explorerUrl}/tx/${txHash}`} target="_blank" rel="noopener noreferrer">
+                        {txHash}
+                      </a>
+                    </SuccessValue>
+                  </SuccessBlock>
                 )}
                 {createdToken && (
-                  <TYPE.body>
-                    Token:{' '}
-                    <a href={`${config.explorerUrl}/token/${createdToken}`} target="_blank" rel="noopener noreferrer">
-                      {createdToken}
-                    </a>
-                  </TYPE.body>
+                  <SuccessBlock>
+                    <SuccessLabel>Token Address</SuccessLabel>
+                    <SuccessValue>
+                      <a href={`${config.explorerUrl}/token/${createdToken}`} target="_blank" rel="noopener noreferrer">
+                        {createdToken}
+                      </a>
+                    </SuccessValue>
+                  </SuccessBlock>
                 )}
                 {createdPair && (
-                  <TYPE.body>
-                    Pair:{' '}
-                    <a href={`${config.explorerUrl}/token/${createdPair}`} target="_blank" rel="noopener noreferrer">
-                      {createdPair}
-                    </a>
-                  </TYPE.body>
+                  <SuccessBlock>
+                    <SuccessLabel>Pair Address</SuccessLabel>
+                    <SuccessValue>
+                      <a href={`${config.explorerUrl}/token/${createdPair}`} target="_blank" rel="noopener noreferrer">
+                        {createdPair}
+                      </a>
+                    </SuccessValue>
+                  </SuccessBlock>
                 )}
                 {createdToken && (
                   <ButtonLight onClick={onAddToMetaMask} style={{ width: '100%' }}>
@@ -898,6 +927,11 @@ export default function CreateToken() {
                 {createdToken && (
                   <ButtonLight as="a" href={`/#/swap?outputCurrency=${createdToken}`} style={{ width: '100%' }}>
                     Go to Swap
+                  </ButtonLight>
+                )}
+                {createdPair && (
+                  <ButtonLight as="a" href={`/info/#/pair/${createdPair}`} style={{ width: '100%' }}>
+                    View Pair Analytics
                   </ButtonLight>
                 )}
               </AutoColumn>

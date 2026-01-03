@@ -61,12 +61,12 @@ if [ -d "${MONO_ROOT}/dex-info" ]; then
   DEX_INFO_DIR="${MONO_ROOT}/dex-info"
 fi
 
-if [ ! -d "${DEX_UI_DIR}/.git" ]; then
+if [ ! -d "${DEX_UI_DIR}/.git" ] && [ "${DEX_UI_DIR}" != "${MONO_ROOT}/dex-ui" ]; then
   echo "[INFO] Cloning swap UI repo..."
   $RUN_AS git clone "$DEX_UI_REPO" "$DEX_UI_DIR"
 fi
 
-if [ ! -d "${DEX_INFO_DIR}/.git" ]; then
+if [ ! -d "${DEX_INFO_DIR}/.git" ] && [ "${DEX_INFO_DIR}" != "${MONO_ROOT}/dex-info" ]; then
   echo "[INFO] Cloning analytics UI repo..."
   $RUN_AS git clone "$DEX_INFO_REPO" "$DEX_INFO_DIR"
 fi

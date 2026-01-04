@@ -6,6 +6,7 @@ import { createRequire } from 'module'
 const require = createRequire(new URL('../server/metadata-api/package.json', import.meta.url))
 const Database = require('better-sqlite3')
 const FormData = require('form-data')
+const fetch = require('node-fetch')
 
 const log = (msg) => process.stdout.write(`${msg}\n`)
 const fail = (msg) => {

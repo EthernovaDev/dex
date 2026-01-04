@@ -81,6 +81,16 @@ db.exec(`
     creator TEXT,
     metadata_uri TEXT,
     content_hash TEXT,
+    name TEXT,
+    symbol TEXT,
+    description TEXT,
+    image_uri TEXT,
+    website TEXT,
+    twitter TEXT,
+    telegram TEXT,
+    discord TEXT,
+    symbol0 TEXT,
+    symbol1 TEXT,
     created_at INTEGER,
     updated_at INTEGER
   );
@@ -118,6 +128,16 @@ function ensureColumn(table, column, type) {
 ensureColumn('tokens', 'content_hash', 'TEXT')
 ensureColumn('tokens', 'image_hash', 'TEXT')
 ensureColumn('pairs', 'content_hash', 'TEXT')
+ensureColumn('pairs', 'name', 'TEXT')
+ensureColumn('pairs', 'symbol', 'TEXT')
+ensureColumn('pairs', 'description', 'TEXT')
+ensureColumn('pairs', 'image_uri', 'TEXT')
+ensureColumn('pairs', 'website', 'TEXT')
+ensureColumn('pairs', 'twitter', 'TEXT')
+ensureColumn('pairs', 'telegram', 'TEXT')
+ensureColumn('pairs', 'discord', 'TEXT')
+ensureColumn('pairs', 'symbol0', 'TEXT')
+ensureColumn('pairs', 'symbol1', 'TEXT')
 
 const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp'])
 
@@ -692,6 +712,58 @@ function buildMetadata(entry) {
     ].filter(Boolean),
     createdAt: createdIso,
     creator: entry?.creator || '',
+  }
+}
+
+function derivePairFields({
+  token0Addr,
+  token1Addr,
+  token0Meta,
+  token1Meta,
+  name,
+  symbol,
+  description,
+  image,
+  website,
+  twitter,
+  telegram,
+  discord,
+  symbol0,
+  symbol1,
+}) {
+  const shortAddr = (addr) => {
+    if (!addr || addr.length < 10) return addr || ''
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`
+  }
+  const token0Lower = normAddr(token0Addr)
+  const token1Lower = normAddr(token1Addr)
+  const resolvedSymbol0 =
+    clampString(symbol0, 20) || token0Meta?.symbol || (token0Lower === WNOVA ? 'WNOVA' : shortAddr(token0Lower))
+  const resolvedSymbol1 =
+    clampString(symbol1, 20) || token1Meta?.symbol || (token1Lower === WNOVA ? 'WNOVA' : shortAddr(token1Lower))
+  const otherMeta = token0Lower === WNOVA ? token1Meta : token1Lower === WNOVA ? token0Meta : token0Meta || token1Meta
+  const otherSymbol = token0Lower === WNOVA ? resolvedSymbol1 : token1Lower === WNOVA ? resolvedSymbol0 : resolvedSymbol1
+  const resolvedName = clampString(name, 120) || `${resolvedSymbol0}/${resolvedSymbol1} Pool`
+  const resolvedSymbol = clampString(symbol, 40) || `${resolvedSymbol0}-${resolvedSymbol1}`
+  const resolvedDescription =
+    clampString(description, 500) ||
+    `WNOVA pool for ${otherSymbol}. LP fee 0.30% (LPs) + protocol fee 1% in WNOVA.`
+  const resolvedImage = sanitizeImageUri(image || otherMeta?.image_uri || otherMeta?.logo || '')
+  const resolvedWebsite = validateUrl(website || otherMeta?.website || '')
+  const resolvedTwitter = validateUrl(twitter || otherMeta?.twitter || '')
+  const resolvedTelegram = validateUrl(telegram || otherMeta?.telegram || '')
+  const resolvedDiscord = validateUrl(discord || otherMeta?.discord || '')
+  return {
+    name: resolvedName,
+    symbol: resolvedSymbol,
+    description: resolvedDescription,
+    image_uri: resolvedImage,
+    website: resolvedWebsite,
+    twitter: resolvedTwitter,
+    telegram: resolvedTelegram,
+    discord: resolvedDiscord,
+    symbol0: resolvedSymbol0,
+    symbol1: resolvedSymbol1,
   }
 }
 
@@ -1397,6 +1469,24 @@ app.post('/api/metadata/pair', authGuard, async (req, res) => {
     const onchainTokens = await verifyPairOnchain(pairAddress, token0, token1)
     const resolvedToken0 = onchainTokens?.token0 || token0 || verification.token
     const resolvedToken1 = onchainTokens?.token1 || token1 || ''
+    const token0Meta = resolvedToken0 ? db.prepare('SELECT * FROM tokens WHERE address = ?').get(resolvedToken0) : null
+    const token1Meta = resolvedToken1 ? db.prepare('SELECT * FROM tokens WHERE address = ?').get(resolvedToken1) : null
+    const derivedPairFields = derivePairFields({
+      token0Addr: resolvedToken0,
+      token1Addr: resolvedToken1,
+      token0Meta,
+      token1Meta,
+      name: req.body?.name,
+      symbol: req.body?.symbol,
+      description: req.body?.description,
+      image: req.body?.imageUri || req.body?.image || req.body?.logo,
+      website: req.body?.website,
+      twitter: req.body?.twitter,
+      telegram: req.body?.telegram,
+      discord: req.body?.discord,
+      symbol0: req.body?.symbol0,
+      symbol1: req.body?.symbol1,
+    })
 
     const dayKey = getDayKey()
     const ipCheck = checkIpLimit(clientIp, dayKey, 1, 1, 0)
@@ -1408,8 +1498,8 @@ app.post('/api/metadata/pair', authGuard, async (req, res) => {
     const now = Math.floor(Date.now() / 1000)
     const existing = db.prepare('SELECT * FROM pairs WHERE address = ?').get(pairAddress)
     db.prepare(
-      `INSERT OR REPLACE INTO pairs(address, token0, token1, creator, metadata_uri, content_hash, created_at, updated_at)
-       VALUES(@address, @token0, @token1, @creator, @metadata_uri, @content_hash, COALESCE(@created_at, @now), @now)`
+      `INSERT OR REPLACE INTO pairs(address, token0, token1, creator, metadata_uri, content_hash, name, symbol, description, image_uri, website, twitter, telegram, discord, symbol0, symbol1, created_at, updated_at)
+       VALUES(@address, @token0, @token1, @creator, @metadata_uri, @content_hash, @name, @symbol, @description, @image_uri, @website, @twitter, @telegram, @discord, @symbol0, @symbol1, COALESCE(@created_at, @now), @now)`
     ).run({
       address: pairAddress,
       token0: resolvedToken0,
@@ -1417,6 +1507,16 @@ app.post('/api/metadata/pair', authGuard, async (req, res) => {
       creator: verification.creator,
       metadata_uri: metadataUri || existing?.metadata_uri || '',
       content_hash: contentHash || existing?.content_hash || '',
+      name: derivedPairFields.name || existing?.name || '',
+      symbol: derivedPairFields.symbol || existing?.symbol || '',
+      description: derivedPairFields.description || existing?.description || '',
+      image_uri: derivedPairFields.image_uri || existing?.image_uri || '',
+      website: derivedPairFields.website || existing?.website || '',
+      twitter: derivedPairFields.twitter || existing?.twitter || '',
+      telegram: derivedPairFields.telegram || existing?.telegram || '',
+      discord: derivedPairFields.discord || existing?.discord || '',
+      symbol0: derivedPairFields.symbol0 || existing?.symbol0 || '',
+      symbol1: derivedPairFields.symbol1 || existing?.symbol1 || '',
       created_at: existing?.created_at || now,
       now,
     })

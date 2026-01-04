@@ -82,6 +82,8 @@ async function main() {
   const rpcErrorWindowMs = toInt(process.env.SMOKE_RPC_WINDOW_MS, 15000)
   const rpcSoftMax = toInt(process.env.SMOKE_RPC_SOFT_MAX, 5)
   const rpcConsecMax = toInt(process.env.SMOKE_RPC_CONSEC_MAX, 3)
+  const rpcRetry = toInt(process.env.SMOKE_RPC_RETRY, 2)
+  const rpcBackoffMs = toInt(process.env.SMOKE_RPC_BACKOFF_MS, 500)
   const rpcLogMax = toInt(process.env.SMOKE_RPC_LOG_MAX, 20)
   const rpcEvents = []
   const rpcMethodCounts = {}
@@ -164,7 +166,7 @@ async function main() {
   }
 
   console.log(
-    `[INFO] RPC thresholds: window=${rpcErrorWindowMs}ms softMax=${rpcSoftMax} consecMax=${rpcConsecMax} logMax=${rpcLogMax}`
+    `[INFO] RPC thresholds: window=${rpcErrorWindowMs}ms softMax=${rpcSoftMax} consecMax=${rpcConsecMax} logMax=${rpcLogMax} retry=${rpcRetry} backoff=${rpcBackoffMs}ms`
   )
 
   let currentRoute = 'swap'
@@ -230,6 +232,7 @@ async function main() {
       method,
       kind: 'soft'
     })
+    triggerRpcProbe()
   }
 
   const recordRpcSuccess = () => {
@@ -237,6 +240,48 @@ async function main() {
     if (lastSoftIncidentAt && Date.now() - lastSoftIncidentAt > 4000) {
       rpcConsecutive = 0
     }
+  }
+
+  let rpcProbeInFlight = false
+  const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
+  const triggerRpcProbe = () => {
+    if (rpcProbeInFlight) return
+    rpcProbeInFlight = true
+    const probeUrl = rpcBaseUrl !== 'unknown' ? rpcBaseUrl : rpcEnvUrl
+    const attemptProbe = async () => {
+      let lastErr = null
+      for (let attempt = 0; attempt <= rpcRetry; attempt += 1) {
+        try {
+          const resp = await fetch(probeUrl, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_blockNumber', params: [] })
+          })
+          if (!resp.ok) {
+            lastErr = new Error(`HTTP ${resp.status}`)
+            if (isSoftRpcStatus(resp.status())) {
+              await sleep(rpcBackoffMs * (attempt + 1))
+              continue
+            }
+            break
+          }
+          const json = await resp.json()
+          if (json?.result) {
+            recordRpcSuccess()
+            return
+          }
+        } catch (err) {
+          lastErr = err
+          await sleep(rpcBackoffMs * (attempt + 1))
+        }
+      }
+      if (lastErr) {
+        rpcOtherErrors += 1
+      }
+    }
+    attemptProbe().finally(() => {
+      rpcProbeInFlight = false
+    })
   }
 
   page.on('console', msg => {

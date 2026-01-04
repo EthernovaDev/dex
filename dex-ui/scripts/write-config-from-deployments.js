@@ -47,7 +47,8 @@ const config = {
     multicall2: addresses.multicall2 || '',
     pair: addresses.pair || '',
     tokenFactory: addresses.tokenFactory || '',
-    boostRegistry: addresses.boostRegistry || ''
+    boostRegistry: addresses.boostRegistry || '',
+    metadataRegistry: addresses.metadataRegistry || ''
   },
   startBlock
 }

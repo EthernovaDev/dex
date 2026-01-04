@@ -1142,7 +1142,7 @@ export default function CreateToken() {
                   </SuccessBlock>
                 )}
                 {createdPair && (
-                  <SuccessBlock>
+                  <SuccessBlock data-testid="create-success-pair-address">
                     <SuccessLabel>Pair Address</SuccessLabel>
                     <SuccessValue>
                       <a href={`${config.explorerUrl}/token/${createdPair}`} target="_blank" rel="noopener noreferrer">
@@ -1152,7 +1152,7 @@ export default function CreateToken() {
                   </SuccessBlock>
                 )}
                 {createdPair && (
-                  <SuccessBlock>
+                  <SuccessBlock data-testid="create-success-pair-status">
                     <SuccessLabel>Pair status</SuccessLabel>
                     <SuccessValue>
                       {pairLiquidityReady === true

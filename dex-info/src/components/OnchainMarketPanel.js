@@ -424,7 +424,7 @@ export default function OnchainMarketPanel({
   return (
     <Panel style={{ marginBottom: '1.5rem' }}>
       <HeaderRow>
-        <TYPE.main>{`Market activity (${quoteSymbol} / ${baseSymbol})`}</TYPE.main>
+        <TYPE.main data-testid="market-activity-title">{`Market activity (${quoteSymbol} / ${baseSymbol})`}</TYPE.main>
         <TimeframeRow>
           {TIMEFRAMES.map((tf) => (
             <TimeframeButton

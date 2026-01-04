@@ -476,6 +476,7 @@ export default function CreateToken() {
   const [txHash, setTxHash] = useState<string | null>(null)
   const [createdToken, setCreatedToken] = useState<string | null>(null)
   const [createdPair, setCreatedPair] = useState<string | null>(null)
+  const [pairLiquidityReady, setPairLiquidityReady] = useState<boolean | null>(null)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [metaStatus, setMetaStatus] = useState<{ state: string; error?: string } | null>(null)
@@ -666,6 +667,7 @@ export default function CreateToken() {
     setTxHash(null)
     setCreatedToken(null)
     setCreatedPair(null)
+    setPairLiquidityReady(null)
 
     try {
       const factory = new Contract(tokenFactoryAddress, TOKEN_FACTORY_ABI, signer)
@@ -712,20 +714,23 @@ export default function CreateToken() {
             if (resolvedPair && resolvedPair !== AddressZero) {
               const pairContract = new Contract(resolvedPair, PAIR_ABI, signer)
               const reserves = await pairContract.getReserves()
+              verifiedPair = resolvedPair
+              setCreatedPair(resolvedPair)
               if (reserves[0].gt(0) && reserves[1].gt(0)) {
-                verifiedPair = resolvedPair
-                setCreatedPair(resolvedPair)
+                setPairLiquidityReady(true)
               } else {
                 setError('Pool created but has no liquidity yet')
-                verifiedPair = null
+                setPairLiquidityReady(false)
               }
+            } else if (verifiedPair) {
+              setError('Pool created but has no liquidity yet')
+              setPairLiquidityReady(false)
             } else {
               setError('Pool creation failed (pair not found)')
-              verifiedPair = null
             }
           } catch {
             setError('Pool creation could not be verified')
-            verifiedPair = null
+            setPairLiquidityReady(null)
           }
         }
 
@@ -1143,6 +1148,18 @@ export default function CreateToken() {
                       <a href={`${config.explorerUrl}/token/${createdPair}`} target="_blank" rel="noopener noreferrer">
                         {createdPair}
                       </a>
+                    </SuccessValue>
+                  </SuccessBlock>
+                )}
+                {createdPair && (
+                  <SuccessBlock>
+                    <SuccessLabel>Pair status</SuccessLabel>
+                    <SuccessValue>
+                      {pairLiquidityReady === true
+                        ? 'Liquidity confirmed'
+                        : pairLiquidityReady === false
+                        ? 'Pool created, liquidity pending'
+                        : 'Pending verification'}
                     </SuccessValue>
                   </SuccessBlock>
                 )}

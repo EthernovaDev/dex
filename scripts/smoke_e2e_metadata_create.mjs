@@ -23,13 +23,28 @@ const fail = (msg) => {
 }
 
 const getImageValue = (payload) => payload?.image || payload?.image_uri || ''
+const ipfsGatewayBase = (process.env.IPFS_GATEWAY_BASE || 'https://dex.ethnova.net/ipfs/').replace(/\/?$/, '/')
 
-const assertNoBase64Image = (payload, label) => {
+const assertNoBase64Image = async (payload, label) => {
   const image = String(getImageValue(payload) || '')
   if (image.startsWith('data:image/')) {
     fail(`${label} contains base64 image (data:image/*)`)
   }
-  if (image && !image.startsWith('ipfs://') && !image.includes('/ipfs/')) {
+  if (!image) return
+  if (image.startsWith('ipfs://')) {
+    const cid = image.replace('ipfs://', '')
+    const gatewayUrl = `${ipfsGatewayBase}${cid}`
+    try {
+      const res = await fetch(gatewayUrl, { method: 'HEAD' })
+      if (!res.ok) {
+        warn(`${label} gateway HEAD failed: ${gatewayUrl} (${res.status})`)
+      }
+    } catch (err) {
+      warn(`${label} gateway HEAD failed: ${gatewayUrl} (${err?.message || 'error'})`)
+    }
+    return
+  }
+  if (!image.includes('/ipfs/')) {
     warn(`${label} image is not ipfs/gateway: ${image.slice(0, 60)}`)
   }
 }
@@ -312,7 +327,7 @@ async function main() {
   if (!json?.name || !json?.symbol) {
     fail('metadata JSON missing name/symbol')
   }
-  assertNoBase64Image(json, 'token metadata JSON')
+  await assertNoBase64Image(json, 'token metadata JSON')
   log('[OK] metadata JSON accessible')
 
   const pairJsonResp = await fetch(`${baseUrl}/api/metadata/json/pair/${pairAddress}`)
@@ -323,7 +338,7 @@ async function main() {
   if (!pairJson?.name || !pairJson?.symbol) {
     fail('pair metadata JSON missing name/symbol')
   }
-  assertNoBase64Image(pairJson, 'pair metadata JSON')
+  await assertNoBase64Image(pairJson, 'pair metadata JSON')
   log('[OK] pair metadata JSON accessible')
 
   if (createTxHash) {

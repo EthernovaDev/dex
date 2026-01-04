@@ -2,6 +2,7 @@
 import fs from 'fs'
 import path from 'path'
 import Database from 'better-sqlite3'
+import FormData from 'form-data'
 
 const log = (msg) => process.stdout.write(`${msg}\n`)
 const fail = (msg) => {
@@ -29,13 +30,8 @@ loadEnvFile(process.env.METADATA_ENV || '/etc/novadex/metadata.env')
 
 const SQLITE_PATH = process.env.SQLITE_PATH || '/var/lib/novadex/metadata.db'
 const UPLOAD_DIR = process.env.UPLOAD_DIR || '/var/lib/novadex/uploads'
-const PIN_PROVIDER = process.env.PIN_PROVIDER || 'pinata'
-const PINATA_JWT = process.env.PINATA_JWT || ''
-const IPFS_GATEWAY = (process.env.IPFS_GATEWAY || 'https://cloudflare-ipfs.com/ipfs/').replace(/\/?$/, '/')
-
-if (PIN_PROVIDER !== 'pinata' || !PINATA_JWT) {
-  fail('Pinata not configured (PINATA_JWT missing). Aborting migration.')
-}
+const IPFS_API_URL = process.env.IPFS_API_URL || 'http://127.0.0.1:5001'
+const IPFS_GATEWAY_BASE = (process.env.IPFS_GATEWAY_BASE || 'https://dex.ethnova.net/ipfs/').replace(/\/?$/, '/')
 
 if (!fs.existsSync(SQLITE_PATH)) {
   fail(`SQLite DB not found at ${SQLITE_PATH}`)
@@ -45,20 +41,21 @@ if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true })
 }
 
-async function pinFileToPinata(filePath, filename) {
+async function pinFileToKubo(filePath, filename) {
   const form = new FormData()
   form.append('file', fs.createReadStream(filePath), filename)
-  const resp = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
+  const resp = await fetch(`${IPFS_API_URL}/api/v0/add?pin=true&wrap-with-directory=false`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${PINATA_JWT}` },
     body: form,
   })
+  const text = await resp.text()
   if (!resp.ok) {
-    const text = await resp.text()
-    throw new Error(`Pinata upload failed: ${text.slice(0, 200)}`)
+    throw new Error(`Kubo upload failed: ${text.slice(0, 200)}`)
   }
-  const data = await resp.json()
-  return data.IpfsHash
+  const lines = text.trim().split('\n').filter(Boolean)
+  const last = lines[lines.length - 1]
+  const data = JSON.parse(last)
+  return data.Hash
 }
 
 async function pinInlineDataUri(dataUri) {
@@ -75,8 +72,8 @@ async function pinInlineDataUri(dataUri) {
   const tmpPath = path.join(UPLOAD_DIR, tmpName)
   fs.writeFileSync(tmpPath, buffer)
   try {
-    const cid = await pinFileToPinata(tmpPath, tmpName)
-    return { cid, ipfsUri: `ipfs://${cid}`, gatewayUrl: `${IPFS_GATEWAY}${cid}` }
+    const cid = await pinFileToKubo(tmpPath, tmpName)
+    return { cid, ipfsUri: `ipfs://${cid}`, gatewayUrl: `${IPFS_GATEWAY_BASE}${cid}` }
   } finally {
     try {
       fs.unlinkSync(tmpPath)
@@ -85,6 +82,15 @@ async function pinInlineDataUri(dataUri) {
 }
 
 async function main() {
+  try {
+    const resp = await fetch(`${IPFS_API_URL}/api/v0/version`, { method: 'POST' })
+    if (!resp.ok) {
+      const text = await resp.text()
+      fail(`IPFS API not healthy: ${text.slice(0, 200)}`)
+    }
+  } catch (err) {
+    fail(`IPFS API not reachable: ${err?.message || 'error'}`)
+  }
   const db = new Database(SQLITE_PATH)
   const rows = db
     .prepare("SELECT address, image_uri FROM tokens WHERE image_uri LIKE 'data:image/%'")

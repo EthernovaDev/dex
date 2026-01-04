@@ -26,12 +26,28 @@ const getImageValue = (payload) => {
   )
 }
 
-const assertNoBase64Image = (payload, label) => {
+const ipfsGatewayBase = (process.env.IPFS_GATEWAY_BASE || 'https://dex.ethnova.net/ipfs/').replace(/\/?$/, '/')
+
+const assertNoBase64Image = async (payload, label) => {
   const image = String(getImageValue(payload) || '')
   if (image.startsWith('data:image/')) {
     fail(`${label} contains base64 image (data:image/*)`)
   }
-  if (image && !image.startsWith('ipfs://') && !image.includes('/ipfs/')) {
+  if (!image) return
+  if (image.startsWith('ipfs://')) {
+    const cid = image.replace('ipfs://', '')
+    const gatewayUrl = `${ipfsGatewayBase}${cid}`
+    try {
+      const res = await fetch(gatewayUrl, { method: 'HEAD' })
+      if (!res.ok) {
+        warn(`${label} gateway HEAD failed: ${gatewayUrl} (${res.status})`)
+      }
+    } catch (err) {
+      warn(`${label} gateway HEAD failed: ${gatewayUrl} (${err?.message || 'error'})`)
+    }
+    return
+  }
+  if (!image.includes('/ipfs/')) {
     warn(`${label} image is not ipfs/gateway: ${image.slice(0, 60)}`)
   }
 }
@@ -75,7 +91,7 @@ async function main() {
   if (wnova) {
     const wnovaMeta = await fetchJson(`${baseUrl}/api/metadata/token/${wnova}`, undefined, 'get token metadata')
     log(`[OK] token metadata GET: ${wnova} -> ${wnovaMeta?.missing ? 'missing' : 'present'}`)
-    assertNoBase64Image(wnovaMeta, 'wnova token metadata')
+    await assertNoBase64Image(wnovaMeta, 'wnova token metadata')
   } else {
     warn('WNOVA address missing from config')
   }
@@ -98,7 +114,7 @@ async function main() {
       if (!pairJson?.name || !pairJson?.symbol || !hasToken0 || !hasToken1) {
         fail('pair metadata JSON missing name/symbol/token0/token1')
       }
-      assertNoBase64Image(pairJson, 'pair metadata json')
+      await assertNoBase64Image(pairJson, 'pair metadata json')
       log('[OK] pair metadata JSON present')
     }
     return
@@ -131,7 +147,7 @@ async function main() {
 
   const getToken = await fetchJson(`${baseUrl}/api/metadata/token/${tokenAddress}`, undefined, 'get token metadata (persisted)')
   if (!getToken?.data) fail('token metadata not persisted')
-  assertNoBase64Image(getToken, 'token metadata persisted')
+  await assertNoBase64Image(getToken, 'token metadata persisted')
   log('[OK] token metadata persisted')
 
   if (pairAddress) {
@@ -146,7 +162,7 @@ async function main() {
     if (!pairJson?.name || !pairJson?.symbol || !hasToken0 || !hasToken1) {
       fail('pair metadata JSON missing name/symbol/token0/token1')
     }
-    assertNoBase64Image(pairJson, 'pair metadata json')
+    await assertNoBase64Image(pairJson, 'pair metadata json')
     log('[OK] pair metadata JSON present')
   }
 }

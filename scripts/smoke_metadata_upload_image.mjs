@@ -13,6 +13,7 @@ const fail = (msg) => {
   process.stderr.write(`[ERROR] ${msg}\n`)
   process.exit(1)
 }
+const ipfsGatewayBase = (process.env.IPFS_GATEWAY_BASE || 'https://dex.ethnova.net/ipfs/').replace(/\/?$/, '/')
 
 const RETRY_STATUSES = new Set([429, 502, 503, 504])
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -87,7 +88,18 @@ async function main() {
   if (String(imageUri).startsWith('data:image/')) {
     fail('image upload returned base64 image')
   }
-  if (imageUri && !String(imageUri).startsWith('ipfs://') && !String(imageUri).includes('/ipfs/')) {
+  if (imageUri && String(imageUri).startsWith('ipfs://')) {
+    const cid = String(imageUri).replace('ipfs://', '')
+    const gatewayUrl = `${ipfsGatewayBase}${cid}`
+    try {
+      const res = await fetch(gatewayUrl, { method: 'HEAD' })
+      if (!res.ok) {
+        warn(`image gateway HEAD failed: ${gatewayUrl} (${res.status})`)
+      }
+    } catch (err) {
+      warn(`image gateway HEAD failed: ${gatewayUrl} (${err?.message || 'error'})`)
+    }
+  } else if (imageUri && !String(imageUri).includes('/ipfs/')) {
     warn(`image upload returned non-ipfs image: ${String(imageUri).slice(0, 60)}`)
   }
   log('[OK] image upload metadata POST')

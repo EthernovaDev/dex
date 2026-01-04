@@ -5,6 +5,11 @@ ROOT_DIR="/opt/novadex/dex"
 OUT_DIR="/opt/novadex/scripts/out"
 mkdir -p "$OUT_DIR"
 
+echo "[INFO] Running metadata smokes..."
+node "$ROOT_DIR/scripts/smoke_metadata_api.mjs"
+node "$ROOT_DIR/scripts/smoke_metadata_upload_image.mjs"
+node "$ROOT_DIR/scripts/smoke_quota_wallet.mjs"
+
 echo "[INFO] Running smoke_rpc_health..."
 RPC_STATUS=0
 node "$ROOT_DIR/scripts/smoke_rpc_health.mjs" || RPC_STATUS=$?

@@ -1,11 +1,18 @@
 #!/usr/bin/env node
-import fs from 'fs'
 import { ethers } from 'ethers'
+import { createRequire } from 'module'
+
+const require = createRequire(import.meta.url)
+let sharp
+try {
+  sharp = require('../server/metadata-api/node_modules/sharp')
+} catch (err) {
+  console.error('[ERROR] sharp not found. Run npm install in server/metadata-api.')
+  process.exit(1)
+}
 
 const baseUrl = (process.env.METADATA_BASE_URL || 'https://dex.ethnova.net').replace(/\/$/, '')
-const priv = process.env.SMOKE_PRIVKEY
-const tokenAddress = process.env.SMOKE_TOKEN_ADDRESS
-const txHash = process.env.SMOKE_TOKEN_TX
+const ipfsGatewayBase = (process.env.IPFS_GATEWAY_BASE || 'https://dex.ethnova.net/ipfs/').replace(/\/?$/, '/')
 
 const log = (msg) => process.stdout.write(`${msg}\n`)
 const warn = (msg) => process.stdout.write(`[WARN] ${msg}\n`)
@@ -13,7 +20,6 @@ const fail = (msg) => {
   process.stderr.write(`[ERROR] ${msg}\n`)
   process.exit(1)
 }
-const ipfsGatewayBase = (process.env.IPFS_GATEWAY_BASE || 'https://dex.ethnova.net/ipfs/').replace(/\/?$/, '/')
 
 const RETRY_STATUSES = new Set([429, 502, 503, 504])
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -46,60 +52,58 @@ async function fetchJson(url, opts, label = 'request') {
 }
 
 async function main() {
-  if (!priv || !tokenAddress || !txHash) {
-    warn('SMOKE_PRIVKEY + SMOKE_TOKEN_ADDRESS + SMOKE_TOKEN_TX not set; skipping image upload test')
-    return
-  }
-
-  const wallet = new ethers.Wallet(priv)
-  const challenge = await fetchJson(`${baseUrl}/api/metadata/challenge`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ address: wallet.address }),
-  }, 'challenge')
+  const wallet = ethers.Wallet.createRandom()
+  const challenge = await fetchJson(
+    `${baseUrl}/api/metadata/challenge`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ address: wallet.address })
+    },
+    'challenge'
+  )
   const signature = await wallet.signMessage(challenge.message)
 
-  const pngData = Buffer.from(
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AAv4B0w0X4csAAAAASUVORK5CYII=',
-    'base64'
-  )
-  const blob = new Blob([pngData], { type: 'image/png' })
-  const form = new FormData()
-  form.append('tokenAddress', tokenAddress)
-  form.append('txHash', txHash)
-  form.append('name', 'Smoke Token')
-  form.append('symbol', 'SMK')
-  form.append('logo', blob, 'logo.png')
+  const pngData = await sharp({
+    create: {
+      width: 1600,
+      height: 1600,
+      channels: 3,
+      background: { r: 140, g: 30, b: 200 }
+    }
+  }).png().toBuffer()
 
-  const resp = await fetch(`${baseUrl}/api/metadata/token`, {
+  const form = new FormData()
+  form.append('image', new Blob([pngData], { type: 'image/png' }), 'smoke.png')
+
+  const resp = await fetch(`${baseUrl}/api/metadata/image`, {
     method: 'POST',
     headers: { 'x-address': wallet.address, 'x-signature': signature },
-    body: form,
+    body: form
   })
   const text = await resp.text()
   if (!resp.ok) fail(`image upload failed: ${text.slice(0, 200)}`)
-  let parsed = null
+  let parsed
   try {
     parsed = JSON.parse(text)
   } catch {
     fail('image upload response is not JSON')
   }
-  const imageUri = parsed?.imageUri || parsed?.data?.image_uri || ''
+  const imageUri = parsed?.ipfsUri || parsed?.imageUri || ''
+  if (!imageUri) {
+    fail('image upload did not return image uri')
+  }
   if (String(imageUri).startsWith('data:image/')) {
     fail('image upload returned base64 image')
   }
-  if (imageUri && String(imageUri).startsWith('ipfs://')) {
+  if (String(imageUri).startsWith('ipfs://')) {
     const cid = String(imageUri).replace('ipfs://', '')
     const gatewayUrl = `${ipfsGatewayBase}${cid}`
-    try {
-      const res = await fetch(gatewayUrl, { method: 'HEAD' })
-      if (!res.ok) {
-        warn(`image gateway HEAD failed: ${gatewayUrl} (${res.status})`)
-      }
-    } catch (err) {
-      warn(`image gateway HEAD failed: ${gatewayUrl} (${err?.message || 'error'})`)
+    const headResp = await fetch(gatewayUrl, { method: 'HEAD' })
+    if (!headResp.ok) {
+      fail(`image gateway HEAD failed: ${gatewayUrl} (${headResp.status})`)
     }
-  } else if (imageUri && !String(imageUri).includes('/ipfs/')) {
+  } else if (!String(imageUri).includes('/ipfs/')) {
     warn(`image upload returned non-ipfs image: ${String(imageUri).slice(0, 60)}`)
   }
   log('[OK] image upload metadata POST')

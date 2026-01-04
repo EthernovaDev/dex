@@ -158,6 +158,20 @@ const SuccessBlock = styled.div`
   width: 100%;
 `
 
+const SuccessGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  width: 100%;
+`
+
+const SuccessActions = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  width: 100%;
+`
+
 const SuccessLabel = styled.div`
   font-size: 12px;
   color: ${({ theme }) => theme.text2};
@@ -1091,125 +1105,129 @@ export default function CreateToken() {
 
             {(txHash || createdToken || createdPair) && (
               <AutoColumn gap="sm" style={{ marginTop: 16, width: '100%' }} data-testid="create-success">
-                {metaStatus?.state && (
-                  <SuccessBlock>
-                    <SuccessLabel>Metadata</SuccessLabel>
-                    <SuccessValue>
-                      {metaStatus.state === 'saving' && 'Saving metadata...'}
-                      {metaStatus.state === 'saved' && 'Saved ✓'}
-                      {metaStatus.state === 'error' && `Saved locally (remote failed): ${metaStatus.error || ''}`}
-                    </SuccessValue>
-                  </SuccessBlock>
-                )}
-                {metadataUri && (
-                  <SuccessBlock>
-                    <SuccessLabel>Metadata URI</SuccessLabel>
-                    <SuccessValue>
-                      <a href={toGatewayUrl(metadataUri)} target="_blank" rel="noopener noreferrer">
-                        {metadataUri}
-                      </a>
-                    </SuccessValue>
-                  </SuccessBlock>
-                )}
-                {metadataImageUri && (
-                  <SuccessBlock>
-                    <SuccessLabel>Logo URI</SuccessLabel>
-                    <SuccessValue>
-                      <a href={toGatewayUrl(metadataImageUri)} target="_blank" rel="noopener noreferrer">
-                        {metadataImageUri}
-                      </a>
-                    </SuccessValue>
-                  </SuccessBlock>
-                )}
-                {txHash && (
-                  <SuccessBlock>
-                    <SuccessLabel>Transaction</SuccessLabel>
-                    <SuccessValue>
-                      <a href={`${config.explorerUrl}/tx/${txHash}`} target="_blank" rel="noopener noreferrer">
-                        {txHash}
-                      </a>
-                    </SuccessValue>
-                  </SuccessBlock>
-                )}
-                {createdToken && (
-                  <SuccessBlock>
-                    <SuccessLabel>Token Address</SuccessLabel>
-                    <SuccessValue>
-                      <a href={`${config.explorerUrl}/token/${createdToken}`} target="_blank" rel="noopener noreferrer">
-                        {createdToken}
-                      </a>
-                    </SuccessValue>
-                  </SuccessBlock>
-                )}
-                {createdPair && (
-                  <SuccessBlock data-testid="create-success-pair-address">
-                    <SuccessLabel>Pair Address</SuccessLabel>
-                    <SuccessValue>
-                      <a href={`${config.explorerUrl}/token/${createdPair}`} target="_blank" rel="noopener noreferrer">
-                        {createdPair}
-                      </a>
-                    </SuccessValue>
-                  </SuccessBlock>
-                )}
-                {createdPair && (
-                  <SuccessBlock data-testid="create-success-pair-status">
-                    <SuccessLabel>Pair status</SuccessLabel>
-                    <SuccessValue>
-                      {pairLiquidityReady === true
-                        ? 'Liquidity confirmed'
-                        : pairLiquidityReady === false
-                        ? 'Pool created, liquidity pending'
-                        : 'Pending verification'}
-                    </SuccessValue>
-                  </SuccessBlock>
-                )}
-                {createdToken && (
-                  <ButtonLight onClick={onAddToMetaMask} style={{ width: '100%' }}>
-                    Add token to MetaMask
-                  </ButtonLight>
-                )}
-                {createdToken && Object.keys(metadataProfile).length ? (
-                  <ButtonLight
-                    onClick={() =>
-                      navigator.clipboard.writeText(
-                        JSON.stringify(
-                          {
-                            name,
-                            symbol,
-                            decimals,
-                            totalSupply,
-                            ...metadataProfile,
-                          },
-                          null,
-                          2
+                <SuccessGrid>
+                  {metaStatus?.state && (
+                    <SuccessBlock>
+                      <SuccessLabel>Metadata</SuccessLabel>
+                      <SuccessValue>
+                        {metaStatus.state === 'saving' && 'Saving metadata...'}
+                        {metaStatus.state === 'saved' && 'Saved ✓'}
+                        {metaStatus.state === 'error' && `Saved locally (remote failed): ${metaStatus.error || ''}`}
+                      </SuccessValue>
+                    </SuccessBlock>
+                  )}
+                  {metadataUri && (
+                    <SuccessBlock>
+                      <SuccessLabel>Metadata URI</SuccessLabel>
+                      <SuccessValue>
+                        <a href={toGatewayUrl(metadataUri)} target="_blank" rel="noopener noreferrer">
+                          {metadataUri}
+                        </a>
+                      </SuccessValue>
+                    </SuccessBlock>
+                  )}
+                  {metadataImageUri && (
+                    <SuccessBlock>
+                      <SuccessLabel>Logo URI</SuccessLabel>
+                      <SuccessValue>
+                        <a href={toGatewayUrl(metadataImageUri)} target="_blank" rel="noopener noreferrer">
+                          {metadataImageUri}
+                        </a>
+                      </SuccessValue>
+                    </SuccessBlock>
+                  )}
+                  {txHash && (
+                    <SuccessBlock>
+                      <SuccessLabel>Transaction</SuccessLabel>
+                      <SuccessValue>
+                        <a href={`${config.explorerUrl}/tx/${txHash}`} target="_blank" rel="noopener noreferrer">
+                          {txHash}
+                        </a>
+                      </SuccessValue>
+                    </SuccessBlock>
+                  )}
+                  {createdToken && (
+                    <SuccessBlock>
+                      <SuccessLabel>Token Address</SuccessLabel>
+                      <SuccessValue>
+                        <a href={`${config.explorerUrl}/token/${createdToken}`} target="_blank" rel="noopener noreferrer">
+                          {createdToken}
+                        </a>
+                      </SuccessValue>
+                    </SuccessBlock>
+                  )}
+                  {createdPair && (
+                    <SuccessBlock data-testid="create-success-pair-address">
+                      <SuccessLabel>Pair Address</SuccessLabel>
+                      <SuccessValue>
+                        <a href={`${config.explorerUrl}/token/${createdPair}`} target="_blank" rel="noopener noreferrer">
+                          {createdPair}
+                        </a>
+                      </SuccessValue>
+                    </SuccessBlock>
+                  )}
+                  {createdPair && (
+                    <SuccessBlock data-testid="create-success-pair-status">
+                      <SuccessLabel>Pair status</SuccessLabel>
+                      <SuccessValue>
+                        {pairLiquidityReady === true
+                          ? 'Liquidity confirmed'
+                          : pairLiquidityReady === false
+                          ? 'Pool created, liquidity pending'
+                          : 'Pending verification'}
+                      </SuccessValue>
+                    </SuccessBlock>
+                  )}
+                </SuccessGrid>
+                <SuccessActions>
+                  {createdToken && (
+                    <ButtonLight onClick={onAddToMetaMask} style={{ width: '100%' }}>
+                      Add token to MetaMask
+                    </ButtonLight>
+                  )}
+                  {createdToken && Object.keys(metadataProfile).length ? (
+                    <ButtonLight
+                      onClick={() =>
+                        navigator.clipboard.writeText(
+                          JSON.stringify(
+                            {
+                              name,
+                              symbol,
+                              decimals,
+                              totalSupply,
+                              ...metadataProfile,
+                            },
+                            null,
+                            2
+                          )
                         )
-                      )
-                    }
-                    style={{ width: '100%' }}
-                  >
-                    Copy Token Profile JSON
-                  </ButtonLight>
-                ) : null}
-                {createdToken && (
-                  <ButtonLight as="a" href={`/#/swap?outputCurrency=${createdToken}`} style={{ width: '100%' }}>
-                    Go to Swap
-                  </ButtonLight>
-                )}
-                {createdToken && (
-                  <ButtonLight as="a" href={`/info/#/token/${createdToken}`} style={{ width: '100%' }}>
-                    View Token Analytics
-                  </ButtonLight>
-                )}
-                {createdPair && (
-                  <ButtonLight as="a" href={`/info/#/pair/${createdPair}`} style={{ width: '100%' }}>
-                    View Pair Analytics
-                  </ButtonLight>
-                )}
-                {createdPair && (
-                  <ButtonLight as="a" href={`/info/#/pair/${createdPair}#boost`} style={{ width: '100%' }}>
-                    Boost this pair (10 NOVA / 24h)
-                  </ButtonLight>
-                )}
+                      }
+                      style={{ width: '100%' }}
+                    >
+                      Copy Token Profile JSON
+                    </ButtonLight>
+                  ) : null}
+                  {createdToken && (
+                    <ButtonLight as="a" href={`/#/swap?outputCurrency=${createdToken}`} style={{ width: '100%' }}>
+                      Go to Swap
+                    </ButtonLight>
+                  )}
+                  {createdToken && (
+                    <ButtonLight as="a" href={`/info/#/token/${createdToken}`} style={{ width: '100%' }}>
+                      View Token Analytics
+                    </ButtonLight>
+                  )}
+                  {createdPair && (
+                    <ButtonLight as="a" href={`/info/#/pair/${createdPair}`} style={{ width: '100%' }}>
+                      View Pair Analytics
+                    </ButtonLight>
+                  )}
+                  {createdPair && (
+                    <ButtonLight as="a" href={`/info/#/pair/${createdPair}#boost`} style={{ width: '100%' }}>
+                      Boost this pair (10 NOVA / 24h)
+                    </ButtonLight>
+                  )}
+                </SuccessActions>
               </AutoColumn>
             )}
           </FormColumn>

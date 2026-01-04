@@ -77,6 +77,19 @@ async function main() {
   })
   const text = await resp.text()
   if (!resp.ok) fail(`image upload failed: ${text.slice(0, 200)}`)
+  let parsed = null
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    fail('image upload response is not JSON')
+  }
+  const imageUri = parsed?.imageUri || parsed?.data?.image_uri || ''
+  if (String(imageUri).startsWith('data:image/')) {
+    fail('image upload returned base64 image')
+  }
+  if (imageUri && !String(imageUri).startsWith('ipfs://') && !String(imageUri).includes('/ipfs/')) {
+    warn(`image upload returned non-ipfs image: ${String(imageUri).slice(0, 60)}`)
+  }
   log('[OK] image upload metadata POST')
 }
 

@@ -22,6 +22,18 @@ const fail = (msg) => {
   process.exit(1)
 }
 
+const getImageValue = (payload) => payload?.image || payload?.image_uri || ''
+
+const assertNoBase64Image = (payload, label) => {
+  const image = String(getImageValue(payload) || '')
+  if (image.startsWith('data:image/')) {
+    fail(`${label} contains base64 image (data:image/*)`)
+  }
+  if (image && !image.startsWith('ipfs://') && !image.includes('/ipfs/')) {
+    warn(`${label} image is not ipfs/gateway: ${image.slice(0, 60)}`)
+  }
+}
+
 const configPath = '/opt/novadex/dex/dex-ui/public/ethernova.config.json'
 const deploymentsPath = '/opt/novadex/contracts/deployments.json'
 const config = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, 'utf8')) : {}
@@ -300,7 +312,19 @@ async function main() {
   if (!json?.name || !json?.symbol) {
     fail('metadata JSON missing name/symbol')
   }
+  assertNoBase64Image(json, 'token metadata JSON')
   log('[OK] metadata JSON accessible')
+
+  const pairJsonResp = await fetch(`${baseUrl}/api/metadata/json/pair/${pairAddress}`)
+  if (!pairJsonResp.ok) {
+    fail('pair metadata JSON endpoint failed')
+  }
+  const pairJson = await pairJsonResp.json()
+  if (!pairJson?.name || !pairJson?.symbol) {
+    fail('pair metadata JSON missing name/symbol')
+  }
+  assertNoBase64Image(pairJson, 'pair metadata JSON')
+  log('[OK] pair metadata JSON accessible')
 
   if (createTxHash) {
     log(`[DONE] tx=${createTxHash} token=${tokenAddress} pair=${pairAddress}`)

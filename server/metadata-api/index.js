@@ -142,6 +142,21 @@ function validateUrl(value) {
   }
 }
 
+function validateImageUri(value) {
+  if (!value) return ''
+  const trimmed = String(value).trim()
+  if (!trimmed) return ''
+  if (trimmed.startsWith('ipfs://')) return trimmed
+  return validateUrl(trimmed)
+}
+
+function sanitizeImageUri(value) {
+  if (!value) return ''
+  const trimmed = String(value).trim()
+  if (!trimmed || trimmed.startsWith('data:image/')) return ''
+  return trimmed
+}
+
 function validateLogo(value, maxLength = 200000) {
   if (!value) return ''
   if (typeof value !== 'string') return ''
@@ -150,7 +165,31 @@ function validateLogo(value, maxLength = 200000) {
   if (trimmed.startsWith('data:image/')) {
     return trimmed.length <= maxLength ? trimmed : ''
   }
-  return validateUrl(trimmed)
+  return validateImageUri(trimmed)
+}
+
+async function pinInlineDataUri(dataUri) {
+  if (!dataUri || !dataUri.startsWith('data:image/')) {
+    throw new Error('Invalid inline image data')
+  }
+  if (!(PIN_PROVIDER === 'pinata' && PINATA_JWT)) {
+    throw new Error('Pinning provider not configured')
+  }
+  const [meta, encoded] = dataUri.split(',')
+  if (!encoded) throw new Error('Invalid data URI encoding')
+  const mimeMatch = meta.match(/data:(image\/[a-zA-Z0-9+.-]+);base64/)
+  if (!mimeMatch) throw new Error('Invalid data URI mime')
+  const ext = mimeMatch[1].split('/')[1] || 'png'
+  const buffer = Buffer.from(encoded, 'base64')
+  const tmpName = `inline-${Date.now()}.${ext}`
+  const tmpPath = path.join(UPLOAD_DIR, tmpName)
+  fs.writeFileSync(tmpPath, buffer)
+  try {
+    const cid = await pinFileToPinata(tmpPath, tmpName)
+    return { cid, ipfsUri: `ipfs://${cid}`, gatewayUrl: `${IPFS_GATEWAY}${cid}` }
+  } finally {
+    fs.unlinkSync(tmpPath)
+  }
 }
 
 function rateLimit(req, res, next) {
@@ -321,7 +360,7 @@ function buildMetadata(entry) {
     const name1 = token1Meta?.name || (token1Addr === WNOVA ? 'Wrapped NOVA' : symbol1)
     const otherMeta = token0Addr === WNOVA ? token1Meta : token1Addr === WNOVA ? token0Meta : token0Meta || token1Meta
     const otherSymbol = token0Addr === WNOVA ? symbol1 : token1Addr === WNOVA ? symbol0 : symbol1
-    const image = entry?.image_uri || entry?.logo || otherMeta?.image_uri || otherMeta?.logo || ''
+    const image = sanitizeImageUri(entry?.image_uri || entry?.logo || otherMeta?.image_uri || otherMeta?.logo || '')
     const links = {
       website: entry?.website || otherMeta?.website || '',
       x: entry?.twitter || otherMeta?.twitter || '',
@@ -356,7 +395,7 @@ function buildMetadata(entry) {
     name: entry?.name || entry?.symbol || 'Token',
     symbol: entry?.symbol || '',
     description: entry?.description || '',
-    image: entry?.image_uri || entry?.logo || '',
+    image: sanitizeImageUri(entry?.image_uri || entry?.logo || ''),
     external_url: PUBLIC_BASE_URL,
     links: {
       website: entry?.website || '',
@@ -605,16 +644,24 @@ app.post('/api/metadata/image', authGuard, upload.single('image'), async (req, r
     }
     let imageUri = ''
     let imageUrl = ''
+    let cid = ''
     if (PIN_PROVIDER === 'pinata' && PINATA_JWT) {
-      const imageCid = await pinFileToPinata(req.file.path, req.file.originalname || req.file.filename)
-      imageUri = `ipfs://${imageCid}`
-      imageUrl = `${IPFS_GATEWAY}${imageCid}`
+      cid = await pinFileToPinata(req.file.path, req.file.originalname || req.file.filename)
+      imageUri = `ipfs://${cid}`
+      imageUrl = `${IPFS_GATEWAY}${cid}`
     } else {
-      imageUri = `${PUBLIC_BASE_URL}/api/metadata/uploads/${req.file.filename}`
-      imageUrl = imageUri
+      throw new Error('Pinning provider not configured')
     }
     const contentHash = ethers.utils.keccak256(fs.readFileSync(req.file.path))
-    res.json({ ok: true, imageUri, imageUrl, contentHash })
+    res.json({
+      ok: true,
+      cid,
+      ipfsUri: imageUri,
+      gatewayUrl: imageUrl,
+      imageUri,
+      imageUrl,
+      contentHash
+    })
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message || 'Image upload failed' })
   }
@@ -641,9 +688,13 @@ app.post('/api/metadata/publish', authGuard, async (req, res) => {
       twitter: validateUrl(payload.x || payload.twitter || ''),
       telegram: validateUrl(payload.telegram),
       discord: validateUrl(payload.discord),
-      image_uri: validateUrl(payload.imageURI || payload.imageUri || ''),
+      image_uri: validateImageUri(payload.imageURI || payload.imageUri || ''),
       pair: isHexAddress(pair) ? pair : '',
       createdAt: new Date().toISOString(),
+    }
+    if (!sanitized.image_uri && payload.imageUri && String(payload.imageUri).startsWith('data:image/')) {
+      const pinned = await pinInlineDataUri(String(payload.imageUri))
+      sanitized.image_uri = pinned.ipfsUri || pinned.gatewayUrl
     }
     const metadata = buildMetadata(sanitized)
     const contentHash = computeContentHash(metadata)
@@ -742,10 +793,16 @@ app.post('/api/metadata/token', authGuard, upload.single('logo'), async (req, re
         const cid = await pinFileToPinata(req.file.path, req.file.originalname || req.file.filename)
         imageUri = `ipfs://${cid}`
       } else {
-        imageUri = `${PUBLIC_BASE_URL}/api/metadata/uploads/${req.file.filename}`
+        throw new Error('Pinning provider not configured for image upload')
       }
     } else if (req.body?.logoUrl) {
-      imageUri = validateLogo(req.body?.logoUrl)
+      const logo = validateLogo(req.body?.logoUrl)
+      if (logo.startsWith('data:image/')) {
+        const pinned = await pinInlineDataUri(logo)
+        imageUri = pinned.ipfsUri || pinned.gatewayUrl
+      } else {
+        imageUri = logo
+      }
     }
 
     const metadata = buildMetadata({ ...sanitized, image_uri: imageUri, creator: creator || signer })

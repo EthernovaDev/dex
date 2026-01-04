@@ -15,6 +15,27 @@ const fail = (msg) => {
   process.exit(1)
 }
 
+const getImageValue = (payload) => {
+  if (!payload) return ''
+  return (
+    payload.image ||
+    payload.image_uri ||
+    payload?.data?.image ||
+    payload?.data?.image_uri ||
+    ''
+  )
+}
+
+const assertNoBase64Image = (payload, label) => {
+  const image = String(getImageValue(payload) || '')
+  if (image.startsWith('data:image/')) {
+    fail(`${label} contains base64 image (data:image/*)`)
+  }
+  if (image && !image.startsWith('ipfs://') && !image.includes('/ipfs/')) {
+    warn(`${label} image is not ipfs/gateway: ${image.slice(0, 60)}`)
+  }
+}
+
 const RETRY_STATUSES = new Set([429, 502, 503, 504])
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -54,6 +75,7 @@ async function main() {
   if (wnova) {
     const wnovaMeta = await fetchJson(`${baseUrl}/api/metadata/token/${wnova}`, undefined, 'get token metadata')
     log(`[OK] token metadata GET: ${wnova} -> ${wnovaMeta?.missing ? 'missing' : 'present'}`)
+    assertNoBase64Image(wnovaMeta, 'wnova token metadata')
   } else {
     warn('WNOVA address missing from config')
   }
@@ -76,6 +98,7 @@ async function main() {
       if (!pairJson?.name || !pairJson?.symbol || !hasToken0 || !hasToken1) {
         fail('pair metadata JSON missing name/symbol/token0/token1')
       }
+      assertNoBase64Image(pairJson, 'pair metadata json')
       log('[OK] pair metadata JSON present')
     }
     return
@@ -108,6 +131,7 @@ async function main() {
 
   const getToken = await fetchJson(`${baseUrl}/api/metadata/token/${tokenAddress}`, undefined, 'get token metadata (persisted)')
   if (!getToken?.data) fail('token metadata not persisted')
+  assertNoBase64Image(getToken, 'token metadata persisted')
   log('[OK] token metadata persisted')
 
   if (pairAddress) {
@@ -122,6 +146,7 @@ async function main() {
     if (!pairJson?.name || !pairJson?.symbol || !hasToken0 || !hasToken1) {
       fail('pair metadata JSON missing name/symbol/token0/token1')
     }
+    assertNoBase64Image(pairJson, 'pair metadata json')
     log('[OK] pair metadata JSON present')
   }
 }

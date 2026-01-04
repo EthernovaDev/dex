@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getLocalTokens, getTokenMetadata, getPairMetadata, getLocalPairs } from '../utils/localMetadata'
 import { fetchTokenMetadata, fetchPairMetadata, fetchTokenList, fetchPairList } from '../utils/metadataApi'
+import { fetchRegistryTokenMetadata, fetchRegistryPairMetadata } from '../utils/metadataRegistry'
 import { normAddr } from '../utils'
 
 export function useTokenMetadata(address) {
@@ -15,13 +16,20 @@ export function useTokenMetadata(address) {
     const addr = normAddr(address)
     const local = getTokenMetadata(addr)
     setMeta(local)
-    fetchTokenMetadata(addr).then((remote) => {
+    fetchRegistryTokenMetadata(addr).then((registryMeta) => {
       if (stale) return
-      if (remote) {
-        setMeta(remote)
-      } else if (!local) {
-        setMeta(null)
+      if (registryMeta) {
+        setMeta(registryMeta)
+        return
       }
+      fetchTokenMetadata(addr).then((remote) => {
+        if (stale) return
+        if (remote) {
+          setMeta(remote)
+        } else if (!local) {
+          setMeta(null)
+        }
+      })
     })
     return () => {
       stale = true
@@ -81,13 +89,20 @@ export function usePairMetadata(pairAddress) {
     const addr = normAddr(pairAddress)
     const local = getPairMetadata(addr)
     setMeta(local)
-    fetchPairMetadata(addr).then((remote) => {
+    fetchRegistryPairMetadata(addr).then((registryMeta) => {
       if (stale) return
-      if (remote) {
-        setMeta(remote)
-      } else if (!local) {
-        setMeta(null)
+      if (registryMeta) {
+        setMeta(registryMeta)
+        return
       }
+      fetchPairMetadata(addr).then((remote) => {
+        if (stale) return
+        if (remote) {
+          setMeta(remote)
+        } else if (!local) {
+          setMeta(null)
+        }
+      })
     })
     return () => {
       stale = true

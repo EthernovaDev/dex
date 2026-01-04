@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 import fs from 'fs'
-import * as ethers from 'ethers'
+import { createRequire } from 'module'
+
+const require = createRequire(import.meta.url)
+const { ethers } = require('ethers')
 
 const configPath = '/opt/novadex/dex/dex-ui/public/ethernova.config.json'
 const deploymentsPath = '/opt/novadex/contracts/deployments.json'

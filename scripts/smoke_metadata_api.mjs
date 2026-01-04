@@ -53,19 +53,25 @@ const assertNoBase64Image = async (payload, label) => {
 }
 
 const RETRY_STATUSES = new Set([429, 502, 503, 504])
+const RETRY_ATTEMPTS = Number(process.env.SMOKE_METADATA_RETRY_ATTEMPTS || 5)
+const RETRY_429_MS = Number(process.env.SMOKE_METADATA_RETRY_429_MS || 15000)
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 async function fetchJson(url, opts, label = 'request') {
   let lastErr
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
+  for (let attempt = 1; attempt <= RETRY_ATTEMPTS; attempt += 1) {
     try {
       const res = await fetch(url, opts)
       const text = await res.text()
       if (!res.ok) {
         if (RETRY_STATUSES.has(res.status)) {
           lastErr = new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`)
-          await sleep(300 * attempt)
+          if (res.status === 429) {
+            await sleep(RETRY_429_MS)
+          } else {
+            await sleep(300 * attempt)
+          }
           continue
         }
         throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`)

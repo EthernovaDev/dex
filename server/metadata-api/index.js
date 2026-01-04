@@ -505,6 +505,9 @@ async function pinFileToPinata(filePath, filename) {
   const form = new FormData()
   form.append('file', fs.createReadStream(filePath), filename)
   const headers = { ...form.getHeaders(), Authorization: `Bearer ${PINATA_JWT}` }
+  try {
+    headers['content-length'] = String(form.getLengthSync())
+  } catch {}
   const resp = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
     method: 'POST',
     headers,
@@ -539,6 +542,9 @@ async function pinFileToKubo(filePath, filename) {
   const form = new FormData()
   form.append('file', fs.createReadStream(filePath), filename)
   const headers = form.getHeaders()
+  try {
+    headers['content-length'] = String(form.getLengthSync())
+  } catch {}
   const resp = await fetch(`${IPFS_API_URL}/api/v0/add?pin=true&wrap-with-directory=false`, {
     method: 'POST',
     headers,

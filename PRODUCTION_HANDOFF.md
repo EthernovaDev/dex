@@ -125,6 +125,14 @@
   2) Clear site data for `dex.ethnova.net`
   3) Reload the page
 
+## Metadata Smokes
+- `node /opt/novadex/dex/scripts/smoke_registry_readonly.mjs`
+- `node /opt/novadex/dex/scripts/smoke_metadata_api.mjs`
+- `node /opt/novadex/dex/scripts/smoke_metadata_upload_image.mjs`
+- `node /opt/novadex/dex/scripts/smoke_rpc_health.mjs`
+- Opt-in E2E (requires funds + privkey):
+  - `SMOKE_PRIVKEY=0x... node /opt/novadex/dex/scripts/smoke_e2e_metadata_create.mjs`
+
 ## Connect Wallet / Switch Network
 1) Click “Connect to a wallet” and choose MetaMask or WalletConnect.
 2) If you connect while on another chain (e.g. Ethereum Mainnet), the UI will show “Wrong Network”.

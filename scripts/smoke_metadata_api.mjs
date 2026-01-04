@@ -61,8 +61,23 @@ async function main() {
   const priv = process.env.SMOKE_PRIVKEY
   const tokenAddress = process.env.SMOKE_TOKEN_ADDRESS
   const txHash = process.env.SMOKE_TOKEN_TX
+  const pairAddress = process.env.SMOKE_PAIR_ADDRESS
   if (!priv || !tokenAddress || !txHash) {
     warn('SMOKE_PRIVKEY + SMOKE_TOKEN_ADDRESS + SMOKE_TOKEN_TX not set; skipping POST tests')
+    if (pairAddress) {
+      const pairJson = await fetchJson(
+        `${baseUrl}/api/metadata/json/pair/${pairAddress}`,
+        undefined,
+        'get pair metadata json'
+      )
+      const attrs = Array.isArray(pairJson?.attributes) ? pairJson.attributes : []
+      const hasToken0 = attrs.some((a) => a?.trait_type === 'token0' && a?.value)
+      const hasToken1 = attrs.some((a) => a?.trait_type === 'token1' && a?.value)
+      if (!pairJson?.name || !pairJson?.symbol || !hasToken0 || !hasToken1) {
+        fail('pair metadata JSON missing name/symbol/token0/token1')
+      }
+      log('[OK] pair metadata JSON present')
+    }
     return
   }
 
@@ -94,6 +109,21 @@ async function main() {
   const getToken = await fetchJson(`${baseUrl}/api/metadata/token/${tokenAddress}`, undefined, 'get token metadata (persisted)')
   if (!getToken?.data) fail('token metadata not persisted')
   log('[OK] token metadata persisted')
+
+  if (pairAddress) {
+    const pairJson = await fetchJson(
+      `${baseUrl}/api/metadata/json/pair/${pairAddress}`,
+      undefined,
+      'get pair metadata json'
+    )
+    const attrs = Array.isArray(pairJson?.attributes) ? pairJson.attributes : []
+    const hasToken0 = attrs.some((a) => a?.trait_type === 'token0' && a?.value)
+    const hasToken1 = attrs.some((a) => a?.trait_type === 'token1' && a?.value)
+    if (!pairJson?.name || !pairJson?.symbol || !hasToken0 || !hasToken1) {
+      fail('pair metadata JSON missing name/symbol/token0/token1')
+    }
+    log('[OK] pair metadata JSON present')
+  }
 }
 
 main().catch((err) => fail(err.message))

@@ -12,6 +12,8 @@ dist/
 coverage/
 out/
 *.log
+scripts/out/
+scripts/out/smoke_wallet.json
 
 # OS
 .DS_Store

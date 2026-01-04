@@ -295,6 +295,63 @@ async function verifyPairOnchain(pairAddress, token0, token1) {
 }
 
 function buildMetadata(entry) {
+  const createdAtSec = entry?.created_at || entry?.createdAt
+  const createdIso = createdAtSec
+    ? new Date(Number(createdAtSec) * 1000).toISOString()
+    : new Date().toISOString()
+  const shortAddr = (addr) => {
+    if (!addr || addr.length < 10) return addr || ''
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`
+  }
+  const tokenLookup = (addr) => {
+    if (!addr) return null
+    return db.prepare('SELECT * FROM tokens WHERE address = ?').get(normAddr(addr))
+  }
+
+  const token0Addr = normAddr(entry?.token0 || '')
+  const token1Addr = normAddr(entry?.token1 || '')
+  const isPair = Boolean(token0Addr && token1Addr)
+
+  if (isPair) {
+    const token0Meta = tokenLookup(token0Addr)
+    const token1Meta = tokenLookup(token1Addr)
+    const symbol0 = token0Meta?.symbol || (token0Addr === WNOVA ? 'WNOVA' : shortAddr(token0Addr))
+    const symbol1 = token1Meta?.symbol || (token1Addr === WNOVA ? 'WNOVA' : shortAddr(token1Addr))
+    const name0 = token0Meta?.name || (token0Addr === WNOVA ? 'Wrapped NOVA' : symbol0)
+    const name1 = token1Meta?.name || (token1Addr === WNOVA ? 'Wrapped NOVA' : symbol1)
+    const otherMeta = token0Addr === WNOVA ? token1Meta : token1Addr === WNOVA ? token0Meta : token0Meta || token1Meta
+    const otherSymbol = token0Addr === WNOVA ? symbol1 : token1Addr === WNOVA ? symbol0 : symbol1
+    const image = entry?.image_uri || entry?.logo || otherMeta?.image_uri || otherMeta?.logo || ''
+    const links = {
+      website: entry?.website || otherMeta?.website || '',
+      x: entry?.twitter || otherMeta?.twitter || '',
+      telegram: entry?.telegram || otherMeta?.telegram || '',
+      discord: entry?.discord || otherMeta?.discord || '',
+    }
+    return {
+      name: entry?.name || `${symbol0}/${symbol1} Pool`,
+      symbol: entry?.symbol || `${symbol0}-${symbol1}`,
+      description:
+        entry?.description ||
+        `WNOVA pool for ${otherSymbol}. LP fee 0.30% (LPs) + protocol fee 1% in WNOVA.`,
+      image,
+      external_url: PUBLIC_BASE_URL,
+      links,
+      attributes: [
+        { trait_type: 'chain', value: 'Ethernova' },
+        { trait_type: 'token0', value: token0Addr },
+        { trait_type: 'token1', value: token1Addr },
+        { trait_type: 'token0_symbol', value: symbol0 },
+        { trait_type: 'token1_symbol', value: symbol1 },
+        { trait_type: 'token0_name', value: name0 },
+        { trait_type: 'token1_name', value: name1 },
+        { trait_type: 'pair', value: entry?.address || entry?.pair || '' },
+      ].filter((attr) => attr?.value),
+      createdAt: createdIso,
+      creator: entry?.creator || '',
+    }
+  }
+
   return {
     name: entry?.name || entry?.symbol || 'Token',
     symbol: entry?.symbol || '',
@@ -311,7 +368,7 @@ function buildMetadata(entry) {
       { trait_type: 'chain', value: 'Ethernova' },
       entry?.pair ? { trait_type: 'pair', value: entry.pair } : null,
     ].filter(Boolean),
-    createdAt: entry?.createdAt || new Date().toISOString(),
+    createdAt: createdIso,
     creator: entry?.creator || '',
   }
 }

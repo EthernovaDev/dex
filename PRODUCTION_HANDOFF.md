@@ -131,7 +131,8 @@
 - `node /opt/novadex/dex/scripts/smoke_metadata_upload_image.mjs`
 - `node /opt/novadex/dex/scripts/smoke_rpc_health.mjs`
 - Opt-in E2E (requires funds + privkey):
-  - `SMOKE_PRIVKEY=0x... node /opt/novadex/dex/scripts/smoke_e2e_metadata_create.mjs`
+  - Store the smoke privkey outside the repo (example: `/root/.novadex/smoke_pk`, chmod 600).
+  - `SMOKE_PRIVKEY=$(cat /root/.novadex/smoke_pk) node /opt/novadex/dex/scripts/smoke_e2e_metadata_create.mjs`
 
 ## Connect Wallet / Switch Network
 1) Click “Connect to a wallet” and choose MetaMask or WalletConnect.

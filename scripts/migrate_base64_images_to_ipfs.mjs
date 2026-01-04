@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 import fs from 'fs'
 import path from 'path'
-import Database from 'better-sqlite3'
-import FormData from 'form-data'
+import { createRequire } from 'module'
+
+const require = createRequire(new URL('../server/metadata-api/package.json', import.meta.url))
+const Database = require('better-sqlite3')
+const FormData = require('form-data')
 
 const log = (msg) => process.stdout.write(`${msg}\n`)
 const fail = (msg) => {
@@ -44,9 +47,11 @@ if (!fs.existsSync(UPLOAD_DIR)) {
 async function pinFileToKubo(filePath, filename) {
   const form = new FormData()
   form.append('file', fs.createReadStream(filePath), filename)
+  const headers = form.getHeaders()
   const resp = await fetch(`${IPFS_API_URL}/api/v0/add?pin=true&wrap-with-directory=false`, {
     method: 'POST',
     body: form,
+    headers,
   })
   const text = await resp.text()
   if (!resp.ok) {

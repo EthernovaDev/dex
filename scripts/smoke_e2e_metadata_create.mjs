@@ -241,9 +241,8 @@ async function main() {
   }
 
   const headers = await fetchSignatureHeaders(wallet.address, wallet)
-  const logoBase64 =
-    'iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAF0lEQVQoU2NkYGD4z0AEYBxVSF8AALwABgWj8XxQAAAAAElFTkSuQmCC'
-  const logoBuffer = Buffer.from(logoBase64, 'base64')
+  const logoPath = '/opt/novadex/dex/dex-info/src/assets/placeholder.png'
+  const logoBuffer = fs.readFileSync(logoPath)
   const logoForm = new FormData()
   logoForm.append('image', new Blob([logoBuffer], { type: 'image/png' }), 'logo.png')
   const logoResp = await fetch(`${baseUrl}/api/metadata/image`, {

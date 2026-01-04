@@ -240,14 +240,14 @@ async function main() {
     log(`[OK] reserves: ${reserves[0].toString()} / ${reserves[1].toString()}`)
   }
 
-  const headers = await fetchSignatureHeaders(wallet.address, wallet)
+  const imageHeaders = await fetchSignatureHeaders(wallet.address, wallet)
   const logoPath = '/opt/novadex/dex/dex-info/src/assets/placeholder.png'
   const logoBuffer = fs.readFileSync(logoPath)
   const logoForm = new FormData()
   logoForm.append('image', new Blob([logoBuffer], { type: 'image/png' }), 'logo.png')
   const logoResp = await fetch(`${baseUrl}/api/metadata/image`, {
     method: 'POST',
-    headers,
+    headers: imageHeaders,
     body: logoForm
   })
   const logoText = await logoResp.text()
@@ -276,9 +276,10 @@ async function main() {
   form.append('discord', 'https://discord.gg/ethernova')
   form.append('logoUrl', imageUri)
 
+  const tokenHeaders = await fetchSignatureHeaders(wallet.address, wallet)
   const tokenResp = await fetch(`${baseUrl}/api/metadata/token`, {
     method: 'POST',
-    headers,
+    headers: tokenHeaders,
     body: form
   })
   const tokenText = await tokenResp.text()

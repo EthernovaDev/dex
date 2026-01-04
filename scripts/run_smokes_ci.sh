@@ -27,5 +27,39 @@ if [ "$RPC_STATUS" -ne 0 ]; then
 fi
 
 echo "[INFO] RPC healthy. Running ui_click_smoke strict."
+set +e
 node "$ROOT_DIR/scripts/ui_click_smoke.mjs"
-echo "[OK] PASS"
+STRICT_STATUS=$?
+set -e
+
+if [ "$STRICT_STATUS" -eq 0 ]; then
+  echo "[OK] PASS"
+  exit 0
+fi
+
+LATEST_LOG="$(ls -t /opt/novadex/scripts/out/ui_click_smoke-*.log 2>/dev/null | head -n 1 || true)"
+if [ -n "$LATEST_LOG" ]; then
+  RPC_SOFT=$(python3 - <<PY 2>/dev/null
+import json,sys
+try:
+  data=json.load(open("$LATEST_LOG"))
+  print(int(data.get("rpcSoft503",0)))
+except Exception:
+  print(0)
+PY
+)
+  if [ "$RPC_SOFT" -gt 0 ]; then
+    echo "[WARN] ui_click_smoke failed but rpcSoft503=${RPC_SOFT}. Rerunning with tolerance."
+    SMOKE_RPC_SOFT_MAX="${SMOKE_RPC_SOFT_MAX:-10}" \
+    SMOKE_RPC_CONSEC_MAX="${SMOKE_RPC_CONSEC_MAX:-5}" \
+    node "$ROOT_DIR/scripts/ui_click_smoke.mjs" || {
+      echo "[ERROR] ui_click_smoke failed under RPC flaky mode."
+      exit 1
+    }
+    echo "[OK] PASS_WITH_RPC_FLAKE"
+    exit 0
+  fi
+fi
+
+echo "[ERROR] ui_click_smoke strict failed without RPC soft errors."
+exit "$STRICT_STATUS"

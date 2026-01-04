@@ -1,7 +1,39 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-/opt/novadex/dex/scripts/require_clean_worktree.sh
+REPO_ROOT="/opt/novadex/dex"
+TARGET_REF="${TARGET_REF:-master}"
+
+require_clean_strict() {
+  local dirty=0
+  cd "$REPO_ROOT"
+  if ! git diff --quiet; then
+    dirty=1
+  fi
+  if ! git diff --cached --quiet; then
+    dirty=1
+  fi
+  if git ls-files --others --exclude-standard | grep -q .; then
+    dirty=1
+  fi
+  if [ "$dirty" -ne 0 ]; then
+    echo "[ERROR] Worktree is dirty. Commit or stash changes before running build." >&2
+    git status -sb >&2
+    exit 1
+  fi
+}
+
+require_clean_strict
+
+echo "[INFO] Ensuring build target ref: ${TARGET_REF}"
+git -C "$REPO_ROOT" fetch origin
+if [ "$TARGET_REF" = "master" ]; then
+  git -C "$REPO_ROOT" switch master
+  git -C "$REPO_ROOT" reset --hard origin/master
+else
+  git -C "$REPO_ROOT" switch -f "$TARGET_REF"
+fi
+require_clean_strict
 
 ENV_FILE="/opt/novadex/.env"
 if [ ! -f "$ENV_FILE" ]; then
@@ -124,7 +156,7 @@ echo "[INFO] Building swap UI..."
 $RUN_AS bash -lc "cd ${DEX_UI_DIR} && rm -rf build && NODE_OPTIONS=--openssl-legacy-provider SKIP_PREFLIGHT_CHECK=true yarn build"
 
 echo "[INFO] Writing version stamp..."
-COMMIT_SHA="$(git -C /opt/novadex/dex rev-parse --short HEAD)"
+COMMIT_SHA="$(git -C "${REPO_ROOT}" rev-parse --short HEAD)"
 BUILD_JSON=$(cat <<JSON
 {"commit":"${COMMIT_SHA}","builtAt":"${BUILD_STAMP}"}
 JSON
@@ -163,5 +195,12 @@ ln -sfn "${RELEASES_DIR}/${TS}/dex-info" /opt/novadex/current/dex-info
 if $SUDO systemctl is-active --quiet caddy; then
   $SUDO systemctl reload caddy || $SUDO systemctl restart caddy
 fi
+
+echo "[INFO] Verifying local version stamps..."
+cat /opt/novadex/current/dex-ui/build/__version.json
+cat /opt/novadex/current/dex-info/build/__version.json
+
+echo "[INFO] Verifying live version stamp..."
+curl -fsS "https://${DEX_DOMAIN}/__version.json"
 
 echo "[INFO] Frontend builds complete (release ${TS})."

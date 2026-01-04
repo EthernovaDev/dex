@@ -3,11 +3,16 @@ import fs from 'fs'
 import * as ethers from 'ethers'
 
 const configPath = '/opt/novadex/dex/dex-ui/public/ethernova.config.json'
+const deploymentsPath = '/opt/novadex/contracts/deployments.json'
 const config = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, 'utf8')) : {}
-const registry = config?.contracts?.metadataRegistry
+const deployments = fs.existsSync(deploymentsPath)
+  ? JSON.parse(fs.readFileSync(deploymentsPath, 'utf8'))
+  : {}
+
+const registry = config?.contracts?.metadataRegistry || deployments?.addresses?.metadataRegistry
 const rpcUrl = process.env.RPC_URL || config?.rpcUrl || 'https://rpc.ethnova.net'
-const wnova = config?.tokens?.WNOVA?.address
-const pair = config?.contracts?.pair
+const wnova = config?.tokens?.WNOVA?.address || deployments?.addresses?.wnova
+const pair = config?.contracts?.pair || deployments?.addresses?.pair
 
 const log = (msg) => process.stdout.write(`${msg}\n`)
 const warn = (msg) => process.stdout.write(`[WARN] ${msg}\n`)

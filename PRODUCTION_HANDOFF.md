@@ -58,10 +58,23 @@
 - Deploys an ERC-20 token via TokenFactory.
 - Optional: create a WNOVA pair + add initial liquidity in one flow.
 - Outputs token address, pair address, and explorer links; includes “Add to MetaMask”.
-- Token metadata (logo/description/socials) is stored locally in the browser (localStorage) and reused by Analytics.
-  - Key: `novadex:token-metadata`
-  - Pair mapping: `novadex:pair-metadata`
-  - This is off-chain metadata; it does not affect the token contract.
+- Token metadata (logo/description/socials) is **global**:
+  - Primary source: Metadata API + IPFS pinning (if configured).
+  - On-chain anchor: MetadataRegistry (tokenURI/pairURI).
+  - Fallback: localStorage only if backend is unavailable.
+  - This metadata is off-chain content, but the **URI is recorded on-chain** in the registry.
+
+### Metadata Registry + API
+- Registry address: `0xc7cFaba93A2b424c50CD6F905585E090B01B3763`
+- API health: `https://dex.ethnova.net/api/metadata/health`
+- JSON endpoints:
+  - `https://dex.ethnova.net/api/metadata/json/token/<tokenAddress>`
+  - `https://dex.ethnova.net/api/metadata/json/pair/<pairAddress>`
+- Auth: UI requests a signature challenge and signs once per write.
+- Service:
+  - systemd: `novadex-metadata`
+  - logs: `journalctl -u novadex-metadata -n 200 --no-pager`
+  - env: `/etc/novadex/metadata.env` (RPC + registry + pinning)
 
 ## Boosted Pairs (24h)
 - Boost a pair from its Pair page (Analytics) to appear in the Boosted section for 24h.

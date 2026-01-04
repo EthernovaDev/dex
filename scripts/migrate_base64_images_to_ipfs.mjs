@@ -7,6 +7,7 @@ const require = createRequire(new URL('../server/metadata-api/package.json', imp
 const Database = require('better-sqlite3')
 const FormData = require('form-data')
 const fetch = require('node-fetch')
+const sharp = require('sharp')
 
 const log = (msg) => process.stdout.write(`${msg}\n`)
 const fail = (msg) => {
@@ -36,6 +37,10 @@ const SQLITE_PATH = process.env.SQLITE_PATH || '/var/lib/novadex/metadata.db'
 const UPLOAD_DIR = process.env.UPLOAD_DIR || '/var/lib/novadex/uploads'
 const IPFS_API_URL = process.env.IPFS_API_URL || 'http://127.0.0.1:5001'
 const IPFS_GATEWAY_BASE = (process.env.IPFS_GATEWAY_BASE || 'https://dex.ethnova.net/ipfs/').replace(/\/?$/, '/')
+const MAX_UPLOAD_MB = Number(process.env.MAX_UPLOAD_MB || 5)
+const MAX_IMAGE_MB = Number(process.env.MAX_IMAGE_MB || 1)
+const RAW_MAX_BYTES = Math.floor(MAX_UPLOAD_MB * 1024 * 1024)
+const PROCESSED_MAX_BYTES = Math.floor(MAX_IMAGE_MB * 1024 * 1024)
 
 if (!fs.existsSync(SQLITE_PATH)) {
   fail(`SQLite DB not found at ${SQLITE_PATH}`)
@@ -77,9 +82,13 @@ async function pinInlineDataUri(dataUri) {
   if (!mimeMatch) throw new Error('Invalid data URI mime')
   const ext = mimeMatch[1].split('/')[1] || 'png'
   const buffer = Buffer.from(encoded, 'base64')
+  if (buffer.length > RAW_MAX_BYTES) {
+    throw new Error('Image exceeds raw size limit')
+  }
+  const processed = await processImageBuffer(buffer)
   const tmpName = `migrate-${Date.now()}-${Math.random().toString(16).slice(2)}.${ext}`
   const tmpPath = path.join(UPLOAD_DIR, tmpName)
-  fs.writeFileSync(tmpPath, buffer)
+  fs.writeFileSync(tmpPath, processed)
   try {
     const cid = await pinFileToKubo(tmpPath, tmpName)
     return { cid, ipfsUri: `ipfs://${cid}`, gatewayUrl: `${IPFS_GATEWAY_BASE}${cid}` }
@@ -88,6 +97,34 @@ async function pinInlineDataUri(dataUri) {
       fs.unlinkSync(tmpPath)
     } catch {}
   }
+}
+
+async function processImageBuffer(buffer) {
+  const base = sharp(buffer, { limitInputPixels: 16_777_216 }).rotate()
+  const meta = await base.metadata()
+  let pipeline = base
+  if ((meta.width || 0) > 1024 || (meta.height || 0) > 1024) {
+    pipeline = base.resize({
+      width: 1024,
+      height: 1024,
+      fit: 'inside',
+      withoutEnlargement: true,
+    })
+  }
+  const qualities = [80, 70, 60, 50, 40, 30]
+  for (const quality of qualities) {
+    const out = await pipeline.clone().webp({ quality }).toBuffer()
+    if (out.length <= PROCESSED_MAX_BYTES) return out
+  }
+  const smaller = pipeline.clone().resize({
+    width: 512,
+    height: 512,
+    fit: 'inside',
+    withoutEnlargement: true,
+  })
+  const out = await smaller.webp({ quality: 40 }).toBuffer()
+  if (out.length <= PROCESSED_MAX_BYTES) return out
+  throw new Error('Image exceeds 1MB after compression')
 }
 
 async function main() {

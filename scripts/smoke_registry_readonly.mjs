@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import fs from 'fs'
-import { ethers } from 'ethers'
+import pkg from 'ethers'
+
+const { ethers } = pkg
 
 const configPath = '/opt/novadex/dex/dex-ui/public/ethernova.config.json'
 const config = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, 'utf8')) : {}

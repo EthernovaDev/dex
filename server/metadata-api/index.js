@@ -7,6 +7,7 @@ const crypto = require('crypto')
 const Database = require('better-sqlite3')
 const fetch = require('node-fetch')
 const FormData = require('form-data')
+const sharp = require('sharp')
 const { ethers } = require('ethers')
 
 const app = express()
@@ -25,7 +26,12 @@ const PINATA_JWT = process.env.PINATA_JWT || ''
 const IPFS_API_URL = process.env.IPFS_API_URL || 'http://127.0.0.1:5001'
 const IPFS_GATEWAY = process.env.IPFS_GATEWAY || ''
 const IPFS_GATEWAY_BASE = (process.env.IPFS_GATEWAY_BASE || IPFS_GATEWAY || `${PUBLIC_BASE_URL}/ipfs/`).replace(/\/?$/, '/')
-const MAX_UPLOAD_MB = Number(process.env.MAX_UPLOAD_MB || 2)
+const MAX_UPLOAD_MB = Number(process.env.MAX_UPLOAD_MB || 5)
+const MAX_IMAGE_MB = Number(process.env.MAX_IMAGE_MB || 1)
+const RAW_MAX_BYTES = Math.floor(MAX_UPLOAD_MB * 1024 * 1024)
+const PROCESSED_MAX_BYTES = Math.floor(MAX_IMAGE_MB * 1024 * 1024)
+const DAILY_LIMIT_COUNT = Number(process.env.DAILY_LIMIT_COUNT || 10)
+const DAILY_LIMIT_BYTES = Number(process.env.DAILY_LIMIT_BYTES || 10 * 1024 * 1024)
 const RATE_LIMIT_PER_MIN = Number(process.env.RATE_LIMIT_PER_MIN || 60)
 const NONCE_TTL_SECONDS = Number(process.env.NONCE_TTL_SECONDS || 600)
 const RPC_URL = process.env.RPC_URL || config?.rpcUrl
@@ -75,6 +81,14 @@ db.exec(`
     created_at INTEGER,
     updated_at INTEGER
   );
+  CREATE TABLE IF NOT EXISTS usage (
+    wallet TEXT,
+    day INTEGER,
+    count INTEGER,
+    bytes INTEGER,
+    updated_at INTEGER,
+    PRIMARY KEY(wallet, day)
+  );
   CREATE TABLE IF NOT EXISTS nonces (
     address TEXT PRIMARY KEY,
     nonce TEXT,
@@ -92,6 +106,114 @@ function ensureColumn(table, column, type) {
 ensureColumn('tokens', 'content_hash', 'TEXT')
 ensureColumn('tokens', 'image_hash', 'TEXT')
 ensureColumn('pairs', 'content_hash', 'TEXT')
+
+const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp'])
+
+function getDayKey(ts = Date.now()) {
+  return Math.floor(ts / 86_400_000)
+}
+
+function getUsage(wallet, dayKey) {
+  if (!wallet) return { count: 0, bytes: 0 }
+  const row = db.prepare('SELECT count, bytes FROM usage WHERE wallet = ? AND day = ?').get(wallet, dayKey)
+  return {
+    count: Number(row?.count || 0),
+    bytes: Number(row?.bytes || 0),
+  }
+}
+
+function checkUsageLimit(wallet, dayKey, countDelta, bytesDelta) {
+  const usage = getUsage(wallet, dayKey)
+  const nextCount = usage.count + countDelta
+  const nextBytes = usage.bytes + bytesDelta
+  if (nextCount > DAILY_LIMIT_COUNT) {
+    return { ok: false, error: 'Daily metadata limit exceeded' }
+  }
+  if (nextBytes > DAILY_LIMIT_BYTES) {
+    return { ok: false, error: 'Daily image bytes limit exceeded' }
+  }
+  return { ok: true }
+}
+
+function bumpUsage(wallet, dayKey, countDelta, bytesDelta) {
+  const now = Math.floor(Date.now() / 1000)
+  db.prepare(
+    `INSERT INTO usage(wallet, day, count, bytes, updated_at)
+     VALUES(@wallet, @day, @count, @bytes, @now)
+     ON CONFLICT(wallet, day) DO UPDATE SET
+       count = count + @count,
+       bytes = bytes + @bytes,
+       updated_at = @now`
+  ).run({
+    wallet,
+    day: dayKey,
+    count: countDelta,
+    bytes: bytesDelta,
+    now,
+  })
+}
+
+function parseContentLength(req) {
+  const raw = req.headers['content-length']
+  if (!raw) return 0
+  const value = Number(raw)
+  return Number.isFinite(value) ? value : 0
+}
+
+function assertRawSize(bytes) {
+  if (bytes > RAW_MAX_BYTES) {
+    throw new Error('Image exceeds raw size limit')
+  }
+}
+
+async function processImageBuffer(buffer, mime) {
+  if (!ALLOWED_IMAGE_TYPES.has((mime || '').toLowerCase())) {
+    throw new Error('Unsupported image type')
+  }
+  const base = sharp(buffer, { limitInputPixels: 16_777_216 }).rotate()
+  const meta = await base.metadata()
+  let pipeline = base
+  if ((meta.width || 0) > 1024 || (meta.height || 0) > 1024) {
+    pipeline = base.resize({
+      width: 1024,
+      height: 1024,
+      fit: 'inside',
+      withoutEnlargement: true,
+    })
+  }
+  const qualities = [80, 70, 60, 50, 40, 30]
+  for (const quality of qualities) {
+    const out = await pipeline.clone().webp({ quality }).toBuffer()
+    if (out.length <= PROCESSED_MAX_BYTES) {
+      return out
+    }
+  }
+  const smaller = pipeline.clone().resize({
+    width: 512,
+    height: 512,
+    fit: 'inside',
+    withoutEnlargement: true,
+  })
+  const out = await smaller.webp({ quality: 40 }).toBuffer()
+  if (out.length <= PROCESSED_MAX_BYTES) {
+    return out
+  }
+  throw new Error('Image exceeds 1MB after compression')
+}
+
+async function pinProcessedBuffer(buffer) {
+  const tmpName = `image-${Date.now()}-${crypto.randomBytes(4).toString('hex')}.webp`
+  const tmpPath = path.join(UPLOAD_DIR, tmpName)
+  fs.writeFileSync(tmpPath, buffer)
+  try {
+    const cid = await pinFileToIPFS(tmpPath, tmpName)
+    return { cid, ipfsUri: `ipfs://${cid}`, gatewayUrl: `${IPFS_GATEWAY_BASE}${cid}` }
+  } finally {
+    try {
+      fs.unlinkSync(tmpPath)
+    } catch {}
+  }
+}
 
 const provider = new ethers.providers.JsonRpcProvider(RPC_URL)
 
@@ -159,7 +281,7 @@ function sanitizeImageUri(value) {
   return trimmed
 }
 
-async function pinRemoteImage(url) {
+async function pinRemoteImage(url, maxBytesRemaining = null) {
   const safeUrl = validateUrl(url)
   if (!safeUrl) throw new Error('Invalid image URL')
   const resp = await fetch(safeUrl)
@@ -168,10 +290,10 @@ async function pinRemoteImage(url) {
     throw new Error(`Image fetch failed: ${text.slice(0, 200)}`)
   }
   const contentType = (resp.headers.get('content-type') || '').toLowerCase()
-  if (!contentType.startsWith('image/')) {
+  if (!ALLOWED_IMAGE_TYPES.has(contentType)) {
     throw new Error('Image URL is not an image')
   }
-  const maxBytes = MAX_UPLOAD_MB * 1024 * 1024
+  const maxBytes = RAW_MAX_BYTES
   const contentLength = Number(resp.headers.get('content-length') || 0)
   if (contentLength && contentLength > maxBytes) {
     throw new Error('Image exceeds size limit')
@@ -180,31 +302,12 @@ async function pinRemoteImage(url) {
   if (buffer.length > maxBytes) {
     throw new Error('Image exceeds size limit')
   }
-  const ext = contentType.split('/')[1] || 'png'
-  const tmpName = `remote-${Date.now()}-${crypto.randomBytes(4).toString('hex')}.${ext}`
-  const tmpPath = path.join(UPLOAD_DIR, tmpName)
-  fs.writeFileSync(tmpPath, buffer)
-  try {
-    const cid = await pinFileToIPFS(tmpPath, tmpName)
-    return { cid, ipfsUri: `ipfs://${cid}`, gatewayUrl: `${IPFS_GATEWAY_BASE}${cid}` }
-  } finally {
-    fs.unlinkSync(tmpPath)
+  if (maxBytesRemaining !== null && buffer.length > maxBytesRemaining) {
+    throw new Error('Daily image bytes limit exceeded')
   }
-}
-
-async function normalizeImageUri(value) {
-  if (!value) return ''
-  const trimmed = String(value).trim()
-  if (!trimmed) return ''
-  if (trimmed.startsWith('data:image/')) {
-    const pinned = await pinInlineDataUri(trimmed)
-    return pinned.ipfsUri || pinned.gatewayUrl
-  }
-  if (trimmed.startsWith('ipfs://') || trimmed.includes('/ipfs/')) {
-    return trimmed
-  }
-  const pinned = await pinRemoteImage(trimmed)
-  return pinned.ipfsUri || pinned.gatewayUrl
+  const processed = await processImageBuffer(buffer, contentType)
+  const pinned = await pinProcessedBuffer(processed)
+  return { ...pinned, bytesRaw: buffer.length, bytesOut: processed.length }
 }
 
 function validateLogo(value, maxLength = 200000) {
@@ -218,7 +321,7 @@ function validateLogo(value, maxLength = 200000) {
   return validateImageUri(trimmed)
 }
 
-async function pinInlineDataUri(dataUri) {
+async function pinInlineDataUri(dataUri, maxBytesRemaining = null) {
   if (!dataUri || !dataUri.startsWith('data:image/')) {
     throw new Error('Invalid inline image data')
   }
@@ -226,17 +329,33 @@ async function pinInlineDataUri(dataUri) {
   if (!encoded) throw new Error('Invalid data URI encoding')
   const mimeMatch = meta.match(/data:(image\/[a-zA-Z0-9+.-]+);base64/)
   if (!mimeMatch) throw new Error('Invalid data URI mime')
-  const ext = mimeMatch[1].split('/')[1] || 'png'
-  const buffer = Buffer.from(encoded, 'base64')
-  const tmpName = `inline-${Date.now()}.${ext}`
-  const tmpPath = path.join(UPLOAD_DIR, tmpName)
-  fs.writeFileSync(tmpPath, buffer)
-  try {
-    const cid = await pinFileToIPFS(tmpPath, tmpName)
-    return { cid, ipfsUri: `ipfs://${cid}`, gatewayUrl: `${IPFS_GATEWAY_BASE}${cid}` }
-  } finally {
-    fs.unlinkSync(tmpPath)
+  const mime = mimeMatch[1]
+  if (!ALLOWED_IMAGE_TYPES.has(mime)) {
+    throw new Error('Unsupported image type')
   }
+  const buffer = Buffer.from(encoded, 'base64')
+  assertRawSize(buffer.length)
+  if (maxBytesRemaining !== null && buffer.length > maxBytesRemaining) {
+    throw new Error('Daily image bytes limit exceeded')
+  }
+  const processed = await processImageBuffer(buffer, mime)
+  const pinned = await pinProcessedBuffer(processed)
+  return { ...pinned, bytesRaw: buffer.length, bytesOut: processed.length }
+}
+
+async function normalizeImageUri(value, maxBytesRemaining = null) {
+  if (!value) return { uri: '', bytesRaw: 0, bytesOut: 0 }
+  const trimmed = String(value).trim()
+  if (!trimmed) return { uri: '', bytesRaw: 0, bytesOut: 0 }
+  if (trimmed.startsWith('data:image/')) {
+    const pinned = await pinInlineDataUri(trimmed, maxBytesRemaining)
+    return { uri: pinned.ipfsUri || pinned.gatewayUrl, bytesRaw: pinned.bytesRaw, bytesOut: pinned.bytesOut }
+  }
+  if (trimmed.startsWith('ipfs://') || trimmed.includes('/ipfs/')) {
+    return { uri: trimmed, bytesRaw: 0, bytesOut: 0 }
+  }
+  const pinned = await pinRemoteImage(trimmed, maxBytesRemaining)
+  return { uri: pinned.ipfsUri || pinned.gatewayUrl, bytesRaw: pinned.bytesRaw, bytesOut: pinned.bytesOut }
 }
 
 function rateLimit(req, res, next) {
@@ -381,10 +500,21 @@ async function verifyPairOnchain(pairAddress, token0, token1) {
 }
 
 function buildMetadata(entry) {
-  const createdAtSec = entry?.created_at || entry?.createdAt
-  const createdIso = createdAtSec
-    ? new Date(Number(createdAtSec) * 1000).toISOString()
-    : new Date().toISOString()
+  const createdAtValue = entry?.created_at || entry?.createdAt
+  let createdIso = new Date().toISOString()
+  if (createdAtValue) {
+    if (typeof createdAtValue === 'string' && createdAtValue.includes('T')) {
+      const parsed = new Date(createdAtValue)
+      if (!Number.isNaN(parsed.getTime())) {
+        createdIso = parsed.toISOString()
+      }
+    } else {
+      const asNumber = Number(createdAtValue)
+      if (Number.isFinite(asNumber) && asNumber > 0) {
+        createdIso = new Date(asNumber * 1000).toISOString()
+      }
+    }
+  }
   const shortAddr = (addr) => {
     if (!addr || addr.length < 10) return addr || ''
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`
@@ -609,7 +739,7 @@ const upload = multer({
       cb(null, `${Date.now()}-${crypto.randomBytes(4).toString('hex')}${ext}`)
     },
   }),
-  limits: { fileSize: MAX_UPLOAD_MB * 1024 * 1024 },
+  limits: { fileSize: RAW_MAX_BYTES },
 })
 
 app.get('/api/metadata/health', async (req, res) => {
@@ -767,13 +897,34 @@ app.post('/api/metadata/image', authGuard, upload.single('image'), async (req, r
       res.status(400).json({ ok: false, error: 'Image file missing' })
       return
     }
+    const signer = req.auth.address
+    const contentLength = parseContentLength(req)
+    if (contentLength && contentLength > RAW_MAX_BYTES) {
+      res.status(413).json({ ok: false, error: 'Image exceeds raw size limit' })
+      return
+    }
+    const rawBytes = Number(req.file.size || 0)
+    assertRawSize(rawBytes)
+    const dayKey = getDayKey()
+    const usageCheck = checkUsageLimit(signer, dayKey, 1, rawBytes)
+    if (!usageCheck.ok) {
+      res.status(429).json({ ok: false, error: usageCheck.error })
+      return
+    }
     let imageUri = ''
     let imageUrl = ''
     let cid = ''
-    cid = await pinFileToIPFS(req.file.path, req.file.originalname || req.file.filename)
+    const buffer = fs.readFileSync(req.file.path)
+    try {
+      fs.unlinkSync(req.file.path)
+    } catch {}
+    const processed = await processImageBuffer(buffer, req.file.mimetype || '')
+    const pinned = await pinProcessedBuffer(processed)
+    cid = pinned.cid
     imageUri = `ipfs://${cid}`
     imageUrl = `${IPFS_GATEWAY_BASE}${cid}`
-    const contentHash = ethers.utils.keccak256(fs.readFileSync(req.file.path))
+    const contentHash = ethers.utils.keccak256(processed)
+    bumpUsage(signer, dayKey, 1, rawBytes)
     res.json({
       ok: true,
       cid,
@@ -799,9 +950,27 @@ app.post('/api/metadata/publish', authGuard, async (req, res) => {
       res.status(400).json({ ok: false, error: 'Invalid token address' })
       return
     }
+    const dayKey = getDayKey()
+    const usageCheck = checkUsageLimit(creator, dayKey, 1, 0)
+    if (!usageCheck.ok) {
+      res.status(429).json({ ok: false, error: usageCheck.error })
+      return
+    }
+
+    let imageBytes = 0
     let imageUri = ''
     if (payload.imageURI || payload.imageUri) {
-      imageUri = await normalizeImageUri(payload.imageURI || payload.imageUri)
+      const remaining = DAILY_LIMIT_BYTES - getUsage(creator, dayKey).bytes
+      const normalized = await normalizeImageUri(payload.imageURI || payload.imageUri, remaining)
+      imageUri = normalized.uri
+      imageBytes = normalized.bytesRaw || 0
+      if (imageBytes > 0) {
+        const bytesCheck = checkUsageLimit(creator, dayKey, 0, imageBytes)
+        if (!bytesCheck.ok) {
+          res.status(429).json({ ok: false, error: bytesCheck.error })
+          return
+        }
+      }
     }
 
     const sanitized = {
@@ -857,6 +1026,7 @@ app.post('/api/metadata/publish', authGuard, async (req, res) => {
         now,
       })
     }
+    bumpUsage(creator, dayKey, 1, imageBytes)
     res.json({ ok: true, token, pair: pair || null, metadataUri, contentHash })
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message || 'Publish failed' })
@@ -866,6 +1036,11 @@ app.post('/api/metadata/publish', authGuard, async (req, res) => {
 app.post('/api/metadata/token', authGuard, upload.single('logo'), async (req, res) => {
   try {
     const signer = req.auth.address
+    const contentLength = parseContentLength(req)
+    if (contentLength && contentLength > RAW_MAX_BYTES) {
+      res.status(413).json({ ok: false, error: 'Image exceeds raw size limit' })
+      return
+    }
     const tokenAddress = normAddr(req.body?.tokenAddress || '')
     const txHash = req.body?.txHash
     const pairAddress = normAddr(req.body?.pairAddress || '')
@@ -905,15 +1080,49 @@ app.post('/api/metadata/token', authGuard, upload.single('logo'), async (req, re
       discord: validateUrl(req.body?.discord || ''),
     }
 
+    const dayKey = getDayKey()
+    const usageCheck = checkUsageLimit(signer, dayKey, 1, 0)
+    if (!usageCheck.ok) {
+      res.status(429).json({ ok: false, error: usageCheck.error })
+      return
+    }
+
+    let imageBytes = 0
     let imageUri = tokenRecord?.image_uri || ''
     if (imageUri && String(imageUri).startsWith('data:image/')) {
-      imageUri = await normalizeImageUri(imageUri)
+      const remaining = DAILY_LIMIT_BYTES - getUsage(signer, dayKey).bytes
+      const normalized = await normalizeImageUri(imageUri, remaining)
+      imageUri = normalized.uri
+      imageBytes = normalized.bytesRaw || 0
     }
     if (req.file) {
-      const cid = await pinFileToIPFS(req.file.path, req.file.originalname || req.file.filename)
-      imageUri = `ipfs://${cid}`
+      const rawBytes = Number(req.file.size || 0)
+      assertRawSize(rawBytes)
+      const bytesCheck = checkUsageLimit(signer, dayKey, 0, rawBytes)
+      if (!bytesCheck.ok) {
+        res.status(429).json({ ok: false, error: bytesCheck.error })
+        return
+      }
+      const buffer = fs.readFileSync(req.file.path)
+      try {
+        fs.unlinkSync(req.file.path)
+      } catch {}
+      const processed = await processImageBuffer(buffer, req.file.mimetype || '')
+      const pinned = await pinProcessedBuffer(processed)
+      imageUri = pinned.ipfsUri || pinned.gatewayUrl
+      imageBytes = rawBytes
     } else if (req.body?.logoUrl) {
-      imageUri = await normalizeImageUri(req.body?.logoUrl)
+      const remaining = DAILY_LIMIT_BYTES - getUsage(signer, dayKey).bytes
+      const normalized = await normalizeImageUri(req.body?.logoUrl, remaining)
+      imageUri = normalized.uri
+      imageBytes = normalized.bytesRaw || imageBytes
+      if (imageBytes > 0) {
+        const bytesCheck = checkUsageLimit(signer, dayKey, 0, imageBytes)
+        if (!bytesCheck.ok) {
+          res.status(429).json({ ok: false, error: bytesCheck.error })
+          return
+        }
+      }
     }
 
     const metadata = buildMetadata({ ...sanitized, image_uri: imageUri, creator: creator || signer })
@@ -943,6 +1152,7 @@ app.post('/api/metadata/token', authGuard, upload.single('logo'), async (req, re
       created_at: tokenRecord.created_at || now,
       now,
     })
+    bumpUsage(signer, dayKey, 1, imageBytes)
 
     const entry = db.prepare('SELECT * FROM tokens WHERE address = ?').get(resolvedToken)
     let registryResult = null

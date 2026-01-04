@@ -1,12 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="/opt/novadex/dex"
-TARGET_REF="${TARGET_REF:-master}"
-
 require_clean_strict() {
   local dirty=0
-  cd "$REPO_ROOT"
+  cd "/opt/novadex/dex"
   if ! git diff --quiet; then
     dirty=1
   fi
@@ -23,16 +20,6 @@ require_clean_strict() {
   fi
 }
 
-require_clean_strict
-
-echo "[INFO] Ensuring build target ref: ${TARGET_REF}"
-git -C "$REPO_ROOT" fetch origin
-if [ "$TARGET_REF" = "master" ]; then
-  git -C "$REPO_ROOT" switch master
-  git -C "$REPO_ROOT" reset --hard origin/master
-else
-  git -C "$REPO_ROOT" switch -f "$TARGET_REF"
-fi
 require_clean_strict
 
 ENV_FILE="/opt/novadex/.env"
@@ -156,7 +143,7 @@ echo "[INFO] Building swap UI..."
 $RUN_AS bash -lc "cd ${DEX_UI_DIR} && rm -rf build && NODE_OPTIONS=--openssl-legacy-provider SKIP_PREFLIGHT_CHECK=true yarn build"
 
 echo "[INFO] Writing version stamp..."
-COMMIT_SHA="$(git -C "${REPO_ROOT}" rev-parse --short HEAD)"
+COMMIT_SHA="$(git -C /opt/novadex/dex rev-parse --short HEAD)"
 BUILD_JSON=$(cat <<JSON
 {"commit":"${COMMIT_SHA}","builtAt":"${BUILD_STAMP}"}
 JSON

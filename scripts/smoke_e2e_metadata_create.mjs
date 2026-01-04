@@ -102,7 +102,11 @@ async function main() {
   const wnovaAmount = parseUnits(amountWnova, decimals)
 
   const allowance = await wnovaContract.allowance(wallet.address, tokenFactory)
-  if (allowance.lt(wnovaAmount)) {
+  const needsApproval =
+    typeof allowance === 'bigint'
+      ? allowance < wnovaAmount
+      : allowance.lt(wnovaAmount)
+  if (needsApproval) {
     if (!autoApprove) {
       fail('WNOVA allowance too low and SMOKE_AUTO_APPROVE=0')
     }

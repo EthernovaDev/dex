@@ -31,7 +31,9 @@ const REGISTRY_ABI = [
 
 async function main() {
   if (!registry) fail('metadataRegistry missing in config')
-  const provider = new ethers.providers.JsonRpcProvider(rpcUrl)
+  const JsonRpcProvider = ethers.providers?.JsonRpcProvider || ethers.JsonRpcProvider
+  if (!JsonRpcProvider) fail('JsonRpcProvider not available from ethers')
+  const provider = new JsonRpcProvider(rpcUrl)
   const contract = new ethers.Contract(registry, REGISTRY_ABI, provider)
   if (wnova) {
     const tokenUri = await contract.tokenURI(wnova)

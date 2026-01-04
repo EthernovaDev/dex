@@ -84,23 +84,30 @@ async function main() {
     fail('TokenFactory or WNOVA address missing in config')
   }
 
-  const provider = new ethers.providers.JsonRpcProvider(rpcUrl)
-  const wallet = new ethers.Wallet(priv, provider)
+  const JsonRpcProvider = ethers.providers?.JsonRpcProvider || ethers.JsonRpcProvider
+  if (!JsonRpcProvider) {
+    fail('JsonRpcProvider not available from ethers')
+  }
+  const provider = new JsonRpcProvider(rpcUrl)
+  const Wallet = ethers.Wallet || ethers.Wallet
+  const wallet = new Wallet(priv, provider)
 
   const wnovaContract = new ethers.Contract(wnova, ERC20_ABI, wallet)
   const factory = new ethers.Contract(tokenFactory, TOKEN_FACTORY_ABI, wallet)
 
   const decimals = 18
-  const totalSupply = ethers.utils.parseUnits(supplyStr, decimals)
-  const tokenAmount = ethers.utils.parseUnits(tokenAmountStr, decimals)
-  const wnovaAmount = ethers.utils.parseUnits(amountWnova, decimals)
+  const parseUnits = ethers.utils?.parseUnits || ethers.parseUnits
+  const totalSupply = parseUnits(supplyStr, decimals)
+  const tokenAmount = parseUnits(tokenAmountStr, decimals)
+  const wnovaAmount = parseUnits(amountWnova, decimals)
 
   const allowance = await wnovaContract.allowance(wallet.address, tokenFactory)
   if (allowance.lt(wnovaAmount)) {
     if (!autoApprove) {
       fail('WNOVA allowance too low and SMOKE_AUTO_APPROVE=0')
     }
-    const approveTx = await wnovaContract.approve(tokenFactory, ethers.constants.MaxUint256)
+    const maxUint = ethers.constants?.MaxUint256 || ethers.MaxUint256
+    const approveTx = await wnovaContract.approve(tokenFactory, maxUint)
     log(`[INFO] approve tx: ${approveTx.hash}`)
     await approveTx.wait(1)
   }
@@ -126,7 +133,7 @@ async function main() {
     fail(`create tx failed: ${tx.hash}`)
   }
 
-  const iface = new ethers.utils.Interface(TOKEN_FACTORY_ABI)
+  const iface = new (ethers.utils?.Interface || ethers.Interface)(TOKEN_FACTORY_ABI)
   let tokenAddress = ''
   let pairAddress = ''
   for (const logEntry of receipt.logs) {
@@ -206,9 +213,10 @@ async function main() {
   log('[OK] pair metadata saved')
 
   if (registryAddress) {
+    const hashZero = ethers.constants?.HashZero || ethers.ZeroHash
     const registry = new ethers.Contract(registryAddress, REGISTRY_ABI, wallet)
-    await registry.setTokenURI(tokenAddress, metadataUri, contentHash || ethers.constants.HashZero)
-    await registry.setPairURI(pairAddress, metadataUri, contentHash || ethers.constants.HashZero)
+    await registry.setTokenURI(tokenAddress, metadataUri, contentHash || hashZero)
+    await registry.setPairURI(pairAddress, metadataUri, contentHash || hashZero)
     const onchainTokenUri = await registry.tokenURI(tokenAddress)
     const onchainPairUri = await registry.pairURI(pairAddress)
     if (onchainTokenUri !== metadataUri) fail('tokenURI mismatch')

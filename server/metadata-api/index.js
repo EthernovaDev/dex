@@ -33,6 +33,9 @@ const PROCESSED_MAX_BYTES = Math.floor(MAX_IMAGE_MB * 1024 * 1024)
 const DAILY_LIMIT_COUNT = Number(process.env.DAILY_LIMIT_COUNT || 10)
 const DAILY_LIMIT_BYTES = Number(process.env.DAILY_LIMIT_BYTES || 10 * 1024 * 1024)
 const RATE_LIMIT_PER_MIN = Number(process.env.RATE_LIMIT_PER_MIN || 60)
+const IP_DAILY_LIMIT = Number(process.env.IP_DAILY_LIMIT || 200)
+const IP_PUBLISH_LIMIT = Number(process.env.IP_PUBLISH_LIMIT || 50)
+const IP_DAILY_BYTES = Number(process.env.IP_DAILY_BYTES || 50 * 1024 * 1024)
 const NONCE_TTL_SECONDS = Number(process.env.NONCE_TTL_SECONDS || 600)
 const RPC_URL = process.env.RPC_URL || config?.rpcUrl
 const TOKEN_FACTORY = (process.env.TOKEN_FACTORY || config?.contracts?.tokenFactory || '').toLowerCase()
@@ -89,6 +92,15 @@ db.exec(`
     updated_at INTEGER,
     PRIMARY KEY(wallet, day)
   );
+  CREATE TABLE IF NOT EXISTS ip_usage (
+    ip TEXT,
+    day INTEGER,
+    count INTEGER,
+    publish_count INTEGER,
+    bytes INTEGER,
+    updated_at INTEGER,
+    PRIMARY KEY(ip, day)
+  );
   CREATE TABLE IF NOT EXISTS nonces (
     address TEXT PRIMARY KEY,
     nonce TEXT,
@@ -111,6 +123,14 @@ const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp'])
 
 function getDayKey(ts = Date.now()) {
   return Math.floor(ts / 86_400_000)
+}
+
+function getClientIp(req) {
+  const forwarded = req.headers['x-forwarded-for']
+  if (typeof forwarded === 'string' && forwarded.trim()) {
+    return forwarded.split(',')[0].trim()
+  }
+  return req.ip || req.connection?.remoteAddress || 'unknown'
 }
 
 function getUsage(wallet, dayKey) {
@@ -148,6 +168,56 @@ function bumpUsage(wallet, dayKey, countDelta, bytesDelta) {
     wallet,
     day: dayKey,
     count: countDelta,
+    bytes: bytesDelta,
+    now,
+  })
+}
+
+function getIpUsage(ip, dayKey) {
+  const row = db
+    .prepare('SELECT count, publish_count, bytes FROM ip_usage WHERE ip = ? AND day = ?')
+    .get(ip, dayKey)
+  return {
+    count: Number(row?.count || 0),
+    publish: Number(row?.publish_count || 0),
+    bytes: Number(row?.bytes || 0),
+  }
+}
+
+function checkIpLimit(ip, dayKey, countDelta, publishDelta, bytesDelta) {
+  if (!ip) return { ok: true }
+  const usage = getIpUsage(ip, dayKey)
+  const nextCount = usage.count + countDelta
+  const nextPublish = usage.publish + publishDelta
+  const nextBytes = usage.bytes + bytesDelta
+  if (nextCount > IP_DAILY_LIMIT) {
+    return { ok: false, error: 'Daily IP request limit exceeded' }
+  }
+  if (nextPublish > IP_PUBLISH_LIMIT) {
+    return { ok: false, error: 'Daily IP publish limit exceeded' }
+  }
+  if (nextBytes > IP_DAILY_BYTES) {
+    return { ok: false, error: 'Daily IP bytes limit exceeded' }
+  }
+  return { ok: true }
+}
+
+function bumpIpUsage(ip, dayKey, countDelta, publishDelta, bytesDelta) {
+  if (!ip) return
+  const now = Math.floor(Date.now() / 1000)
+  db.prepare(
+    `INSERT INTO ip_usage(ip, day, count, publish_count, bytes, updated_at)
+     VALUES(@ip, @day, @count, @publish, @bytes, @now)
+     ON CONFLICT(ip, day) DO UPDATE SET
+       count = count + @count,
+       publish_count = publish_count + @publish,
+       bytes = bytes + @bytes,
+       updated_at = @now`
+  ).run({
+    ip,
+    day: dayKey,
+    count: countDelta,
+    publish: publishDelta,
     bytes: bytesDelta,
     now,
   })
@@ -212,6 +282,42 @@ async function pinProcessedBuffer(buffer) {
     try {
       fs.unlinkSync(tmpPath)
     } catch {}
+  }
+}
+
+let ipfsStatCache = { ts: 0, size: 0, max: 0 }
+const IPFS_STAT_TTL_MS = 10_000
+const IPFS_GUARD_RATIO = Number(process.env.IPFS_STORAGE_GUARD_RATIO || 0.95)
+const IPFS_GUARD_BYTES = Number(process.env.IPFS_STORAGE_GUARD_BYTES || 190 * 1024 * 1024 * 1024)
+
+async function getIpfsRepoStat() {
+  const now = Date.now()
+  if (now - ipfsStatCache.ts < IPFS_STAT_TTL_MS) return ipfsStatCache
+  const resp = await fetch(`${IPFS_API_URL}/api/v0/repo/stat?size-only=true`, { method: 'POST' })
+  const text = await resp.text()
+  if (!resp.ok) {
+    throw new Error(`IPFS repo stat failed: ${text.slice(0, 200)}`)
+  }
+  let parsed = {}
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    parsed = {}
+  }
+  const size = Number(parsed?.RepoSize || parsed?.RepoSize?.toString?.() || 0)
+  const max = Number(parsed?.StorageMax || parsed?.StorageMax?.toString?.() || 0)
+  ipfsStatCache = { ts: now, size, max }
+  return ipfsStatCache
+}
+
+async function assertIpfsCapacity() {
+  if (PIN_PROVIDER !== 'kubo') return
+  const stat = await getIpfsRepoStat()
+  if (!stat.max || !Number.isFinite(stat.max)) return
+  const percent = stat.size / stat.max
+  if (stat.size >= IPFS_GUARD_BYTES || percent >= IPFS_GUARD_RATIO) {
+    const pct = (percent * 100).toFixed(2)
+    throw new Error(`IPFS storage near limit (${pct}%)`)
   }
 }
 
@@ -881,6 +987,52 @@ app.get('/api/metadata/pairs', (req, res) => {
   res.json({ ok: true, data: mapped })
 })
 
+app.get('/api/metadata/stats', async (req, res) => {
+  const dayKey = getDayKey()
+  const usage = db
+    .prepare('SELECT SUM(count) as count, SUM(bytes) as bytes FROM usage WHERE day = ?')
+    .get(dayKey)
+  const ipUsage = db
+    .prepare('SELECT SUM(count) as count, SUM(publish_count) as publish_count, SUM(bytes) as bytes FROM ip_usage WHERE day = ?')
+    .get(dayKey)
+  let repoSize = 0
+  let storageMax = 0
+  let percentUsed = null
+  try {
+    const stat = await getIpfsRepoStat()
+    repoSize = Number(stat?.size || 0)
+    storageMax = Number(stat?.max || 0)
+    if (storageMax > 0) {
+      percentUsed = Number(((repoSize / storageMax) * 100).toFixed(2))
+    }
+  } catch (err) {
+    // ignore stat errors
+  }
+  res.json({
+    ok: true,
+    day: dayKey,
+    usage: {
+      publishes: Number(usage?.count || 0),
+      bytes: Number(usage?.bytes || 0),
+      dailyLimit: DAILY_LIMIT_COUNT,
+      dailyBytesLimit: DAILY_LIMIT_BYTES
+    },
+    ipUsage: {
+      requests: Number(ipUsage?.count || 0),
+      publishes: Number(ipUsage?.publish_count || 0),
+      bytes: Number(ipUsage?.bytes || 0),
+      dailyLimit: IP_DAILY_LIMIT,
+      dailyPublishLimit: IP_PUBLISH_LIMIT,
+      dailyBytesLimit: IP_DAILY_BYTES
+    },
+    ipfs: {
+      repoSize,
+      storageMax,
+      percentUsed
+    }
+  })
+})
+
 app.get('/api/metadata/uploads/:file', (req, res) => {
   const file = req.params.file
   const filePath = path.join(UPLOAD_DIR, file)
@@ -897,7 +1049,9 @@ app.post('/api/metadata/image', authGuard, upload.single('image'), async (req, r
       res.status(400).json({ ok: false, error: 'Image file missing' })
       return
     }
+    await assertIpfsCapacity()
     const signer = req.auth.address
+    const clientIp = getClientIp(req)
     const contentLength = parseContentLength(req)
     if (contentLength && contentLength > RAW_MAX_BYTES) {
       res.status(413).json({ ok: false, error: 'Image exceeds raw size limit' })
@@ -909,6 +1063,11 @@ app.post('/api/metadata/image', authGuard, upload.single('image'), async (req, r
     const usageCheck = checkUsageLimit(signer, dayKey, 1, rawBytes)
     if (!usageCheck.ok) {
       res.status(429).json({ ok: false, error: usageCheck.error })
+      return
+    }
+    const ipCheck = checkIpLimit(clientIp, dayKey, 1, 1, rawBytes)
+    if (!ipCheck.ok) {
+      res.status(429).json({ ok: false, error: ipCheck.error })
       return
     }
     let imageUri = ''
@@ -925,6 +1084,7 @@ app.post('/api/metadata/image', authGuard, upload.single('image'), async (req, r
     imageUrl = `${IPFS_GATEWAY_BASE}${cid}`
     const contentHash = ethers.utils.keccak256(processed)
     bumpUsage(signer, dayKey, 1, rawBytes)
+    bumpIpUsage(clientIp, dayKey, 1, 1, rawBytes)
     res.json({
       ok: true,
       cid,
@@ -939,6 +1099,14 @@ app.post('/api/metadata/image', authGuard, upload.single('image'), async (req, r
   }
 })
 
+app.use((err, req, res, next) => {
+  if (err && err.code === 'LIMIT_FILE_SIZE') {
+    res.status(413).json({ ok: false, error: 'Image exceeds raw size limit' })
+    return
+  }
+  next(err)
+})
+
 app.post('/api/metadata/publish', authGuard, async (req, res) => {
   try {
     const now = Math.floor(Date.now() / 1000)
@@ -950,10 +1118,17 @@ app.post('/api/metadata/publish', authGuard, async (req, res) => {
       res.status(400).json({ ok: false, error: 'Invalid token address' })
       return
     }
+    await assertIpfsCapacity()
+    const clientIp = getClientIp(req)
     const dayKey = getDayKey()
     const usageCheck = checkUsageLimit(creator, dayKey, 1, 0)
     if (!usageCheck.ok) {
       res.status(429).json({ ok: false, error: usageCheck.error })
+      return
+    }
+    const ipCheck = checkIpLimit(clientIp, dayKey, 1, 1, 0)
+    if (!ipCheck.ok) {
+      res.status(429).json({ ok: false, error: ipCheck.error })
       return
     }
 
@@ -968,6 +1143,11 @@ app.post('/api/metadata/publish', authGuard, async (req, res) => {
         const bytesCheck = checkUsageLimit(creator, dayKey, 0, imageBytes)
         if (!bytesCheck.ok) {
           res.status(429).json({ ok: false, error: bytesCheck.error })
+          return
+        }
+        const ipBytesCheck = checkIpLimit(clientIp, dayKey, 0, 0, imageBytes)
+        if (!ipBytesCheck.ok) {
+          res.status(429).json({ ok: false, error: ipBytesCheck.error })
           return
         }
       }
@@ -1027,6 +1207,7 @@ app.post('/api/metadata/publish', authGuard, async (req, res) => {
       })
     }
     bumpUsage(creator, dayKey, 1, imageBytes)
+    bumpIpUsage(clientIp, dayKey, 1, 1, imageBytes)
     res.json({ ok: true, token, pair: pair || null, metadataUri, contentHash })
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message || 'Publish failed' })
@@ -1036,6 +1217,8 @@ app.post('/api/metadata/publish', authGuard, async (req, res) => {
 app.post('/api/metadata/token', authGuard, upload.single('logo'), async (req, res) => {
   try {
     const signer = req.auth.address
+    await assertIpfsCapacity()
+    const clientIp = getClientIp(req)
     const contentLength = parseContentLength(req)
     if (contentLength && contentLength > RAW_MAX_BYTES) {
       res.status(413).json({ ok: false, error: 'Image exceeds raw size limit' })
@@ -1086,6 +1269,11 @@ app.post('/api/metadata/token', authGuard, upload.single('logo'), async (req, re
       res.status(429).json({ ok: false, error: usageCheck.error })
       return
     }
+    const ipCheck = checkIpLimit(clientIp, dayKey, 1, 1, 0)
+    if (!ipCheck.ok) {
+      res.status(429).json({ ok: false, error: ipCheck.error })
+      return
+    }
 
     let imageBytes = 0
     let imageUri = tokenRecord?.image_uri || ''
@@ -1101,6 +1289,11 @@ app.post('/api/metadata/token', authGuard, upload.single('logo'), async (req, re
       const bytesCheck = checkUsageLimit(signer, dayKey, 0, rawBytes)
       if (!bytesCheck.ok) {
         res.status(429).json({ ok: false, error: bytesCheck.error })
+        return
+      }
+      const ipBytesCheck = checkIpLimit(clientIp, dayKey, 0, 0, rawBytes)
+      if (!ipBytesCheck.ok) {
+        res.status(429).json({ ok: false, error: ipBytesCheck.error })
         return
       }
       const buffer = fs.readFileSync(req.file.path)
@@ -1120,6 +1313,11 @@ app.post('/api/metadata/token', authGuard, upload.single('logo'), async (req, re
         const bytesCheck = checkUsageLimit(signer, dayKey, 0, imageBytes)
         if (!bytesCheck.ok) {
           res.status(429).json({ ok: false, error: bytesCheck.error })
+          return
+        }
+        const ipBytesCheck = checkIpLimit(clientIp, dayKey, 0, 0, imageBytes)
+        if (!ipBytesCheck.ok) {
+          res.status(429).json({ ok: false, error: ipBytesCheck.error })
           return
         }
       }
@@ -1153,6 +1351,7 @@ app.post('/api/metadata/token', authGuard, upload.single('logo'), async (req, re
       now,
     })
     bumpUsage(signer, dayKey, 1, imageBytes)
+    bumpIpUsage(clientIp, dayKey, 1, 1, imageBytes)
 
     const entry = db.prepare('SELECT * FROM tokens WHERE address = ?').get(resolvedToken)
     let registryResult = null
@@ -1172,6 +1371,8 @@ app.post('/api/metadata/token', authGuard, upload.single('logo'), async (req, re
 app.post('/api/metadata/pair', authGuard, async (req, res) => {
   try {
     const signer = req.auth.address
+    await assertIpfsCapacity()
+    const clientIp = getClientIp(req)
     const pairAddress = normAddr(req.body?.pairAddress || '')
     const txHash = req.body?.txHash
     if (!pairAddress || !isHexAddress(pairAddress)) {
@@ -1196,6 +1397,13 @@ app.post('/api/metadata/pair', authGuard, async (req, res) => {
     const onchainTokens = await verifyPairOnchain(pairAddress, token0, token1)
     const resolvedToken0 = onchainTokens?.token0 || token0 || verification.token
     const resolvedToken1 = onchainTokens?.token1 || token1 || ''
+
+    const dayKey = getDayKey()
+    const ipCheck = checkIpLimit(clientIp, dayKey, 1, 1, 0)
+    if (!ipCheck.ok) {
+      res.status(429).json({ ok: false, error: ipCheck.error })
+      return
+    }
 
     const now = Math.floor(Date.now() / 1000)
     const existing = db.prepare('SELECT * FROM pairs WHERE address = ?').get(pairAddress)
@@ -1222,6 +1430,7 @@ app.post('/api/metadata/pair', authGuard, async (req, res) => {
     } catch (err) {
       registryResult = { ok: false, error: err.message || 'Registry register failed' }
     }
+    bumpIpUsage(clientIp, dayKey, 1, 1, 0)
     res.json({ ok: true, data: entry, registry: registryResult })
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message || 'Pair metadata update failed' })

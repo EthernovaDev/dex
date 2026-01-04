@@ -6,6 +6,8 @@ OUT_DIR="/opt/novadex/scripts/out"
 mkdir -p "$OUT_DIR"
 
 echo "[INFO] Running metadata smokes..."
+node "$ROOT_DIR/scripts/smoke_ipfs_storage_cap.mjs"
+node "$ROOT_DIR/scripts/smoke_metadata_limits.mjs"
 node "$ROOT_DIR/scripts/smoke_metadata_api.mjs"
 node "$ROOT_DIR/scripts/smoke_metadata_upload_image.mjs"
 node "$ROOT_DIR/scripts/smoke_quota_wallet.mjs"

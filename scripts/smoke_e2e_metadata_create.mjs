@@ -11,6 +11,9 @@ const autoApprove = process.env.SMOKE_AUTO_APPROVE !== '0'
 const amountWnova = process.env.SMOKE_AMOUNT_WNOVA || '0.1'
 const tokenAmountStr = process.env.SMOKE_TOKEN_AMOUNT || '1000'
 const supplyStr = process.env.SMOKE_TOTAL_SUPPLY || '1000000'
+const existingToken = process.env.SMOKE_TOKEN_ADDRESS
+const existingPair = process.env.SMOKE_PAIR_ADDRESS
+const providedTxHash = process.env.SMOKE_TX_HASH
 
 const log = (msg) => process.stdout.write(`${msg}\n`)
 const warn = (msg) => process.stdout.write(`[WARN] ${msg}\n`)
@@ -47,7 +50,10 @@ const REGISTRY_ABI = [
 const ERC20_ABI = [
   'function approve(address spender,uint256 amount) returns (bool)',
   'function allowance(address owner,address spender) view returns (uint256)',
-  'function balanceOf(address owner) view returns (uint256)'
+  'function balanceOf(address owner) view returns (uint256)',
+  'function name() view returns (string)',
+  'function symbol() view returns (string)',
+  'function deposit() payable'
 ]
 
 const PAIR_ABI = ['function getReserves() view returns (uint112,uint112,uint32)']
@@ -101,67 +107,107 @@ async function main() {
   const tokenAmount = parseUnits(tokenAmountStr, decimals)
   const wnovaAmount = parseUnits(amountWnova, decimals)
 
-  const allowance = await wnovaContract.allowance(wallet.address, tokenFactory)
-  const needsApproval =
-    typeof allowance === 'bigint'
-      ? allowance < wnovaAmount
-      : allowance.lt(wnovaAmount)
-  if (needsApproval) {
-    if (!autoApprove) {
-      fail('WNOVA allowance too low and SMOKE_AUTO_APPROVE=0')
-    }
-    const maxUint = ethers.constants?.MaxUint256 || ethers.MaxUint256
-    const approveTx = await wnovaContract.approve(tokenFactory, maxUint)
-    log(`[INFO] approve tx: ${approveTx.hash}`)
-    await approveTx.wait(1)
-  }
-
-  const name = `Smoke Token ${Date.now()}`
-  const symbol = `SMK${Date.now().toString().slice(-4)}`
-  const deadline = Math.floor(Date.now() / 1000) + 1200
-
-  log('[INFO] creating token + launch...')
-  const tx = await factory.createTokenAndLaunch(
-    name,
-    symbol,
-    decimals,
-    totalSupply,
-    tokenAmount,
-    wnovaAmount,
-    wallet.address,
-    deadline
-  )
-  log(`[INFO] create tx: ${tx.hash}`)
-  const receipt = await tx.wait(1)
-  if (receipt.status !== 1) {
-    fail(`create tx failed: ${tx.hash}`)
-  }
-
-  const iface = new (ethers.utils?.Interface || ethers.Interface)(TOKEN_FACTORY_ABI)
-  let tokenAddress = ''
-  let pairAddress = ''
-  for (const logEntry of receipt.logs) {
-    if (logEntry.address.toLowerCase() !== tokenFactory.toLowerCase()) continue
+  let tokenAddress = existingToken || ''
+  let pairAddress = existingPair || ''
+  let createTxHash = ''
+  let name = ''
+  let symbol = ''
+  if (tokenAddress && pairAddress) {
+    log(`[INFO] using existing token/pair: ${tokenAddress} / ${pairAddress}`)
     try {
-      const parsed = iface.parseLog(logEntry)
-      if (parsed?.name === 'TokenCreated') {
-        tokenAddress = parsed.args.token
-      }
-      if (parsed?.name === 'TokenLaunched') {
-        pairAddress = parsed.args.pair
-      }
+      const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, provider)
+      name = await tokenContract.name()
+      symbol = await tokenContract.symbol()
     } catch {
-      // ignore
+      name = `Smoke Token ${Date.now()}`
+      symbol = `SMK${Date.now().toString().slice(-4)}`
     }
+  } else {
+    const wnovaBalance = await wnovaContract.balanceOf(wallet.address)
+    const needsWrap =
+      typeof wnovaBalance === 'bigint'
+        ? wnovaBalance < wnovaAmount
+        : wnovaBalance.lt(wnovaAmount)
+    if (needsWrap) {
+      const wrapAmount =
+        typeof wnovaBalance === 'bigint'
+          ? wnovaAmount - wnovaBalance
+          : wnovaAmount.sub(wnovaBalance)
+      log(`[INFO] wrapping NOVA -> WNOVA: ${wrapAmount.toString()}`)
+      const wrapTx = await wnovaContract.deposit({ value: wrapAmount })
+      log(`[INFO] wrap tx: ${wrapTx.hash}`)
+      await wrapTx.wait(1)
+    }
+
+    const allowance = await wnovaContract.allowance(wallet.address, tokenFactory)
+    const needsApproval =
+      typeof allowance === 'bigint'
+        ? allowance < wnovaAmount
+        : allowance.lt(wnovaAmount)
+    if (needsApproval) {
+      if (!autoApprove) {
+        fail('WNOVA allowance too low and SMOKE_AUTO_APPROVE=0')
+      }
+      const maxUint = ethers.constants?.MaxUint256 || ethers.MaxUint256
+      const approveTx = await wnovaContract.approve(tokenFactory, maxUint)
+      log(`[INFO] approve tx: ${approveTx.hash}`)
+      await approveTx.wait(1)
+    }
+
+    name = `Smoke Token ${Date.now()}`
+    symbol = `SMK${Date.now().toString().slice(-4)}`
+    const deadline = Math.floor(Date.now() / 1000) + 1200
+
+    log('[INFO] creating token + launch...')
+    const tx = await factory.createTokenAndLaunch(
+      name,
+      symbol,
+      decimals,
+      totalSupply,
+      tokenAmount,
+      wnovaAmount,
+      wallet.address,
+      deadline
+    )
+    log(`[INFO] create tx: ${tx.hash}`)
+    createTxHash = tx.hash
+    const receipt = await tx.wait(1)
+    if (receipt.status !== 1) {
+      fail(`create tx failed: ${tx.hash}`)
+    }
+
+    const iface = new (ethers.utils?.Interface || ethers.Interface)(TOKEN_FACTORY_ABI)
+    for (const logEntry of receipt.logs) {
+      if (logEntry.address.toLowerCase() !== tokenFactory.toLowerCase()) continue
+      try {
+        const parsed = iface.parseLog(logEntry)
+        if (parsed?.name === 'TokenCreated') {
+          tokenAddress = parsed.args.token
+        }
+        if (parsed?.name === 'TokenLaunched') {
+          pairAddress = parsed.args.pair
+        }
+      } catch {
+        // ignore
+      }
+    }
+    if (!tokenAddress || !pairAddress) {
+      fail('Token or pair not found in receipt logs')
+    }
+    log(`[OK] token=${tokenAddress} pair=${pairAddress}`)
   }
-  if (!tokenAddress || !pairAddress) {
-    fail('Token or pair not found in receipt logs')
-  }
-  log(`[OK] token=${tokenAddress} pair=${pairAddress}`)
 
   const pairContract = new ethers.Contract(pairAddress, PAIR_ABI, provider)
   const reserves = await pairContract.getReserves()
-  if (!reserves || reserves[0].isZero() && reserves[1].isZero()) {
+  const reserve0Zero =
+    typeof reserves?.[0] === 'bigint'
+      ? reserves[0] === 0n
+      : reserves?.[0]?.isZero?.()
+  const reserve1Zero =
+    typeof reserves?.[1] === 'bigint'
+      ? reserves[1] === 0n
+      : reserves?.[1]?.isZero?.()
+  if (!reserves || (reserve0Zero && reserve1Zero)) {
     warn('Pair reserves are zero; autolist may have failed')
   } else {
     log(`[OK] reserves: ${reserves[0].toString()} / ${reserves[1].toString()}`)
@@ -173,7 +219,10 @@ async function main() {
 
   const form = new FormData()
   form.append('tokenAddress', tokenAddress)
-  form.append('txHash', tx.hash)
+  const finalTxHash = createTxHash || providedTxHash
+  if (finalTxHash) {
+    form.append('txHash', finalTxHash)
+  }
   form.append('name', name)
   form.append('symbol', symbol)
   form.append('description', 'Smoke E2E metadata test')
@@ -200,12 +249,13 @@ async function main() {
   }
   log(`[OK] metadataUri=${metadataUri}`)
 
+  const pairHeaders = await fetchSignatureHeaders(wallet.address, wallet)
   const pairResp = await fetch(`${baseUrl}/api/metadata/pair`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', ...headers },
+    headers: { 'content-type': 'application/json', ...pairHeaders },
     body: JSON.stringify({
       pairAddress,
-      txHash: tx.hash,
+      txHash: finalTxHash || undefined,
       metadataUri,
       contentHash
     })
@@ -219,8 +269,20 @@ async function main() {
   if (registryAddress) {
     const hashZero = ethers.constants?.HashZero || ethers.ZeroHash
     const registry = new ethers.Contract(registryAddress, REGISTRY_ABI, wallet)
-    await registry.setTokenURI(tokenAddress, metadataUri, contentHash || hashZero)
-    await registry.setPairURI(pairAddress, metadataUri, contentHash || hashZero)
+    const setTokenTx = await registry.setTokenURI(
+      tokenAddress,
+      metadataUri,
+      contentHash || hashZero
+    )
+    log(`[INFO] setTokenURI tx: ${setTokenTx.hash}`)
+    await setTokenTx.wait(1)
+    const setPairTx = await registry.setPairURI(
+      pairAddress,
+      metadataUri,
+      contentHash || hashZero
+    )
+    log(`[INFO] setPairURI tx: ${setPairTx.hash}`)
+    await setPairTx.wait(1)
     const onchainTokenUri = await registry.tokenURI(tokenAddress)
     const onchainPairUri = await registry.pairURI(pairAddress)
     if (onchainTokenUri !== metadataUri) fail('tokenURI mismatch')
@@ -240,7 +302,11 @@ async function main() {
   }
   log('[OK] metadata JSON accessible')
 
-  log(`[DONE] tx=${tx.hash} token=${tokenAddress} pair=${pairAddress}`)
+  if (createTxHash) {
+    log(`[DONE] tx=${createTxHash} token=${tokenAddress} pair=${pairAddress}`)
+  } else {
+    log(`[DONE] token=${tokenAddress} pair=${pairAddress}`)
+  }
 }
 
 main().catch((err) => fail(err.message))

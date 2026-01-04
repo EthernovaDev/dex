@@ -5,6 +5,15 @@ import { TONY_ADDRESS, WRAPPED_NATIVE_ADDRESS } from '../../constants/urls'
 import { useTokenMetadata } from '../../hooks/useTokenMetadata'
 
 const BAD_IMAGES = {}
+const IPFS_GATEWAY = process.env.REACT_APP_IPFS_GATEWAY || 'https://dex.ethnova.net/ipfs/'
+
+const resolveLogoUri = (uri) => {
+  if (!uri) return null
+  if (uri.startsWith('ipfs://')) {
+    return `${IPFS_GATEWAY}${uri.slice(7)}`
+  }
+  return uri
+}
 
 const Inline = styled.div`
   display: flex;
@@ -57,7 +66,7 @@ export default function TokenLogo({ address, header = false, size = '24px', ...r
     if (!address) return
     const meta = remoteMeta
     if (meta?.logo || meta?.image_uri) {
-      setCustomLogo(meta.logo || meta.image_uri)
+      setCustomLogo(resolveLogoUri(meta.logo || meta.image_uri))
     }
   }, [address, remoteMeta])
 

@@ -301,6 +301,13 @@ const PAIR_ABI = [
 const TOKEN_METADATA_KEY = 'novadex:token-metadata'
 const PAIR_METADATA_KEY = 'novadex:pair-metadata'
 const METADATA_BASE = '/api/metadata'
+const FALLBACK_IPFS_GATEWAY = 'https://dex.ethnova.net/ipfs/'
+
+const toGatewayUrl = (uri: string) => {
+  if (!uri) return ''
+  const base = typeof window !== 'undefined' ? `${window.location.origin}/ipfs/` : FALLBACK_IPFS_GATEWAY
+  return uri.startsWith('ipfs://') ? `${base}${uri.slice(7)}` : uri
+}
 
 const saveMetadataLocal = (tokenAddress: string, pairAddress: string | null, payload: Record<string, any>) => {
   if (typeof window === 'undefined' || !tokenAddress) return
@@ -390,6 +397,7 @@ const saveMetadataRemote = async (
   const tokenJson = await tokenResp.json()
   const tokenMetadataUri = tokenJson?.metadataUri || tokenJson?.data?.metadata_uri || ''
   const tokenContentHash = tokenJson?.contentHash || tokenJson?.data?.content_hash || ''
+  const tokenImageUri = tokenJson?.imageUri || tokenJson?.data?.image_uri || ''
 
   let pairJson: any = null
   if (pairAddress && payload?.pairMeta) {
@@ -411,7 +419,7 @@ const saveMetadataRemote = async (
     }
     pairJson = await pairResp.json()
   }
-  return { tokenMetadataUri, tokenContentHash, pairJson }
+  return { tokenMetadataUri, tokenContentHash, tokenImageUri, pairJson }
 }
 
 const setRegistryUris = async (
@@ -472,6 +480,7 @@ export default function CreateToken() {
   const [error, setError] = useState<string | null>(null)
   const [metaStatus, setMetaStatus] = useState<{ state: string; error?: string } | null>(null)
   const [metadataUri, setMetadataUri] = useState<string | null>(null)
+  const [metadataImageUri, setMetadataImageUri] = useState<string | null>(null)
   const [allowance, setAllowance] = useState('0')
   const [approvePending, setApprovePending] = useState(false)
 
@@ -763,6 +772,9 @@ export default function CreateToken() {
           )
           if (metaResult?.tokenMetadataUri) {
             setMetadataUri(metaResult.tokenMetadataUri)
+            if (metaResult?.tokenImageUri) {
+              setMetadataImageUri(metaResult.tokenImageUri)
+            }
             if (metadataRegistryAddress) {
               try {
                 await setRegistryUris(
@@ -1088,8 +1100,18 @@ export default function CreateToken() {
                   <SuccessBlock>
                     <SuccessLabel>Metadata URI</SuccessLabel>
                     <SuccessValue>
-                      <a href={metadataUri.startsWith('ipfs://') ? `https://cloudflare-ipfs.com/ipfs/${metadataUri.slice(7)}` : metadataUri} target="_blank" rel="noopener noreferrer">
+                      <a href={toGatewayUrl(metadataUri)} target="_blank" rel="noopener noreferrer">
                         {metadataUri}
+                      </a>
+                    </SuccessValue>
+                  </SuccessBlock>
+                )}
+                {metadataImageUri && (
+                  <SuccessBlock>
+                    <SuccessLabel>Logo URI</SuccessLabel>
+                    <SuccessValue>
+                      <a href={toGatewayUrl(metadataImageUri)} target="_blank" rel="noopener noreferrer">
+                        {metadataImageUri}
                       </a>
                     </SuccessValue>
                   </SuccessBlock>

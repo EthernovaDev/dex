@@ -70,8 +70,8 @@ function parseAmount(value, decimals = 18) {
 export function useOnchainSwapHistory({
   rpcUrl,
   factoryAddress,
-  wnovaAddress,
-  tonyAddress,
+  baseTokenAddress,
+  quoteTokenAddress,
   pairAddress: explicitPair,
   startBlock = 0,
   intervalSec = DEFAULT_INTERVAL,
@@ -94,7 +94,7 @@ export function useOnchainSwapHistory({
   }, [])
 
   useEffect(() => {
-    if (!rpcUrl || !factoryAddress || !wnovaAddress || !tonyAddress) return
+    if (!rpcUrl || !factoryAddress || !baseTokenAddress || !quoteTokenAddress) return
     let cancelled = false
     const requestId = nonceRef.current
 
@@ -125,7 +125,7 @@ export function useOnchainSwapHistory({
         let pairAddress = explicitPair
         if (!pairAddress) {
           const pairRaw = await rpcCallWithRetry(rpcUrl, 'eth_call', [
-            { to: factoryAddress, data: `0xe6a43905${pad(wnovaAddress)}${pad(tonyAddress)}` },
+            { to: factoryAddress, data: `0xe6a43905${pad(baseTokenAddress)}${pad(quoteTokenAddress)}` },
             'latest',
           ])
           pairAddress = `0x${pairRaw.slice(-40)}`
@@ -164,14 +164,14 @@ export function useOnchainSwapHistory({
         ])
         const token0 = `0x${token0Raw.slice(-40)}`.toLowerCase()
         const token1 = `0x${token1Raw.slice(-40)}`.toLowerCase()
-        const wnovaLower = wnovaAddress.toLowerCase()
-        const tonyLower = tonyAddress.toLowerCase()
-        const isToken0Wnova = token0 === wnovaLower
-        const isToken1Wnova = token1 === wnovaLower
-        const isToken0Tony = token0 === tonyLower
-        const isToken1Tony = token1 === tonyLower
+        const baseLower = baseTokenAddress.toLowerCase()
+        const quoteLower = quoteTokenAddress.toLowerCase()
+        const isToken0Base = token0 === baseLower
+        const isToken1Base = token1 === baseLower
+        const isToken0Quote = token0 === quoteLower
+        const isToken1Quote = token1 === quoteLower
         const isTargetPair =
-          (isToken0Wnova && isToken1Tony) || (isToken1Wnova && isToken0Tony)
+          (isToken0Base && isToken1Quote) || (isToken1Base && isToken0Quote)
 
         const logs = await rpcCallWithRetry(rpcUrl, 'eth_getLogs', [
           {
@@ -203,47 +203,47 @@ export function useOnchainSwapHistory({
 
             if (!isTargetPair) continue
 
-            let amountWnovaIn = new BigNumber(0)
-            let amountWnovaOut = new BigNumber(0)
-            let amountTonyIn = new BigNumber(0)
-            let amountTonyOut = new BigNumber(0)
+            let amountBaseIn = new BigNumber(0)
+            let amountBaseOut = new BigNumber(0)
+            let amountQuoteIn = new BigNumber(0)
+            let amountQuoteOut = new BigNumber(0)
 
-            if (isToken0Wnova) {
-              amountWnovaIn = amount0In
-              amountWnovaOut = amount0Out
-            } else if (isToken1Wnova) {
-              amountWnovaIn = amount1In
-              amountWnovaOut = amount1Out
+            if (isToken0Base) {
+              amountBaseIn = amount0In
+              amountBaseOut = amount0Out
+            } else if (isToken1Base) {
+              amountBaseIn = amount1In
+              amountBaseOut = amount1Out
             }
 
-            if (isToken0Tony) {
-              amountTonyIn = amount0In
-              amountTonyOut = amount0Out
-            } else if (isToken1Tony) {
-              amountTonyIn = amount1In
-              amountTonyOut = amount1Out
+            if (isToken0Quote) {
+              amountQuoteIn = amount0In
+              amountQuoteOut = amount0Out
+            } else if (isToken1Quote) {
+              amountQuoteIn = amount1In
+              amountQuoteOut = amount1Out
             }
 
-            const wnovaIn = parseAmount(amountWnovaIn, 18)
-            const wnovaOut = parseAmount(amountWnovaOut, 18)
-            const tonyIn = parseAmount(amountTonyIn, 18)
-            const tonyOut = parseAmount(amountTonyOut, 18)
+            const baseIn = parseAmount(amountBaseIn, 18)
+            const baseOut = parseAmount(amountBaseOut, 18)
+            const quoteIn = parseAmount(amountQuoteIn, 18)
+            const quoteOut = parseAmount(amountQuoteOut, 18)
 
             let side = null
-            let wnovaAmount = new BigNumber(0)
-            let tonyAmount = new BigNumber(0)
-            if (wnovaIn.gt(0) && tonyOut.gt(0)) {
+            let baseAmount = new BigNumber(0)
+            let quoteAmount = new BigNumber(0)
+            if (baseIn.gt(0) && quoteOut.gt(0)) {
               side = 'buy'
-              wnovaAmount = wnovaIn
-              tonyAmount = tonyOut
-            } else if (tonyIn.gt(0) && wnovaOut.gt(0)) {
+              baseAmount = baseIn
+              quoteAmount = quoteOut
+            } else if (quoteIn.gt(0) && baseOut.gt(0)) {
               side = 'sell'
-              wnovaAmount = wnovaOut
-              tonyAmount = tonyIn
+              baseAmount = baseOut
+              quoteAmount = quoteIn
             }
-            if (!side || !wnovaAmount.gt(0) || !tonyAmount.gt(0)) continue
+            if (!side || !baseAmount.gt(0) || !quoteAmount.gt(0)) continue
 
-            const price = tonyAmount.div(wnovaAmount)
+            const price = quoteAmount.div(baseAmount)
             if (!price.isFinite()) continue
 
             const timestamp = await getTimestamp(log.blockNumber)
@@ -260,17 +260,15 @@ export function useOnchainSwapHistory({
             candle.close = price.toNumber()
             candle.high = Math.max(candle.high, price.toNumber())
             candle.low = Math.min(candle.low, price.toNumber())
-            candle.volume = candle.volume.plus(wnovaAmount)
+            candle.volume = candle.volume.plus(baseAmount)
             candlesMap.set(bucket, candle)
 
-            const sideLabel = side === 'sell' ? 'SELL TONY' : 'BUY TONY'
             trades.push({
               timestamp,
               price: price.toNumber(),
               side,
-              sideLabel,
-              wnovaAmount: wnovaAmount.toNumber(),
-              tonyAmount: tonyAmount.toNumber(),
+              baseAmount: baseAmount.toNumber(),
+              quoteAmount: quoteAmount.toNumber(),
               txHash: log.transactionHash,
             })
           } catch {
@@ -318,7 +316,7 @@ export function useOnchainSwapHistory({
       cancelled = true
       clearInterval(intervalId)
     }
-  }, [rpcUrl, factoryAddress, wnovaAddress, tonyAddress, explicitPair, startBlock, intervalSec, lookbackBlocks])
+  }, [rpcUrl, factoryAddress, baseTokenAddress, quoteTokenAddress, explicitPair, startBlock, intervalSec, lookbackBlocks])
 
   return { ...state, refresh }
 }

@@ -200,17 +200,37 @@ function GlobalPage() {
   const wnovaLower = normAddr(WNOVA_ADDRESS)
   const tonyLower = normAddr(TONY_ADDRESS)
   const boostState = useBoostedPairs(RPC_URL, 60000)
+  const quoteTokenAddress = useMemo(() => {
+    const token0Id = normAddr(pinnedPair?.token0?.id)
+    const token1Id = normAddr(pinnedPair?.token1?.id)
+    if (token0Id && token1Id) {
+      if (isAddrEq(token0Id, wnovaLower)) return token1Id
+      if (isAddrEq(token1Id, wnovaLower)) return token0Id
+    }
+    return tonyLower
+  }, [pinnedPair, wnovaLower, tonyLower])
+
+  const quoteTokenSymbol = useMemo(() => {
+    const token0Id = normAddr(pinnedPair?.token0?.id)
+    const token1Id = normAddr(pinnedPair?.token1?.id)
+    if (token0Id && token1Id) {
+      if (isAddrEq(token0Id, wnovaLower)) return pinnedPair?.token1?.symbol || 'TOKEN'
+      if (isAddrEq(token1Id, wnovaLower)) return pinnedPair?.token0?.symbol || 'TOKEN'
+    }
+    return pinnedPair?.token1?.symbol || pinnedPair?.token0?.symbol || 'TOKEN'
+  }, [pinnedPair, wnovaLower])
+
   const pairSwaps = useMemo(() => {
-    if (!transactions?.swaps?.length || !wnovaLower || !tonyLower) return []
+    if (!transactions?.swaps?.length || !wnovaLower || !quoteTokenAddress) return []
     return transactions.swaps.filter((swap) => {
       const token0 = normAddr(swap?.pair?.token0?.id)
       const token1 = normAddr(swap?.pair?.token1?.id)
       return (
-        (isAddrEq(token0, wnovaLower) && isAddrEq(token1, tonyLower)) ||
-        (isAddrEq(token1, wnovaLower) && isAddrEq(token0, tonyLower))
+        (isAddrEq(token0, wnovaLower) && isAddrEq(token1, quoteTokenAddress)) ||
+        (isAddrEq(token1, wnovaLower) && isAddrEq(token0, quoteTokenAddress))
       )
     })
-  }, [transactions, wnovaLower, tonyLower])
+  }, [transactions, wnovaLower, quoteTokenAddress])
 
   const volumeWnova24h = useMemo(() => {
     if (!pairSwaps || !pairSwaps.length) return 0
@@ -231,7 +251,7 @@ function GlobalPage() {
   }, [pairSwaps, wnovaLower])
 
   const reserveWnova = useMemo(() => getReserveWnova(pinnedPair, WNOVA_ADDRESS) || 0, [pinnedPair])
-  const reserveTony = useMemo(() => {
+  const reserveQuote = useMemo(() => {
     const token0Id = normAddr(pinnedPair?.token0?.id)
     const token1Id = normAddr(pinnedPair?.token1?.id)
     if (!token0Id || !token1Id) return 0
@@ -346,11 +366,13 @@ function GlobalPage() {
           <OnchainMarketPanel
             rpcUrl={RPC_URL}
             factoryAddress={FACTORY_ADDRESS}
-            wnovaAddress={WNOVA_ADDRESS}
-            tonyAddress={TONY_ADDRESS}
+            baseTokenAddress={WNOVA_ADDRESS}
+            quoteTokenAddress={quoteTokenAddress}
+            baseSymbol="WNOVA"
+            quoteSymbol={quoteTokenSymbol}
             pairAddress={PAIR_ADDRESS}
-            reserveWnova={reserveWnova}
-            reserveTony={reserveTony}
+            reserveBase={reserveWnova}
+            reserveQuote={reserveQuote}
             liquiditySeries={liquiditySeries}
             swaps={pairSwaps}
             showVolume={false}

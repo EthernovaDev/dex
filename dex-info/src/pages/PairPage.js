@@ -233,9 +233,15 @@ function PairPageContent({ pairId, history }) {
   const isToken0Wnova = isAddrEq(token0Id, wnovaLower)
   const isToken1Wnova = isAddrEq(token1Id, wnovaLower)
   const reserveWnova = isToken0Wnova ? reserve0 : isToken1Wnova ? reserve1 : null
-  const reserveTony = isToken0Wnova ? reserve1 : isToken1Wnova ? reserve0 : null
+  const reserveQuote = isToken0Wnova ? reserve1 : isToken1Wnova ? reserve0 : null
   const reserveWnovaNum = isFiniteNum(reserveWnova) ? Number(reserveWnova) : null
-  const reserveTonyNum = isFiniteNum(reserveTony) ? Number(reserveTony) : null
+  const reserveQuoteNum = isFiniteNum(reserveQuote) ? Number(reserveQuote) : null
+  const quoteTokenAddress = isToken0Wnova ? token1?.id : isToken1Wnova ? token0?.id : token1?.id || token0?.id
+  const quoteSymbol = isToken0Wnova
+    ? token1?.symbol || 'TOKEN'
+    : isToken1Wnova
+    ? token0?.symbol || 'TOKEN'
+    : token1?.symbol || token0?.symbol || 'TOKEN'
   const volumeWnova24h = React.useMemo(() => {
     if (!transactions?.swaps?.length || !wnovaLower) return 0
     const now = Math.floor(Date.now() / 1000)
@@ -574,11 +580,13 @@ function PairPageContent({ pairId, history }) {
           <OnchainMarketPanel
             rpcUrl={RPC_URL}
             factoryAddress={FACTORY_ADDRESS}
-            wnovaAddress={WNOVA_ADDRESS}
-            tonyAddress={TONY_ADDRESS}
+            baseTokenAddress={WNOVA_ADDRESS}
+            quoteTokenAddress={quoteTokenAddress}
+            baseSymbol="WNOVA"
+            quoteSymbol={quoteSymbol}
             pairAddress={pairId}
-            reserveWnova={reserveWnovaNum}
-            reserveTony={reserveTonyNum}
+            reserveBase={reserveWnovaNum}
+            reserveQuote={reserveQuoteNum}
             liquiditySeries={liquiditySeries}
             swaps={transactions?.swaps || []}
             allowOnchain={!subgraphReady}

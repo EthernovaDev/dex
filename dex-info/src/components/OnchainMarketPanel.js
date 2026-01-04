@@ -152,11 +152,13 @@ const CHART_TABS = [
 export default function OnchainMarketPanel({
   rpcUrl,
   factoryAddress,
-  wnovaAddress,
-  tonyAddress,
+  baseTokenAddress,
+  quoteTokenAddress,
+  baseSymbol = 'WNOVA',
+  quoteSymbol = 'TOKEN',
   pairAddress,
-  reserveWnova,
-  reserveTony,
+  reserveBase,
+  reserveQuote,
   liquiditySeries,
   swaps,
   showVolume = true,
@@ -169,11 +171,11 @@ export default function OnchainMarketPanel({
   const [chartTab, setChartTab] = useState(CHART_TABS[0].key)
   const [allowOnchainDelayed, setAllowOnchainDelayed] = useState(false)
 
-  const wnovaLower = normAddr(wnovaAddress)
-  const tonyLower = normAddr(tonyAddress)
+  const baseLower = normAddr(baseTokenAddress)
+  const quoteLower = normAddr(quoteTokenAddress)
 
   const subgraphSeries = useMemo(() => {
-    if (!swaps || !swaps.length || !wnovaLower || !tonyLower) return null
+    if (!swaps || !swaps.length || !baseLower || !quoteLower) return null
     const candlesMap = new Map()
     const trades = []
 
@@ -182,53 +184,53 @@ export default function OnchainMarketPanel({
       const pairToken1 = normAddr(swap?.pair?.token1?.id)
       if (!pairToken0 || !pairToken1) continue
 
-      const isToken0Wnova = isAddrEq(pairToken0, wnovaLower)
-      const isToken1Wnova = isAddrEq(pairToken1, wnovaLower)
-      const isToken0Tony = isAddrEq(pairToken0, tonyLower)
-      const isToken1Tony = isAddrEq(pairToken1, tonyLower)
-      if (!((isToken0Wnova && isToken1Tony) || (isToken1Wnova && isToken0Tony))) continue
+      const isToken0Base = isAddrEq(pairToken0, baseLower)
+      const isToken1Base = isAddrEq(pairToken1, baseLower)
+      const isToken0Quote = isAddrEq(pairToken0, quoteLower)
+      const isToken1Quote = isAddrEq(pairToken1, quoteLower)
+      if (!((isToken0Base && isToken1Quote) || (isToken1Base && isToken0Quote))) continue
 
       const amount0In = new BigNumber(swap?.amount0In || 0)
       const amount1In = new BigNumber(swap?.amount1In || 0)
       const amount0Out = new BigNumber(swap?.amount0Out || 0)
       const amount1Out = new BigNumber(swap?.amount1Out || 0)
 
-      let amountWnovaIn = new BigNumber(0)
-      let amountWnovaOut = new BigNumber(0)
-      let amountTonyIn = new BigNumber(0)
-      let amountTonyOut = new BigNumber(0)
+      let amountBaseIn = new BigNumber(0)
+      let amountBaseOut = new BigNumber(0)
+      let amountQuoteIn = new BigNumber(0)
+      let amountQuoteOut = new BigNumber(0)
 
-      if (isToken0Wnova) {
-        amountWnovaIn = amount0In
-        amountWnovaOut = amount0Out
-      } else if (isToken1Wnova) {
-        amountWnovaIn = amount1In
-        amountWnovaOut = amount1Out
+      if (isToken0Base) {
+        amountBaseIn = amount0In
+        amountBaseOut = amount0Out
+      } else if (isToken1Base) {
+        amountBaseIn = amount1In
+        amountBaseOut = amount1Out
       }
 
-      if (isToken0Tony) {
-        amountTonyIn = amount0In
-        amountTonyOut = amount0Out
-      } else if (isToken1Tony) {
-        amountTonyIn = amount1In
-        amountTonyOut = amount1Out
+      if (isToken0Quote) {
+        amountQuoteIn = amount0In
+        amountQuoteOut = amount0Out
+      } else if (isToken1Quote) {
+        amountQuoteIn = amount1In
+        amountQuoteOut = amount1Out
       }
 
       let side = null
-      let wnovaAmount = new BigNumber(0)
-      let tonyAmount = new BigNumber(0)
-      if (amountWnovaIn.gt(0) && amountTonyOut.gt(0)) {
+      let baseAmount = new BigNumber(0)
+      let quoteAmount = new BigNumber(0)
+      if (amountBaseIn.gt(0) && amountQuoteOut.gt(0)) {
         side = 'buy'
-        wnovaAmount = amountWnovaIn
-        tonyAmount = amountTonyOut
-      } else if (amountTonyIn.gt(0) && amountWnovaOut.gt(0)) {
+        baseAmount = amountBaseIn
+        quoteAmount = amountQuoteOut
+      } else if (amountQuoteIn.gt(0) && amountBaseOut.gt(0)) {
         side = 'sell'
-        wnovaAmount = amountWnovaOut
-        tonyAmount = amountTonyIn
+        baseAmount = amountBaseOut
+        quoteAmount = amountQuoteIn
       }
 
-      if (!side || wnovaAmount.isZero() || tonyAmount.isZero()) continue
-      const price = tonyAmount.div(wnovaAmount)
+      if (!side || baseAmount.isZero() || quoteAmount.isZero()) continue
+      const price = quoteAmount.div(baseAmount)
       if (!price.isFinite()) continue
 
       const timestamp = Number.parseInt(swap?.transaction?.timestamp || swap?.timestamp || 0, 10)
@@ -246,17 +248,17 @@ export default function OnchainMarketPanel({
       candle.close = price.toNumber()
       candle.high = Math.max(candle.high, price.toNumber())
       candle.low = Math.min(candle.low, price.toNumber())
-      candle.volume = candle.volume.plus(wnovaAmount)
+      candle.volume = candle.volume.plus(baseAmount)
       candlesMap.set(bucket, candle)
 
-      const sideLabel = side === 'sell' ? 'SELL TONY' : 'BUY TONY'
+      const sideLabel = side === 'sell' ? `SELL ${quoteSymbol}` : `BUY ${quoteSymbol}`
       trades.push({
         timestamp,
         price: price.toNumber(),
         side,
         sideLabel,
-        wnovaAmount: wnovaAmount.toNumber(),
-        tonyAmount: tonyAmount.toNumber(),
+        baseAmount: baseAmount.toNumber(),
+        quoteAmount: quoteAmount.toNumber(),
         txHash: swap?.transaction?.id || swap?.id,
       })
     }
@@ -271,7 +273,7 @@ export default function OnchainMarketPanel({
       lastPrice: candles[candles.length - 1]?.close || null,
       readPath: 'subgraph',
     }
-  }, [swaps, timeframe.intervalSec, wnovaLower, tonyLower])
+  }, [swaps, timeframe.intervalSec, baseLower, quoteLower, quoteSymbol])
 
   const useSubgraph = Boolean(subgraphSeries && subgraphSeries.trades.length)
 
@@ -288,8 +290,8 @@ export default function OnchainMarketPanel({
   const { status, candles, trades, lastPrice, refresh } = useOnchainSwapHistory({
     rpcUrl: useOnchain ? rpcUrl : null,
     factoryAddress,
-    wnovaAddress,
-    tonyAddress,
+    baseTokenAddress,
+    quoteTokenAddress,
     pairAddress,
     intervalSec: timeframe.intervalSec,
     lookbackBlocks: timeframe.lookbackBlocks,
@@ -321,9 +323,9 @@ export default function OnchainMarketPanel({
         }))
         .filter((entry) => Number.isFinite(entry.time) && Number.isFinite(entry.value))
     }
-    if (Number.isFinite(reserveWnova) && Number.isFinite(reserveTony) && reserveWnova > 0 && reserveTony > 0) {
+    if (Number.isFinite(reserveBase) && Number.isFinite(reserveQuote) && reserveBase > 0 && reserveQuote > 0) {
       const now = Math.floor(Date.now() / 1000)
-      const price = reserveTony / reserveWnova
+      const price = reserveQuote / reserveBase
       return [
         { time: now - 3600, value: price },
         { time: now, value: price },
@@ -337,7 +339,7 @@ export default function OnchainMarketPanel({
       ]
     }
     return []
-  }, [activeTrades, reserveWnova, reserveTony, activeLastPrice])
+  }, [activeTrades, reserveBase, reserveQuote, activeLastPrice])
 
   const priceSeriesFinal = priceSeries.length ? priceSeries : fallbackPriceSeries
 
@@ -358,22 +360,22 @@ export default function OnchainMarketPanel({
     if (!activeTrades || !activeTrades.length) return []
     return activeTrades.map((trade) => ({
       time: Number(trade.timestamp),
-      value: Number(trade.wnovaAmount || 0),
+      value: Number(trade.baseAmount || 0),
       color: trade.side === 'buy' ? 'rgba(34,197,94,0.55)' : 'rgba(239,68,68,0.55)',
     }))
   }, [activeTrades, volumeSeries])
 
   const liquiditySeriesFinal = useMemo(() => {
     if (liquiditySeries && liquiditySeries.length) return liquiditySeries
-    if (Number.isFinite(reserveWnova) && reserveWnova > 0) {
+    if (Number.isFinite(reserveBase) && reserveBase > 0) {
       const now = Math.floor(Date.now() / 1000)
       if (activeCandles && activeCandles.length) {
-        return activeCandles.map((c) => ({ time: Number(c.timestamp), value: Number(reserveWnova) }))
+        return activeCandles.map((c) => ({ time: Number(c.timestamp), value: Number(reserveBase) }))
       }
-      return [{ time: now, value: Number(reserveWnova) }]
+      return [{ time: now, value: Number(reserveBase) }]
     }
     return []
-  }, [liquiditySeries, reserveWnova, activeCandles])
+  }, [liquiditySeries, reserveBase, activeCandles])
 
   const ref = useRef()
   const idPrefix = testIdPrefix || 'market'
@@ -409,7 +411,7 @@ export default function OnchainMarketPanel({
   const isUp = change24h !== null && change24h >= 0
   const priceValue = isFiniteNum(activeLastPrice) ? formatPrice(activeLastPrice) : '—'
   const changeValue = isFiniteNum(change24h) ? `${change24h.toFixed(2)}%` : '—'
-  const volumeValue = isFiniteNum(volume24h) ? `${formattedNum(volume24h, false)} WNOVA` : '—'
+  const volumeValue = isFiniteNum(volume24h) ? `${formattedNum(volume24h, false)} ${baseSymbol}` : '—'
   const tradesValue = Number.isFinite(trades24h.length) ? trades24h.length : '—'
 
 
@@ -422,7 +424,7 @@ export default function OnchainMarketPanel({
   return (
     <Panel style={{ marginBottom: '1.5rem' }}>
       <HeaderRow>
-        <TYPE.main>Market activity (TONY / WNOVA)</TYPE.main>
+        <TYPE.main>{`Market activity (${quoteSymbol} / ${baseSymbol})`}</TYPE.main>
         <TimeframeRow>
           {TIMEFRAMES.map((tf) => (
             <TimeframeButton
@@ -439,7 +441,7 @@ export default function OnchainMarketPanel({
         <StatCard data-testid="market-pool-price">
           <StatLabel data-testid="market-pool-price-label">Pool price</StatLabel>
           <StatValue data-testid="market-pool-price-value">{priceValue}</StatValue>
-          <StatSubLabel>TONY/WNOVA</StatSubLabel>
+          <StatSubLabel>{`${quoteSymbol}/${baseSymbol}`}</StatSubLabel>
         </StatCard>
         <StatCard data-testid="market-24h-change">
           <StatLabel data-testid="market-24h-change-label">24h change</StatLabel>
@@ -514,18 +516,22 @@ export default function OnchainMarketPanel({
           activeTrades.map((trade) => {
             const spent =
               trade.side === 'buy'
-                ? `${formattedNum(trade.wnovaAmount)} WNOVA`
-                : `${formattedNum(trade.tonyAmount)} TONY`
+                ? `${formattedNum(trade.baseAmount)} ${baseSymbol}`
+                : `${formattedNum(trade.quoteAmount)} ${quoteSymbol}`
             const received =
               trade.side === 'buy'
-                ? `${formattedNum(trade.tonyAmount)} TONY`
-                : `${formattedNum(trade.wnovaAmount)} WNOVA`
+                ? `${formattedNum(trade.quoteAmount)} ${quoteSymbol}`
+                : `${formattedNum(trade.baseAmount)} ${baseSymbol}`
             return (
               <TradeRow key={`${trade.txHash}-${trade.timestamp}`} data-testid="recent-trade-row">
-                <Badge $side={trade.side}>{trade.sideLabel || trade.side}</Badge>
+                <Badge $side={trade.side}>
+                  {trade.sideLabel || (trade.side === 'sell' ? `SELL ${quoteSymbol}` : `BUY ${quoteSymbol}`)}
+                </Badge>
                 <span>{spent}</span>
                 <span>{received}</span>
-                <span>{formatPrice(trade.price)} TONY/WNOVA</span>
+                <span>
+                  {formatPrice(trade.price)} {quoteSymbol}/{baseSymbol}
+                </span>
               </TradeRow>
             )
           })

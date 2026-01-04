@@ -472,7 +472,6 @@ export default function CreateToken() {
   const [error, setError] = useState<string | null>(null)
   const [metaStatus, setMetaStatus] = useState<{ state: string; error?: string } | null>(null)
   const [metadataUri, setMetadataUri] = useState<string | null>(null)
-  const [metadataHash, setMetadataHash] = useState<string | null>(null)
   const [allowance, setAllowance] = useState('0')
   const [approvePending, setApprovePending] = useState(false)
 
@@ -764,7 +763,6 @@ export default function CreateToken() {
           )
           if (metaResult?.tokenMetadataUri) {
             setMetadataUri(metaResult.tokenMetadataUri)
-            setMetadataHash(metaResult.tokenContentHash || null)
             if (metadataRegistryAddress) {
               try {
                 await setRegistryUris(

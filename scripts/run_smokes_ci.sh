@@ -43,7 +43,12 @@ if [ -n "$LATEST_LOG" ]; then
 import json,sys
 try:
   data=json.load(open("$LATEST_LOG"))
-  print(int(data.get("rpcSoft503",0)))
+  soft=int(data.get("rpcSoft503",0))
+  if soft == 0:
+    page_errors=data.get("pageErrors",[])
+    if isinstance(page_errors,list) and any("503" in str(e) for e in page_errors):
+      soft=1
+  print(soft)
 except Exception:
   print(0)
 PY

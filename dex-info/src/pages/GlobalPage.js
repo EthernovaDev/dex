@@ -49,15 +49,19 @@ const PAIR_ADDRESS = process.env.REACT_APP_PAIR_ADDRESS
 const GridRow = styled.div`
   display: grid;
   width: 100%;
-  grid-template-columns: 1fr 1fr;
-  column-gap: 12px;
-  row-gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 16px;
+  row-gap: 16px;
   align-items: stretch;
   justify-content: space-between;
+
+  @media screen and (max-width: 980px) {
+    grid-template-columns: 1fr;
+  }
 `
 
 const SectionHeader = styled(RowBetween)`
-  margin-top: 2rem;
+  margin-top: 1.5rem;
   margin-bottom: 0.5rem;
 `
 
@@ -417,12 +421,12 @@ function GlobalPage() {
           )}
           {!below800 && (
             <GridRow>
-              <Panel style={{ height: '100%', minHeight: '300px' }}>
+              <Panel style={{ height: '100%', minHeight: '240px' }}>
                 <div data-testid="chart-liquidity" style={{ height: '100%' }}>
                   <GlobalChart display="liquidity" />
                 </div>
               </Panel>
-              <Panel style={{ height: '100%', minHeight: '300px' }}>
+              <Panel style={{ height: '100%', minHeight: '240px' }}>
                 <div data-testid="chart-volume" style={{ height: '100%' }}>
                   <GlobalChart display="volume" />
                 </div>
@@ -431,7 +435,7 @@ function GlobalPage() {
           )}
           {below800 && (
             <AutoColumn style={{ marginTop: '6px' }} gap="24px">
-              <Panel style={{ height: '100%', minHeight: '300px' }}>
+              <Panel style={{ height: '100%', minHeight: '240px' }}>
                 <div data-testid="chart-liquidity" style={{ height: '100%' }}>
                   <GlobalChart display="liquidity" />
                 </div>

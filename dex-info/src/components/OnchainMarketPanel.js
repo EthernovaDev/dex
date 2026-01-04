@@ -39,7 +39,7 @@ const StatCard = styled.div`
   align-items: flex-start;
   gap: 6px;
   line-height: 1.3;
-  min-height: 86px;
+  min-height: 78px;
 `
 
 const StatLabel = styled.div`
@@ -128,12 +128,12 @@ const RetryButton = styled.button`
 `
 
 const EmptyState = styled.div`
-  padding: 8px 0 4px;
+  padding: 6px 0 4px;
   font-size: 12px;
   color: rgba(255, 255, 255, 0.65);
 `
 
-const CHART_HEIGHT = 280
+const CHART_HEIGHT = 250
 
 const TIMEFRAMES = [
   { label: '1H', intervalSec: 3600, lookbackBlocks: 60000 },
@@ -500,7 +500,7 @@ export default function OnchainMarketPanel({
             valueFormatter={(val) => formattedNum(val, false)}
           />
         ) : (
-          <EmptyState data-testid={emptyTestId}>No on-chain swaps yet.</EmptyState>
+          <EmptyState data-testid={emptyTestId}>No activity yet.</EmptyState>
         )}
         {hasMarketData ? <span data-testid={hasDataTestId} style={{ display: 'none' }} /> : null}
       </div>

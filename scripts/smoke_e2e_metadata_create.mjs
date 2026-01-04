@@ -241,8 +241,26 @@ async function main() {
   }
 
   const headers = await fetchSignatureHeaders(wallet.address, wallet)
-  const dataUrlLogo =
-    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AAv4B0w0X4csAAAAASUVORK5CYII='
+  const logoBase64 =
+    'iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAF0lEQVQoU2NkYGD4z0AEYBxVSF8AALwABgWj8XxQAAAAAElFTkSuQmCC'
+  const logoBuffer = Buffer.from(logoBase64, 'base64')
+  const logoForm = new FormData()
+  logoForm.append('image', new Blob([logoBuffer], { type: 'image/png' }), 'logo.png')
+  const logoResp = await fetch(`${baseUrl}/api/metadata/image`, {
+    method: 'POST',
+    headers,
+    body: logoForm
+  })
+  const logoText = await logoResp.text()
+  if (!logoResp.ok) {
+    fail(`metadata image upload failed: ${logoText.slice(0, 200)}`)
+  }
+  const logoJson = JSON.parse(logoText)
+  const imageUri = logoJson?.ipfsUri || logoJson?.imageUri || logoJson?.gatewayUrl || ''
+  if (!imageUri) {
+    fail('metadata image upload missing ipfs uri')
+  }
+  log(`[OK] imageUri=${imageUri}`)
 
   const form = new FormData()
   form.append('tokenAddress', tokenAddress)
@@ -257,7 +275,7 @@ async function main() {
   form.append('twitter', 'https://x.com/ethernova')
   form.append('telegram', 'https://t.me/ethernova')
   form.append('discord', 'https://discord.gg/ethernova')
-  form.append('logoUrl', dataUrlLogo)
+  form.append('logoUrl', imageUri)
 
   const tokenResp = await fetch(`${baseUrl}/api/metadata/token`, {
     method: 'POST',

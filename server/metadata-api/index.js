@@ -30,6 +30,8 @@ const RPC_URL = process.env.RPC_URL || config?.rpcUrl
 const TOKEN_FACTORY = (process.env.TOKEN_FACTORY || config?.contracts?.tokenFactory || '').toLowerCase()
 const WNOVA = (process.env.WNOVA || config?.tokens?.WNOVA?.address || '').toLowerCase()
 const START_BLOCK = Number(process.env.START_BLOCK || config?.startBlock || 0)
+const REGISTRY_ADDRESS = (process.env.METADATA_REGISTRY || config?.contracts?.metadataRegistry || '').toLowerCase()
+const REGISTRY_REGISTRAR_KEY = process.env.REGISTRY_REGISTRAR_KEY || ''
 
 if (!RPC_URL) {
   console.error('[metadata-api] Missing RPC_URL')
@@ -67,6 +69,7 @@ db.exec(`
     token1 TEXT,
     creator TEXT,
     metadata_uri TEXT,
+    content_hash TEXT,
     created_at INTEGER,
     updated_at INTEGER
   );
@@ -76,6 +79,17 @@ db.exec(`
     created_at INTEGER
   );
 `)
+
+function ensureColumn(table, column, type) {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all()
+  if (!columns.find((col) => col.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`)
+  }
+}
+
+ensureColumn('tokens', 'content_hash', 'TEXT')
+ensureColumn('tokens', 'image_hash', 'TEXT')
+ensureColumn('pairs', 'content_hash', 'TEXT')
 
 const provider = new ethers.providers.JsonRpcProvider(RPC_URL)
 
@@ -88,6 +102,13 @@ const tokenFactoryIface = new ethers.utils.Interface(TOKEN_FACTORY_ABI)
 const PAIR_ABI = [
   'function token0() view returns (address)',
   'function token1() view returns (address)',
+]
+
+const REGISTRY_ABI = [
+  'function registerToken(address token,address creator)',
+  'function registerPair(address pair,address creator)',
+  'function creatorOfToken(address token) view returns (address)',
+  'function creatorOfPair(address pair) view returns (address)',
 ]
 
 const rateBuckets = new Map()
@@ -286,7 +307,55 @@ function buildMetadata(entry) {
       telegram: entry?.telegram || '',
       discord: entry?.discord || '',
     },
+    attributes: [
+      { trait_type: 'chain', value: 'Ethernova' },
+      entry?.pair ? { trait_type: 'pair', value: entry.pair } : null,
+    ].filter(Boolean),
+    createdAt: entry?.createdAt || new Date().toISOString(),
+    creator: entry?.creator || '',
   }
+}
+
+function computeContentHash(payload) {
+  try {
+    const json = JSON.stringify(payload)
+    return ethers.utils.keccak256(ethers.utils.toUtf8Bytes(json))
+  } catch {
+    return ethers.constants.HashZero
+  }
+}
+
+function getRegistryContract(signerOrProvider) {
+  if (!REGISTRY_ADDRESS) return null
+  return new ethers.Contract(REGISTRY_ADDRESS, REGISTRY_ABI, signerOrProvider)
+}
+
+async function registerTokenOnchain(token, creator) {
+  if (!REGISTRY_ADDRESS || !REGISTRY_REGISTRAR_KEY) return { ok: false, skipped: true }
+  const wallet = new ethers.Wallet(REGISTRY_REGISTRAR_KEY, provider)
+  const registry = getRegistryContract(wallet)
+  const existing = await registry.creatorOfToken(token)
+  if (normAddr(existing) === normAddr(creator)) return { ok: true, skipped: true }
+  if (existing && normAddr(existing) !== '0x0000000000000000000000000000000000000000') {
+    throw new Error('Token already registered with different creator')
+  }
+  const tx = await registry.registerToken(token, creator)
+  const receipt = await tx.wait(1)
+  return { ok: true, txHash: receipt.transactionHash }
+}
+
+async function registerPairOnchain(pair, creator) {
+  if (!REGISTRY_ADDRESS || !REGISTRY_REGISTRAR_KEY) return { ok: false, skipped: true }
+  const wallet = new ethers.Wallet(REGISTRY_REGISTRAR_KEY, provider)
+  const registry = getRegistryContract(wallet)
+  const existing = await registry.creatorOfPair(pair)
+  if (normAddr(existing) === normAddr(creator)) return { ok: true, skipped: true }
+  if (existing && normAddr(existing) !== '0x0000000000000000000000000000000000000000') {
+    throw new Error('Pair already registered with different creator')
+  }
+  const tx = await registry.registerPair(pair, creator)
+  const receipt = await tx.wait(1)
+  return { ok: true, txHash: receipt.transactionHash }
 }
 
 async function pinFileToPinata(filePath, filename) {
@@ -399,6 +468,16 @@ app.get('/api/metadata/token/:address/json', (req, res) => {
   res.json(buildMetadata(entry))
 })
 
+app.get('/api/metadata/json/token/:address', (req, res) => {
+  const address = normAddr(req.params.address)
+  if (!isHexAddress(address)) {
+    res.status(400).json({ ok: false, error: 'Invalid address' })
+    return
+  }
+  req.url = `/api/metadata/token/${address}/json`
+  return app._router.handle(req, res)
+})
+
 app.get('/api/metadata/pair/:address', (req, res) => {
   const address = normAddr(req.params.address)
   if (!isHexAddress(address)) {
@@ -420,14 +499,17 @@ app.get('/api/metadata/pair/:address/json', (req, res) => {
     res.status(404).json({ ok: false, error: 'Not found' })
     return
   }
-  res.json({
-    name: `Pair ${entry.address}`,
-    symbol: '',
-    description: '',
-    image: '',
-    external_url: PUBLIC_BASE_URL,
-    links: {},
-  })
+  res.json(buildMetadata(entry))
+})
+
+app.get('/api/metadata/json/pair/:address', (req, res) => {
+  const address = normAddr(req.params.address)
+  if (!isHexAddress(address)) {
+    res.status(400).json({ ok: false, error: 'Invalid address' })
+    return
+  }
+  req.url = `/api/metadata/pair/${address}/json`
+  return app._router.handle(req, res)
 })
 
 app.get('/api/metadata/tokens', (req, res) => {
@@ -456,6 +538,103 @@ app.get('/api/metadata/uploads/:file', (req, res) => {
     return
   }
   res.sendFile(filePath)
+})
+
+app.post('/api/metadata/image', authGuard, upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      res.status(400).json({ ok: false, error: 'Image file missing' })
+      return
+    }
+    let imageUri = ''
+    let imageUrl = ''
+    if (PIN_PROVIDER === 'pinata' && PINATA_JWT) {
+      const imageCid = await pinFileToPinata(req.file.path, req.file.originalname || req.file.filename)
+      imageUri = `ipfs://${imageCid}`
+      imageUrl = `${IPFS_GATEWAY}${imageCid}`
+    } else {
+      imageUri = `${PUBLIC_BASE_URL}/api/metadata/uploads/${req.file.filename}`
+      imageUrl = imageUri
+    }
+    const contentHash = ethers.utils.keccak256(fs.readFileSync(req.file.path))
+    res.json({ ok: true, imageUri, imageUrl, contentHash })
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message || 'Image upload failed' })
+  }
+})
+
+app.post('/api/metadata/publish', authGuard, async (req, res) => {
+  try {
+    const now = Math.floor(Date.now() / 1000)
+    const payload = req.body || {}
+    const token = normAddr(payload.token || '')
+    const pair = normAddr(payload.pair || '')
+    const creator = normAddr(payload.creator || req.auth.address || '')
+    if (!isHexAddress(token)) {
+      res.status(400).json({ ok: false, error: 'Invalid token address' })
+      return
+    }
+    const sanitized = {
+      address: token,
+      creator,
+      name: clampString(payload.name, 80),
+      symbol: clampString(payload.symbol, 20),
+      description: clampString(payload.description, 500),
+      website: validateUrl(payload.website),
+      twitter: validateUrl(payload.x || payload.twitter || ''),
+      telegram: validateUrl(payload.telegram),
+      discord: validateUrl(payload.discord),
+      image_uri: validateUrl(payload.imageURI || payload.imageUri || ''),
+      pair: isHexAddress(pair) ? pair : '',
+      createdAt: new Date().toISOString(),
+    }
+    const metadata = buildMetadata(sanitized)
+    const contentHash = computeContentHash(metadata)
+    let metadataUri = ''
+    if (PIN_PROVIDER === 'pinata' && PINATA_JWT) {
+      const metaCid = await pinJsonToPinata(metadata)
+      metadataUri = `ipfs://${metaCid}`
+    } else {
+      metadataUri = `${PUBLIC_BASE_URL}/api/metadata/token/${token}/json`
+    }
+    db.prepare(
+      `INSERT OR REPLACE INTO tokens(address, creator, metadata_uri, image_uri, name, symbol, description, website, twitter, telegram, discord, content_hash, created_at, updated_at)
+       VALUES(@address, @creator, @metadata_uri, @image_uri, @name, @symbol, @description, @website, @twitter, @telegram, @discord, @content_hash, COALESCE(@created_at, @now), @now)`
+    ).run({
+      address: token,
+      creator,
+      metadata_uri: metadataUri,
+      image_uri: sanitized.image_uri,
+      name: sanitized.name,
+      symbol: sanitized.symbol,
+      description: sanitized.description,
+      website: sanitized.website,
+      twitter: sanitized.twitter,
+      telegram: sanitized.telegram,
+      discord: sanitized.discord,
+      content_hash: contentHash,
+      created_at: now,
+      now,
+    })
+    if (pair) {
+      db.prepare(
+        `INSERT OR REPLACE INTO pairs(address, token0, token1, creator, metadata_uri, content_hash, created_at, updated_at)
+         VALUES(@address, @token0, @token1, @creator, @metadata_uri, @content_hash, COALESCE(@created_at, @now), @now)`
+      ).run({
+        address: pair,
+        token0: '',
+        token1: '',
+        creator,
+        metadata_uri: metadataUri,
+        content_hash: contentHash,
+        created_at: now,
+        now,
+      })
+    }
+    res.json({ ok: true, token, pair: pair || null, metadataUri, contentHash })
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message || 'Publish failed' })
+  }
 })
 
 app.post('/api/metadata/token', authGuard, upload.single('logo'), async (req, res) => {
@@ -512,7 +691,8 @@ app.post('/api/metadata/token', authGuard, upload.single('logo'), async (req, re
       imageUri = validateLogo(req.body?.logoUrl)
     }
 
-    const metadata = buildMetadata({ ...sanitized, image_uri: imageUri })
+    const metadata = buildMetadata({ ...sanitized, image_uri: imageUri, creator: creator || signer })
+    const contentHash = computeContentHash(metadata)
     let metadataUri = ''
     if (PIN_PROVIDER === 'pinata' && PINATA_JWT) {
       const metaCid = await pinJsonToPinata(metadata)
@@ -524,8 +704,8 @@ app.post('/api/metadata/token', authGuard, upload.single('logo'), async (req, re
     const now = Math.floor(Date.now() / 1000)
 
     db.prepare(
-      `INSERT OR REPLACE INTO tokens(address, creator, metadata_uri, image_uri, name, symbol, description, website, twitter, telegram, discord, created_at, updated_at)
-       VALUES(@address, @creator, @metadata_uri, @image_uri, @name, @symbol, @description, @website, @twitter, @telegram, @discord, COALESCE(@created_at, @now), @now)`
+      `INSERT OR REPLACE INTO tokens(address, creator, metadata_uri, image_uri, name, symbol, description, website, twitter, telegram, discord, content_hash, created_at, updated_at)
+       VALUES(@address, @creator, @metadata_uri, @image_uri, @name, @symbol, @description, @website, @twitter, @telegram, @discord, @content_hash, COALESCE(@created_at, @now), @now)`
     ).run({
       address: resolvedToken,
       creator: creator || signer,
@@ -538,12 +718,21 @@ app.post('/api/metadata/token', authGuard, upload.single('logo'), async (req, re
       twitter: sanitized.twitter,
       telegram: sanitized.telegram,
       discord: sanitized.discord,
+      content_hash: contentHash,
       created_at: tokenRecord.created_at || now,
       now,
     })
 
     const entry = db.prepare('SELECT * FROM tokens WHERE address = ?').get(resolvedToken)
-    res.json({ ok: true, data: entry, metadataUri })
+    let registryResult = null
+    try {
+      if (REGISTRY_ADDRESS && REGISTRY_REGISTRAR_KEY) {
+        registryResult = await registerTokenOnchain(resolvedToken, creator || signer)
+      }
+    } catch (err) {
+      registryResult = { ok: false, error: err.message || 'Registry register failed' }
+    }
+    res.json({ ok: true, data: entry, metadataUri, contentHash, registry: registryResult })
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message || 'Metadata update failed' })
   }
@@ -571,24 +760,38 @@ app.post('/api/metadata/pair', authGuard, async (req, res) => {
 
     const token0 = normAddr(req.body?.token0 || '')
     const token1 = normAddr(req.body?.token1 || '')
+    const metadataUri = req.body?.metadataUri ? String(req.body?.metadataUri) : ''
+    const contentHash = req.body?.contentHash ? String(req.body?.contentHash) : ''
     const onchainTokens = await verifyPairOnchain(pairAddress, token0, token1)
+    const resolvedToken0 = onchainTokens?.token0 || token0 || verification.token
+    const resolvedToken1 = onchainTokens?.token1 || token1 || ''
 
     const now = Math.floor(Date.now() / 1000)
+    const existing = db.prepare('SELECT * FROM pairs WHERE address = ?').get(pairAddress)
     db.prepare(
-      `INSERT OR REPLACE INTO pairs(address, token0, token1, creator, metadata_uri, created_at, updated_at)
-       VALUES(@address, @token0, @token1, @creator, @metadata_uri, COALESCE(@created_at, @now), @now)`
+      `INSERT OR REPLACE INTO pairs(address, token0, token1, creator, metadata_uri, content_hash, created_at, updated_at)
+       VALUES(@address, @token0, @token1, @creator, @metadata_uri, @content_hash, COALESCE(@created_at, @now), @now)`
     ).run({
       address: pairAddress,
-      token0: token0 || onchainTokens?.token0 || verification.token,
-      token1: token1 || onchainTokens?.token1 || '',
+      token0: resolvedToken0,
+      token1: resolvedToken1,
       creator: verification.creator,
-      metadata_uri: '',
-      created_at: now,
+      metadata_uri: metadataUri || existing?.metadata_uri || '',
+      content_hash: contentHash || existing?.content_hash || '',
+      created_at: existing?.created_at || now,
       now,
     })
 
     const entry = db.prepare('SELECT * FROM pairs WHERE address = ?').get(pairAddress)
-    res.json({ ok: true, data: entry })
+    let registryResult = null
+    try {
+      if (REGISTRY_ADDRESS && REGISTRY_REGISTRAR_KEY) {
+        registryResult = await registerPairOnchain(pairAddress, verification.creator)
+      }
+    } catch (err) {
+      registryResult = { ok: false, error: err.message || 'Registry register failed' }
+    }
+    res.json({ ok: true, data: entry, registry: registryResult })
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message || 'Pair metadata update failed' })
   }

@@ -490,6 +490,7 @@ export default function CreateToken() {
   const [txHash, setTxHash] = useState<string | null>(null)
   const [createdToken, setCreatedToken] = useState<string | null>(null)
   const [createdPair, setCreatedPair] = useState<string | null>(null)
+  const [debugInjected, setDebugInjected] = useState(false)
   const [pairLiquidityReady, setPairLiquidityReady] = useState<boolean | null>(null)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -535,6 +536,27 @@ export default function CreateToken() {
     isValidUrl(logoUrl)
 
   const signer = useMemo(() => (account && library ? library.getSigner(account) : null), [account, library])
+
+  useEffect(() => {
+    if (debugInjected || typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('debug') !== '1' || params.get('success') !== '1') return
+    const token = params.get('token')
+    const pair = params.get('pair')
+    const tx = params.get('tx')
+    const metadataUriParam = params.get('metadataUri')
+    const logoUriParam = params.get('logoUri')
+    const pairStatus = params.get('pairStatus')
+    if (tx) setTxHash(tx)
+    if (token) setCreatedToken(token)
+    if (pair) setCreatedPair(pair)
+    if (metadataUriParam) setMetadataUri(decodeURIComponent(metadataUriParam))
+    if (logoUriParam) setMetadataImageUri(decodeURIComponent(logoUriParam))
+    if (pairStatus === 'confirmed') setPairLiquidityReady(true)
+    if (pairStatus === 'pending') setPairLiquidityReady(false)
+    if (metadataUriParam) setMetaStatus({ state: 'saved' })
+    setDebugInjected(true)
+  }, [debugInjected])
 
   useEffect(() => {
     let stale = false

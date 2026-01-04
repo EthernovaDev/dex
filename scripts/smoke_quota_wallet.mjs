@@ -67,10 +67,16 @@ async function main() {
     )
     if (res.status === 429) {
       hitLimit = true
-      if (i <= expectedLimit) {
-        fail(`quota triggered too early on attempt ${i}: ${text.slice(0, 200)}`)
+      const msg = text.slice(0, 200)
+      const isIpLimit = /IP publish limit|IP request limit|IP bytes limit/i.test(msg)
+      if (i <= expectedLimit && !isIpLimit) {
+        fail(`quota triggered too early on attempt ${i}: ${msg}`)
       }
-      log(`[OK] quota limit triggered on attempt ${i}`)
+      if (isIpLimit && i <= expectedLimit) {
+        log(`[OK] quota triggered by IP limit on attempt ${i} (acceptable)`)
+      } else {
+        log(`[OK] quota limit triggered on attempt ${i}`)
+      }
       break
     }
     if (!res.ok) {

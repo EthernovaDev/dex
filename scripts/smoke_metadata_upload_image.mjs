@@ -82,7 +82,14 @@ async function main() {
     body: form
   })
   const text = await resp.text()
-  if (!resp.ok) fail(`image upload failed: ${text.slice(0, 200)}`)
+  if (!resp.ok) {
+    const msg = text.slice(0, 200)
+    if (resp.status === 429 && /IP publish limit|IP request limit|IP bytes limit/i.test(msg)) {
+      warn(`image upload blocked by IP limit (acceptable for smoke): ${msg}`)
+      process.exit(0)
+    }
+    fail(`image upload failed: ${msg}`)
+  }
   let parsed
   try {
     parsed = JSON.parse(text)

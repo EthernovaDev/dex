@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import styled from 'styled-components'
 import { Contract } from '@ethersproject/contracts'
 import { parseUnits } from '@ethersproject/units'
-import { AddressZero } from '@ethersproject/constants'
+import { AddressZero, HashZero } from '@ethersproject/constants'
 import { SwapPoolTabs } from '../../components/NavigationTabs'
 import { ButtonPrimary, ButtonLight } from '../../components/Button'
 import { AutoColumn } from '../../components/Column'
@@ -285,6 +285,11 @@ const ERC20_ABI = [
   'function allowance(address owner,address spender) view returns (uint256)'
 ]
 
+const METADATA_REGISTRY_ABI = [
+  'function setTokenURI(address token,string uri,bytes32 contentHash)',
+  'function setPairURI(address pair,string uri,bytes32 contentHash)'
+]
+
 const FACTORY_ABI = [
   'function getPair(address tokenA,address tokenB) view returns (address pair)'
 ]
@@ -382,18 +387,47 @@ const saveMetadataRemote = async (
     const text = await tokenResp.text()
     throw new Error(text || 'Token metadata save failed')
   }
+  const tokenJson = await tokenResp.json()
+  const tokenMetadataUri = tokenJson?.metadataUri || tokenJson?.data?.metadata_uri || ''
+  const tokenContentHash = tokenJson?.contentHash || tokenJson?.data?.content_hash || ''
 
+  let pairJson: any = null
   if (pairAddress && payload?.pairMeta) {
     const pairHeaders = await fetchSignatureHeaders(account, signer)
     const pairResp = await fetch(`${METADATA_BASE}/pair`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...pairHeaders },
-      body: JSON.stringify({ ...payload.pairMeta, pairAddress, txHash })
+      body: JSON.stringify({
+        ...payload.pairMeta,
+        pairAddress,
+        txHash,
+        metadataUri: tokenMetadataUri,
+        contentHash: tokenContentHash
+      })
     })
     if (!pairResp.ok) {
       const text = await pairResp.text()
       throw new Error(text || 'Pair metadata save failed')
     }
+    pairJson = await pairResp.json()
+  }
+  return { tokenMetadataUri, tokenContentHash, pairJson }
+}
+
+const setRegistryUris = async (
+  registryAddress: string,
+  tokenAddress: string,
+  pairAddress: string | null,
+  metadataUri: string,
+  contentHash: string,
+  signer: any
+) => {
+  if (!registryAddress || !metadataUri || !signer) return
+  const registry = new Contract(registryAddress, METADATA_REGISTRY_ABI, signer)
+  const hash = contentHash && contentHash !== '' ? contentHash : HashZero
+  await registry.setTokenURI(tokenAddress, metadataUri, hash)
+  if (pairAddress) {
+    await registry.setPairURI(pairAddress, metadataUri, hash)
   }
 }
 
@@ -404,6 +438,7 @@ export default function CreateToken() {
   const tokenFactoryAddress = config.contracts.tokenFactory ?? ''
   const factoryAddress = config.contracts.factory ?? ''
   const wnovaAddress = config.tokens.WNOVA.address
+  const metadataRegistryAddress = config.contracts.metadataRegistry ?? ''
 
   const isValidUrl = useCallback((value: string) => {
     if (!value) return true
@@ -436,6 +471,8 @@ export default function CreateToken() {
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [metaStatus, setMetaStatus] = useState<{ state: string; error?: string } | null>(null)
+  const [metadataUri, setMetadataUri] = useState<string | null>(null)
+  const [metadataHash, setMetadataHash] = useState<string | null>(null)
   const [allowance, setAllowance] = useState('0')
   const [approvePending, setApprovePending] = useState(false)
 
@@ -715,7 +752,7 @@ export default function CreateToken() {
 
         try {
           setMetaStatus({ state: 'saving' })
-          await saveMetadataRemote(
+          const metaResult = await saveMetadataRemote(
             tokenAddress,
             verifiedPair || null,
             payload,
@@ -725,6 +762,24 @@ export default function CreateToken() {
             logoFile,
             logoUrl
           )
+          if (metaResult?.tokenMetadataUri) {
+            setMetadataUri(metaResult.tokenMetadataUri)
+            setMetadataHash(metaResult.tokenContentHash || null)
+            if (metadataRegistryAddress) {
+              try {
+                await setRegistryUris(
+                  metadataRegistryAddress,
+                  tokenAddress,
+                  verifiedPair || null,
+                  metaResult.tokenMetadataUri,
+                  metaResult.tokenContentHash || '',
+                  signer
+                )
+              } catch (registryErr) {
+                console.warn('Registry set failed', registryErr)
+              }
+            }
+          }
           setMetaStatus({ state: 'saved' })
         } catch (metaErr) {
           const message = metaErr instanceof Error ? metaErr.message : 'Metadata save failed'
@@ -746,6 +801,7 @@ export default function CreateToken() {
     factoryAddress,
     logoFile,
     logoUrl,
+    metadataRegistryAddress,
     name,
     needsApproval,
     parsedDecimals,
@@ -1030,6 +1086,16 @@ export default function CreateToken() {
                     </SuccessValue>
                   </SuccessBlock>
                 )}
+                {metadataUri && (
+                  <SuccessBlock>
+                    <SuccessLabel>Metadata URI</SuccessLabel>
+                    <SuccessValue>
+                      <a href={metadataUri.startsWith('ipfs://') ? `https://cloudflare-ipfs.com/ipfs/${metadataUri.slice(7)}` : metadataUri} target="_blank" rel="noopener noreferrer">
+                        {metadataUri}
+                      </a>
+                    </SuccessValue>
+                  </SuccessBlock>
+                )}
                 {txHash && (
                   <SuccessBlock>
                     <SuccessLabel>Transaction</SuccessLabel>
@@ -1090,6 +1156,11 @@ export default function CreateToken() {
                 {createdToken && (
                   <ButtonLight as="a" href={`/#/swap?outputCurrency=${createdToken}`} style={{ width: '100%' }}>
                     Go to Swap
+                  </ButtonLight>
+                )}
+                {createdToken && (
+                  <ButtonLight as="a" href={`/info/#/token/${createdToken}`} style={{ width: '100%' }}>
+                    View Token Analytics
                   </ButtonLight>
                 )}
                 {createdPair && (

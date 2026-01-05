@@ -200,6 +200,7 @@ function TokenPage({ address, history }) {
     tokenMeta &&
     (tokenMeta.description ||
       tokenMeta.logo ||
+      tokenMeta.image_uri ||
       tokenMeta.website ||
       tokenMeta.twitter ||
       tokenMeta.telegram ||

@@ -83,51 +83,20 @@ const DashboardWrapper = styled.div`
 `
 
 const PanelWrapper = styled.div`
-  grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: max-content;
-  gap: 6px;
-  display: inline-grid;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
   width: 100%;
-  align-items: start;
-  @media screen and (max-width: 1024px) {
-    grid-template-columns: 1fr;
-    align-items: stretch;
-    > * {
-      /* grid-column: 1 / 4; */
-    }
-
-    > * {
-      &:first-child {
-        width: 100%;
-      }
-    }
-  }
+  align-items: stretch;
 `
 
 const TokenDetailsLayout = styled.div`
-  display: inline-grid;
+  display: grid;
   width: 100%;
-  grid-template-columns: auto auto auto auto 1fr;
-  column-gap: 60px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  column-gap: 20px;
+  row-gap: 12px;
   align-items: start;
-
-  &:last-child {
-    align-items: center;
-    justify-items: end;
-  }
-  @media screen and (max-width: 1024px) {
-    grid-template-columns: 1fr;
-    align-items: stretch;
-    > * {
-      /* grid-column: 1 / 4; */
-      margin-bottom: 1rem;
-    }
-
-    &:last-child {
-      align-items: start;
-      justify-items: start;
-    }
-  }
 `
 
 const FixedPanel = styled(Panel)`
@@ -233,9 +202,15 @@ function PairPageContent({ pairId, history }) {
   const isToken0Wnova = isAddrEq(token0Id, wnovaLower)
   const isToken1Wnova = isAddrEq(token1Id, wnovaLower)
   const reserveWnova = isToken0Wnova ? reserve0 : isToken1Wnova ? reserve1 : null
-  const reserveTony = isToken0Wnova ? reserve1 : isToken1Wnova ? reserve0 : null
+  const reserveQuote = isToken0Wnova ? reserve1 : isToken1Wnova ? reserve0 : null
   const reserveWnovaNum = isFiniteNum(reserveWnova) ? Number(reserveWnova) : null
-  const reserveTonyNum = isFiniteNum(reserveTony) ? Number(reserveTony) : null
+  const reserveQuoteNum = isFiniteNum(reserveQuote) ? Number(reserveQuote) : null
+  const quoteTokenAddress = isToken0Wnova ? token1?.id : isToken1Wnova ? token0?.id : token1?.id || token0?.id
+  const quoteSymbol = isToken0Wnova
+    ? token1?.symbol || 'TOKEN'
+    : isToken1Wnova
+    ? token0?.symbol || 'TOKEN'
+    : token1?.symbol || token0?.symbol || 'TOKEN'
   const volumeWnova24h = React.useMemo(() => {
     if (!transactions?.swaps?.length || !wnovaLower) return 0
     const now = Math.floor(Date.now() / 1000)
@@ -574,11 +549,13 @@ function PairPageContent({ pairId, history }) {
           <OnchainMarketPanel
             rpcUrl={RPC_URL}
             factoryAddress={FACTORY_ADDRESS}
-            wnovaAddress={WNOVA_ADDRESS}
-            tonyAddress={TONY_ADDRESS}
+            baseTokenAddress={WNOVA_ADDRESS}
+            quoteTokenAddress={quoteTokenAddress}
+            baseSymbol="WNOVA"
+            quoteSymbol={quoteSymbol}
             pairAddress={pairId}
-            reserveWnova={reserveWnovaNum}
-            reserveTony={reserveTonyNum}
+            reserveBase={reserveWnovaNum}
+            reserveQuote={reserveQuoteNum}
             liquiditySeries={liquiditySeries}
             swaps={transactions?.swaps || []}
             allowOnchain={!subgraphReady}

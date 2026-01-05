@@ -82,7 +82,16 @@ async function main() {
   const rpcErrorWindowMs = toInt(process.env.SMOKE_RPC_WINDOW_MS, 15000)
   const rpcSoftMax = toInt(process.env.SMOKE_RPC_SOFT_MAX, 5)
   const rpcConsecMax = toInt(process.env.SMOKE_RPC_CONSEC_MAX, 3)
+  const rpcRetry = toInt(process.env.SMOKE_RPC_RETRY, 2)
+  const rpcBackoffMs = toInt(process.env.SMOKE_RPC_BACKOFF_MS, 500)
   const rpcLogMax = toInt(process.env.SMOKE_RPC_LOG_MAX, 20)
+  const rpcOverrideUrls = (process.env.SMOKE_RPC_URLS || '')
+    .split(',')
+    .map(url => url.trim())
+    .filter(Boolean)
+  const useRpcOverride = rpcOverrideUrls.length > 0
+  let rpcOverrideIndex = 0
+  let rpcFallbackEnabled = false
   const rpcEvents = []
   const rpcMethodCounts = {}
 
@@ -115,6 +124,22 @@ async function main() {
       return new URL(url).host
     } catch (_) {
       return url.replace(/^https?:\/\//, '').split('/')[0]
+    }
+  }
+  const normalizeRpcUrl = url => {
+    try {
+      return new URL(url).origin
+    } catch (_) {
+      return url
+    }
+  }
+  const buildRpcUrl = (base, original) => {
+    try {
+      const baseUrl = new URL(base)
+      const originalUrl = new URL(original)
+      return `${baseUrl.origin}${originalUrl.pathname}${originalUrl.search}`
+    } catch (_) {
+      return base
     }
   }
   const isRpcHost = url => {
@@ -164,7 +189,7 @@ async function main() {
   }
 
   console.log(
-    `[INFO] RPC thresholds: window=${rpcErrorWindowMs}ms softMax=${rpcSoftMax} consecMax=${rpcConsecMax} logMax=${rpcLogMax}`
+    `[INFO] RPC thresholds: window=${rpcErrorWindowMs}ms softMax=${rpcSoftMax} consecMax=${rpcConsecMax} logMax=${rpcLogMax} retry=${rpcRetry} backoff=${rpcBackoffMs}ms`
   )
 
   let currentRoute = 'swap'
@@ -230,6 +255,10 @@ async function main() {
       method,
       kind: 'soft'
     })
+    if (useRpcOverride) {
+      rpcFallbackEnabled = true
+    }
+    triggerRpcProbe()
   }
 
   const recordRpcSuccess = () => {
@@ -237,6 +266,48 @@ async function main() {
     if (lastSoftIncidentAt && Date.now() - lastSoftIncidentAt > 4000) {
       rpcConsecutive = 0
     }
+  }
+
+  let rpcProbeInFlight = false
+  const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
+  const triggerRpcProbe = () => {
+    if (rpcProbeInFlight) return
+    rpcProbeInFlight = true
+    const probeUrl = rpcBaseUrl !== 'unknown' ? rpcBaseUrl : rpcEnvUrl
+    const attemptProbe = async () => {
+      let lastErr = null
+      for (let attempt = 0; attempt <= rpcRetry; attempt += 1) {
+        try {
+          const resp = await fetch(probeUrl, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_blockNumber', params: [] })
+          })
+          if (!resp.ok) {
+            lastErr = new Error(`HTTP ${resp.status}`)
+            if (isSoftRpcStatus(resp.status())) {
+              await sleep(rpcBackoffMs * (attempt + 1))
+              continue
+            }
+            break
+          }
+          const json = await resp.json()
+          if (json?.result) {
+            recordRpcSuccess()
+            return
+          }
+        } catch (err) {
+          lastErr = err
+          await sleep(rpcBackoffMs * (attempt + 1))
+        }
+      }
+      if (lastErr) {
+        rpcOtherErrors += 1
+      }
+    }
+    attemptProbe().finally(() => {
+      rpcProbeInFlight = false
+    })
   }
 
   page.on('console', msg => {
@@ -292,6 +363,9 @@ async function main() {
   })
   page.on('response', res => {
     const url = res.url()
+    if (useRpcOverride && isRpcUrl(url)) {
+      return
+    }
     const req = res.request()
     const postData = req?.postData?.() || ''
     const methods = extractRpcMethods(postData)
@@ -354,6 +428,69 @@ async function main() {
       uniswapHits.push(url)
     }
   })
+
+  if (useRpcOverride) {
+    const rpcTargets = rpcOverrideUrls.map(normalizeRpcUrl)
+    page.route('**/*', async route => {
+      const req = route.request()
+      const url = req.url()
+      const postData = req.postData() || ''
+      const isJsonRpc = isJsonRpcPayload(postData)
+      if (!isJsonRpc || !isRpcUrl(url)) {
+        return route.continue()
+      }
+      const method = extractRpcMethods(postData)[0] || ''
+      const targets = rpcFallbackEnabled ? rpcTargets : [rpcTargets[0]]
+      let lastErr = null
+      for (let i = 0; i < targets.length; i += 1) {
+        const targetBase = targets[i]
+        const targetUrl = buildRpcUrl(targetBase, url)
+        lastRpcUrl = targetUrl
+        if (rpcBaseUrl === 'unknown') {
+          rpcBaseUrl = targetBase
+        }
+        try {
+          const resp = await fetch(targetUrl, {
+            method: req.method(),
+            headers: req.headers(),
+            body: postData || undefined
+          })
+          const body = await resp.text()
+          if (isSoftRpcStatus(resp.status) && i < targets.length - 1) {
+            recordRpcSoft({ url: targetUrl, method, status: `${resp.status}` })
+            continue
+          }
+          if (resp.status >= 200 && resp.status < 400) {
+            recordRpcSuccess()
+          } else if (isSoftRpcStatus(resp.status)) {
+            recordRpcSoft({ url: targetUrl, method, status: `${resp.status}` })
+          } else {
+            rpcOtherErrors += 1
+            if (method) recordRpcMethod(method)
+            pushRpcEvent({
+              status: `${resp.status}`,
+              url: targetUrl,
+              route: getRouteLabel(),
+              method,
+              kind: 'other'
+            })
+          }
+          return route.fulfill({
+            status: resp.status,
+            headers: Object.fromEntries(resp.headers.entries()),
+            body
+          })
+        } catch (err) {
+          lastErr = err
+          recordRpcSoft({ url: targetUrl, method, status: 'other' })
+        }
+      }
+      if (lastErr) {
+        return route.abort('failed')
+      }
+      return route.continue()
+    })
+  }
 
   currentRoute = 'swap'
   await page.goto(DEBUG_URL, { waitUntil: 'domcontentloaded', timeout: 60000 })
@@ -761,6 +898,15 @@ async function main() {
     await page.goto(`${BASE_URL}/info/#/overview`, { waitUntil: 'domcontentloaded', timeout: 60000 })
     await page.waitForTimeout(4000)
     if (i === 0) {
+      const marketTitle = await page.locator('[data-testid="market-activity-title"]').first()
+      if (await marketTitle.count()) {
+        const titleText = (await marketTitle.textContent()) || ''
+        if (!/WNOVA/i.test(titleText) || !/\//.test(titleText)) {
+          addLiquidityFailures.push(`Market activity title missing pair label (${titleText.trim() || 'empty'})`)
+        }
+      } else {
+        addLiquidityFailures.push('Market activity title missing data-testid')
+      }
       const priceCard = page.locator('[data-testid="market-pool-price"]')
       const priceLabel = page.locator('[data-testid="market-pool-price-label"]')
       const priceValue = page.locator('[data-testid="market-pool-price-value"]')
@@ -850,6 +996,17 @@ async function main() {
       addLiquidityFailures.push('Create logo file picker missing')
     }
     routesRendered.create = true
+  }
+  const createSuccess = await page.locator('[data-testid="create-success"]').count()
+  if (createSuccess) {
+    const pairAddressBlock = await page.locator('[data-testid="create-success-pair-address"]').count()
+    const pairStatusBlock = await page.locator('[data-testid="create-success-pair-status"]').count()
+    if (!pairAddressBlock) {
+      addLiquidityFailures.push('Create success missing pair address block')
+    }
+    if (!pairStatusBlock) {
+      addLiquidityFailures.push('Create success missing pair status block')
+    }
   }
 
   const rootHtml = await page.evaluate(() => {

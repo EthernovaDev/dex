@@ -36,6 +36,7 @@ export type EthernovaConfig = {
     multicall2: string
     pair: string
     tokenFactory?: string
+    metadataRegistry?: string
   }
 }
 
@@ -69,7 +70,8 @@ const FALLBACK_CONFIG: EthernovaConfig = {
     swapRouter: SWAP_ROUTER_ADDRESS ?? '',
     multicall2: MULTICALL_ADDRESS ?? '',
     pair: '',
-    tokenFactory: process.env.REACT_APP_TOKEN_FACTORY_ADDRESS ?? ''
+    tokenFactory: process.env.REACT_APP_TOKEN_FACTORY_ADDRESS ?? '',
+    metadataRegistry: process.env.REACT_APP_METADATA_REGISTRY_ADDRESS ?? ''
   }
 }
 
@@ -105,7 +107,8 @@ function normalizeConfig(raw: any): EthernovaConfig {
       swapRouter: cfg.contracts?.swapRouter ?? FALLBACK_CONFIG.contracts.swapRouter,
       multicall2: cfg.contracts?.multicall2 ?? FALLBACK_CONFIG.contracts.multicall2,
       pair: cfg.contracts?.pair ?? FALLBACK_CONFIG.contracts.pair,
-      tokenFactory: cfg.contracts?.tokenFactory ?? FALLBACK_CONFIG.contracts.tokenFactory
+      tokenFactory: cfg.contracts?.tokenFactory ?? FALLBACK_CONFIG.contracts.tokenFactory,
+      metadataRegistry: cfg.contracts?.metadataRegistry ?? FALLBACK_CONFIG.contracts.metadataRegistry
     }
   }
 }

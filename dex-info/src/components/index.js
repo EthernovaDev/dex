@@ -81,10 +81,12 @@ const EmptyCard = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 200px;
+  min-height: 140px;
+  padding: 16px;
   border-radius: 20px;
   color: ${({ theme }) => theme.text1};
   height: ${({ height }) => height && height};
+  text-align: center;
 `
 
 export const SideBar = styled.span`

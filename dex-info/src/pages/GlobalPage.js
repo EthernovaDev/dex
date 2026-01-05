@@ -49,15 +49,19 @@ const PAIR_ADDRESS = process.env.REACT_APP_PAIR_ADDRESS
 const GridRow = styled.div`
   display: grid;
   width: 100%;
-  grid-template-columns: 1fr 1fr;
-  column-gap: 12px;
-  row-gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 16px;
+  row-gap: 16px;
   align-items: stretch;
   justify-content: space-between;
+
+  @media screen and (max-width: 980px) {
+    grid-template-columns: 1fr;
+  }
 `
 
 const SectionHeader = styled(RowBetween)`
-  margin-top: 2rem;
+  margin-top: 1.5rem;
   margin-bottom: 0.5rem;
 `
 
@@ -200,17 +204,37 @@ function GlobalPage() {
   const wnovaLower = normAddr(WNOVA_ADDRESS)
   const tonyLower = normAddr(TONY_ADDRESS)
   const boostState = useBoostedPairs(RPC_URL, 60000)
+  const quoteTokenAddress = useMemo(() => {
+    const token0Id = normAddr(pinnedPair?.token0?.id)
+    const token1Id = normAddr(pinnedPair?.token1?.id)
+    if (token0Id && token1Id) {
+      if (isAddrEq(token0Id, wnovaLower)) return token1Id
+      if (isAddrEq(token1Id, wnovaLower)) return token0Id
+    }
+    return tonyLower
+  }, [pinnedPair, wnovaLower, tonyLower])
+
+  const quoteTokenSymbol = useMemo(() => {
+    const token0Id = normAddr(pinnedPair?.token0?.id)
+    const token1Id = normAddr(pinnedPair?.token1?.id)
+    if (token0Id && token1Id) {
+      if (isAddrEq(token0Id, wnovaLower)) return pinnedPair?.token1?.symbol || 'TOKEN'
+      if (isAddrEq(token1Id, wnovaLower)) return pinnedPair?.token0?.symbol || 'TOKEN'
+    }
+    return pinnedPair?.token1?.symbol || pinnedPair?.token0?.symbol || 'TOKEN'
+  }, [pinnedPair, wnovaLower])
+
   const pairSwaps = useMemo(() => {
-    if (!transactions?.swaps?.length || !wnovaLower || !tonyLower) return []
+    if (!transactions?.swaps?.length || !wnovaLower || !quoteTokenAddress) return []
     return transactions.swaps.filter((swap) => {
       const token0 = normAddr(swap?.pair?.token0?.id)
       const token1 = normAddr(swap?.pair?.token1?.id)
       return (
-        (isAddrEq(token0, wnovaLower) && isAddrEq(token1, tonyLower)) ||
-        (isAddrEq(token1, wnovaLower) && isAddrEq(token0, tonyLower))
+        (isAddrEq(token0, wnovaLower) && isAddrEq(token1, quoteTokenAddress)) ||
+        (isAddrEq(token1, wnovaLower) && isAddrEq(token0, quoteTokenAddress))
       )
     })
-  }, [transactions, wnovaLower, tonyLower])
+  }, [transactions, wnovaLower, quoteTokenAddress])
 
   const volumeWnova24h = useMemo(() => {
     if (!pairSwaps || !pairSwaps.length) return 0
@@ -231,7 +255,7 @@ function GlobalPage() {
   }, [pairSwaps, wnovaLower])
 
   const reserveWnova = useMemo(() => getReserveWnova(pinnedPair, WNOVA_ADDRESS) || 0, [pinnedPair])
-  const reserveTony = useMemo(() => {
+  const reserveQuote = useMemo(() => {
     const token0Id = normAddr(pinnedPair?.token0?.id)
     const token1Id = normAddr(pinnedPair?.token1?.id)
     if (!token0Id || !token1Id) return 0
@@ -346,11 +370,13 @@ function GlobalPage() {
           <OnchainMarketPanel
             rpcUrl={RPC_URL}
             factoryAddress={FACTORY_ADDRESS}
-            wnovaAddress={WNOVA_ADDRESS}
-            tonyAddress={TONY_ADDRESS}
+            baseTokenAddress={WNOVA_ADDRESS}
+            quoteTokenAddress={quoteTokenAddress}
+            baseSymbol="WNOVA"
+            quoteSymbol={quoteTokenSymbol}
             pairAddress={PAIR_ADDRESS}
-            reserveWnova={reserveWnova}
-            reserveTony={reserveTony}
+            reserveBase={reserveWnova}
+            reserveQuote={reserveQuote}
             liquiditySeries={liquiditySeries}
             swaps={pairSwaps}
             showVolume={false}
@@ -395,12 +421,12 @@ function GlobalPage() {
           )}
           {!below800 && (
             <GridRow>
-              <Panel style={{ height: '100%', minHeight: '300px' }}>
+              <Panel style={{ height: '100%', minHeight: '240px' }}>
                 <div data-testid="chart-liquidity" style={{ height: '100%' }}>
                   <GlobalChart display="liquidity" />
                 </div>
               </Panel>
-              <Panel style={{ height: '100%', minHeight: '300px' }}>
+              <Panel style={{ height: '100%', minHeight: '240px' }}>
                 <div data-testid="chart-volume" style={{ height: '100%' }}>
                   <GlobalChart display="volume" />
                 </div>
@@ -409,7 +435,7 @@ function GlobalPage() {
           )}
           {below800 && (
             <AutoColumn style={{ marginTop: '6px' }} gap="24px">
-              <Panel style={{ height: '100%', minHeight: '300px' }}>
+              <Panel style={{ height: '100%', minHeight: '240px' }}>
                 <div data-testid="chart-liquidity" style={{ height: '100%' }}>
                   <GlobalChart display="liquidity" />
                 </div>

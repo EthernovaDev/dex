@@ -2,9 +2,18 @@ import React, { useState, useEffect } from 'react'
 import styled from 'styled-components'
 import NovaLogo from '../../assets/nova.svg'
 import { TONY_ADDRESS, WRAPPED_NATIVE_ADDRESS } from '../../constants/urls'
-import { getTokenMetadata } from '../../utils/localMetadata'
+import { useTokenMetadata } from '../../hooks/useTokenMetadata'
 
 const BAD_IMAGES = {}
+const IPFS_GATEWAY = process.env.REACT_APP_IPFS_GATEWAY || 'https://dex.ethnova.net/ipfs/'
+
+const resolveLogoUri = (uri) => {
+  if (!uri) return null
+  if (uri.startsWith('ipfs://')) {
+    return `${IPFS_GATEWAY}${uri.slice(7)}`
+  }
+  return uri
+}
 
 const Inline = styled.div`
   display: flex;
@@ -48,17 +57,18 @@ const colorFromAddress = (addr) => {
 export default function TokenLogo({ address, header = false, size = '24px', ...rest }) {
   const [error, setError] = useState(false)
   const [customLogo, setCustomLogo] = useState(null)
+  const remoteMeta = useTokenMetadata(address)
 
   useEffect(() => {
     setError(false)
     setCustomLogo(null)
     if (typeof window === 'undefined') return
     if (!address) return
-    const meta = getTokenMetadata(address)
-    if (meta?.logo) {
-      setCustomLogo(meta.logo)
+    const meta = remoteMeta
+    if (meta?.logo || meta?.image_uri) {
+      setCustomLogo(resolveLogoUri(meta.logo || meta.image_uri))
     }
-  }, [address])
+  }, [address, remoteMeta])
 
   const normalized = address?.toLowerCase()
 

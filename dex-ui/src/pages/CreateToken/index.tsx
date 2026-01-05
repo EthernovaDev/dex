@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import styled from 'styled-components'
 import { Contract } from '@ethersproject/contracts'
 import { parseUnits } from '@ethersproject/units'
+import { AddressZero, HashZero } from '@ethersproject/constants'
 import { SwapPoolTabs } from '../../components/NavigationTabs'
 import { ButtonPrimary, ButtonLight } from '../../components/Button'
 import { AutoColumn } from '../../components/Column'
@@ -154,6 +155,21 @@ const SuccessBlock = styled.div`
   border: 1px solid ${({ theme }) => theme.bg3};
   border-radius: 12px;
   padding: 10px 12px;
+  width: 100%;
+`
+
+const SuccessGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  width: 100%;
+`
+
+const SuccessActions = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  width: 100%;
 `
 
 const SuccessLabel = styled.div`
@@ -283,10 +299,31 @@ const ERC20_ABI = [
   'function allowance(address owner,address spender) view returns (uint256)'
 ]
 
+const METADATA_REGISTRY_ABI = [
+  'function setTokenURI(address token,string uri,bytes32 contentHash)',
+  'function setPairURI(address pair,string uri,bytes32 contentHash)'
+]
+
+const FACTORY_ABI = [
+  'function getPair(address tokenA,address tokenB) view returns (address pair)'
+]
+
+const PAIR_ABI = [
+  'function getReserves() view returns (uint112,uint112,uint32)'
+]
+
 const TOKEN_METADATA_KEY = 'novadex:token-metadata'
 const PAIR_METADATA_KEY = 'novadex:pair-metadata'
+const METADATA_BASE = '/api/metadata'
+const FALLBACK_IPFS_GATEWAY = 'https://dex.ethnova.net/ipfs/'
 
-const saveMetadata = (tokenAddress: string, pairAddress: string | null, payload: Record<string, any>) => {
+const toGatewayUrl = (uri: string) => {
+  if (!uri) return ''
+  const base = typeof window !== 'undefined' ? `${window.location.origin}/ipfs/` : FALLBACK_IPFS_GATEWAY
+  return uri.startsWith('ipfs://') ? `${base}${uri.slice(7)}` : uri
+}
+
+const saveMetadataLocal = (tokenAddress: string, pairAddress: string | null, payload: Record<string, any>) => {
   if (typeof window === 'undefined' || !tokenAddress) return
   try {
     const tokenKey = tokenAddress.toLowerCase()
@@ -314,12 +351,116 @@ const saveMetadata = (tokenAddress: string, pairAddress: string | null, payload:
   }
 }
 
+const fetchSignatureHeaders = async (account: string, signer: any) => {
+  const challengeResp = await fetch(`${METADATA_BASE}/challenge`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ address: account })
+  })
+  const challenge = await challengeResp.json()
+  if (!challenge?.message) {
+    throw new Error('Metadata signature challenge failed')
+  }
+  const signature = await signer.signMessage(challenge.message)
+  return {
+    'x-address': account,
+    'x-signature': signature
+  }
+}
+
+const saveMetadataRemote = async (
+  tokenAddress: string,
+  pairAddress: string | null,
+  payload: Record<string, any>,
+  txHash: string,
+  account: string,
+  signer: any,
+  logoFile: File | null,
+  logoUrl: string
+) => {
+  if (!tokenAddress || !txHash) throw new Error('Missing token address or tx hash')
+  if (!account || !signer) throw new Error('Wallet signature required')
+
+  const tokenHeaders = await fetchSignatureHeaders(account, signer)
+  const form = new FormData()
+  form.append('tokenAddress', tokenAddress)
+  form.append('txHash', txHash)
+  form.append('name', payload.name || '')
+  form.append('symbol', payload.symbol || '')
+  form.append('description', payload.description || '')
+  form.append('website', payload.website || '')
+  form.append('twitter', payload.twitter || '')
+  form.append('telegram', payload.telegram || '')
+  form.append('discord', payload.discord || '')
+  if (pairAddress) form.append('pairAddress', pairAddress)
+  if (logoFile) {
+    form.append('logo', logoFile)
+  } else if (logoUrl) {
+    form.append('logoUrl', logoUrl)
+  }
+
+  const tokenResp = await fetch(`${METADATA_BASE}/token`, {
+    method: 'POST',
+    headers: tokenHeaders,
+    body: form
+  })
+  if (!tokenResp.ok) {
+    const text = await tokenResp.text()
+    throw new Error(text || 'Token metadata save failed')
+  }
+  const tokenJson = await tokenResp.json()
+  const tokenMetadataUri = tokenJson?.metadataUri || tokenJson?.data?.metadata_uri || ''
+  const tokenContentHash = tokenJson?.contentHash || tokenJson?.data?.content_hash || ''
+  const tokenImageUri = tokenJson?.imageUri || tokenJson?.data?.image_uri || ''
+
+  let pairJson: any = null
+  if (pairAddress && payload?.pairMeta) {
+    const pairHeaders = await fetchSignatureHeaders(account, signer)
+    const pairResp = await fetch(`${METADATA_BASE}/pair`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...pairHeaders },
+      body: JSON.stringify({
+        ...payload.pairMeta,
+        pairAddress,
+        txHash,
+        metadataUri: tokenMetadataUri,
+        contentHash: tokenContentHash
+      })
+    })
+    if (!pairResp.ok) {
+      const text = await pairResp.text()
+      throw new Error(text || 'Pair metadata save failed')
+    }
+    pairJson = await pairResp.json()
+  }
+  return { tokenMetadataUri, tokenContentHash, tokenImageUri, pairJson }
+}
+
+const setRegistryUris = async (
+  registryAddress: string,
+  tokenAddress: string,
+  pairAddress: string | null,
+  metadataUri: string,
+  contentHash: string,
+  signer: any
+) => {
+  if (!registryAddress || !metadataUri || !signer) return
+  const registry = new Contract(registryAddress, METADATA_REGISTRY_ABI, signer)
+  const hash = contentHash && contentHash !== '' ? contentHash : HashZero
+  await registry.setTokenURI(tokenAddress, metadataUri, hash)
+  if (pairAddress) {
+    await registry.setPairURI(pairAddress, metadataUri, hash)
+  }
+}
+
 export default function CreateToken() {
   const { account, chainId, library } = useActiveWeb3React()
   const { config } = useEthernovaConfig()
 
   const tokenFactoryAddress = config.contracts.tokenFactory ?? ''
+  const factoryAddress = config.contracts.factory ?? ''
   const wnovaAddress = config.tokens.WNOVA.address
+  const metadataRegistryAddress = config.contracts.metadataRegistry ?? ''
 
   const isValidUrl = useCallback((value: string) => {
     if (!value) return true
@@ -349,8 +490,13 @@ export default function CreateToken() {
   const [txHash, setTxHash] = useState<string | null>(null)
   const [createdToken, setCreatedToken] = useState<string | null>(null)
   const [createdPair, setCreatedPair] = useState<string | null>(null)
+  const [debugInjected, setDebugInjected] = useState(false)
+  const [pairLiquidityReady, setPairLiquidityReady] = useState<boolean | null>(null)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [metaStatus, setMetaStatus] = useState<{ state: string; error?: string } | null>(null)
+  const [metadataUri, setMetadataUri] = useState<string | null>(null)
+  const [metadataImageUri, setMetadataImageUri] = useState<string | null>(null)
   const [allowance, setAllowance] = useState('0')
   const [approvePending, setApprovePending] = useState(false)
 
@@ -390,6 +536,27 @@ export default function CreateToken() {
     isValidUrl(logoUrl)
 
   const signer = useMemo(() => (account && library ? library.getSigner(account) : null), [account, library])
+
+  useEffect(() => {
+    if (debugInjected || typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('debug') !== '1' || params.get('success') !== '1') return
+    const token = params.get('token')
+    const pair = params.get('pair')
+    const tx = params.get('tx')
+    const metadataUriParam = params.get('metadataUri')
+    const logoUriParam = params.get('logoUri')
+    const pairStatus = params.get('pairStatus')
+    if (tx) setTxHash(tx)
+    if (token) setCreatedToken(token)
+    if (pair) setCreatedPair(pair)
+    if (metadataUriParam) setMetadataUri(decodeURIComponent(metadataUriParam))
+    if (logoUriParam) setMetadataImageUri(decodeURIComponent(logoUriParam))
+    if (pairStatus === 'confirmed') setPairLiquidityReady(true)
+    if (pairStatus === 'pending') setPairLiquidityReady(false)
+    if (metadataUriParam) setMetaStatus({ state: 'saved' })
+    setDebugInjected(true)
+  }, [debugInjected])
 
   useEffect(() => {
     let stale = false
@@ -532,9 +699,11 @@ export default function CreateToken() {
 
     setPending(true)
     setError(null)
+    setMetaStatus(null)
     setTxHash(null)
     setCreatedToken(null)
     setCreatedPair(null)
+    setPairLiquidityReady(null)
 
     try {
       const factory = new Contract(tokenFactoryAddress, TOKEN_FACTORY_ABI, signer)
@@ -573,18 +742,48 @@ export default function CreateToken() {
         }
       }
       if (tokenAddress) {
+        let verifiedPair = pairAddress
+        if (autoList && factoryAddress && wnovaAddress) {
+          try {
+            const pairFactory = new Contract(factoryAddress, FACTORY_ABI, signer)
+            const resolvedPair = await pairFactory.getPair(tokenAddress, wnovaAddress)
+            if (resolvedPair && resolvedPair !== AddressZero) {
+              const pairContract = new Contract(resolvedPair, PAIR_ABI, signer)
+              const reserves = await pairContract.getReserves()
+              verifiedPair = resolvedPair
+              setCreatedPair(resolvedPair)
+              if (reserves[0].gt(0) && reserves[1].gt(0)) {
+                setPairLiquidityReady(true)
+              } else {
+                setError('Pool created but has no liquidity yet')
+                setPairLiquidityReady(false)
+              }
+            } else if (verifiedPair) {
+              setError('Pool created but has no liquidity yet')
+              setPairLiquidityReady(false)
+            } else {
+              setError('Pool creation failed (pair not found)')
+            }
+          } catch {
+            setError('Pool creation could not be verified')
+            setPairLiquidityReady(null)
+          }
+        }
+
         const tokenLower = tokenAddress.toLowerCase()
         const wnovaLower = wnovaAddress?.toLowerCase?.()
-        const pairMeta = pairAddress && wnovaLower
-          ? {
-              token0: tokenLower < wnovaLower ? tokenLower : wnovaLower,
-              token1: tokenLower < wnovaLower ? wnovaLower : tokenLower,
-              symbol0: tokenLower < wnovaLower ? symbol.trim().toUpperCase() : NATIVE_SYMBOL,
-              symbol1: tokenLower < wnovaLower ? NATIVE_SYMBOL : symbol.trim().toUpperCase(),
-              createdAt: Date.now(),
-            }
-          : null
-        saveMetadata(tokenAddress, pairAddress || null, {
+        const pairMeta =
+          verifiedPair && wnovaLower
+            ? {
+                token0: tokenLower < wnovaLower ? tokenLower : wnovaLower,
+                token1: tokenLower < wnovaLower ? wnovaLower : tokenLower,
+                symbol0: tokenLower < wnovaLower ? symbol.trim().toUpperCase() : NATIVE_SYMBOL,
+                symbol1: tokenLower < wnovaLower ? NATIVE_SYMBOL : symbol.trim().toUpperCase(),
+                createdAt: Date.now(),
+              }
+            : null
+
+        const payload = {
           name: name.trim(),
           symbol: symbol.trim().toUpperCase(),
           decimals: parsedDecimals,
@@ -596,9 +795,48 @@ export default function CreateToken() {
           telegram: telegram || '',
           discord: discord || '',
           createdAt: Date.now(),
-          pair: pairAddress || undefined,
+          pair: verifiedPair || undefined,
           pairMeta: pairMeta || undefined,
-        })
+        }
+
+        try {
+          setMetaStatus({ state: 'saving' })
+          const metaResult = await saveMetadataRemote(
+            tokenAddress,
+            verifiedPair || null,
+            payload,
+            tx.hash,
+            account,
+            signer,
+            logoFile,
+            logoUrl
+          )
+          if (metaResult?.tokenMetadataUri) {
+            setMetadataUri(metaResult.tokenMetadataUri)
+            if (metaResult?.tokenImageUri) {
+              setMetadataImageUri(metaResult.tokenImageUri)
+            }
+            if (metadataRegistryAddress) {
+              try {
+                await setRegistryUris(
+                  metadataRegistryAddress,
+                  tokenAddress,
+                  verifiedPair || null,
+                  metaResult.tokenMetadataUri,
+                  metaResult.tokenContentHash || '',
+                  signer
+                )
+              } catch (registryErr) {
+                console.warn('Registry set failed', registryErr)
+              }
+            }
+          }
+          setMetaStatus({ state: 'saved' })
+        } catch (metaErr) {
+          const message = metaErr instanceof Error ? metaErr.message : 'Metadata save failed'
+          setMetaStatus({ state: 'error', error: message })
+          saveMetadataLocal(tokenAddress, verifiedPair || null, payload)
+        }
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Deploy failed'
@@ -606,7 +844,29 @@ export default function CreateToken() {
     } finally {
       setPending(false)
     }
-  }, [account, autoList, name, symbol, parsedDecimals, supplyRaw, tokenAmountRaw, wnovaAmountRaw, tokenFactoryAddress, signer, needsApproval])
+  }, [
+    account,
+    autoList,
+    description,
+    discord,
+    factoryAddress,
+    logoFile,
+    logoUrl,
+    metadataRegistryAddress,
+    name,
+    needsApproval,
+    parsedDecimals,
+    signer,
+    supplyRaw,
+    symbol,
+    telegram,
+    tokenAmountRaw,
+    tokenFactoryAddress,
+    twitter,
+    website,
+    wnovaAddress,
+    wnovaAmountRaw,
+  ])
 
   const onAddToMetaMask = useCallback(async () => {
     if (!createdToken || !symbol || !parsedDecimals) return
@@ -867,73 +1127,129 @@ export default function CreateToken() {
 
             {(txHash || createdToken || createdPair) && (
               <AutoColumn gap="sm" style={{ marginTop: 16, width: '100%' }} data-testid="create-success">
-                {txHash && (
-                  <SuccessBlock>
-                    <SuccessLabel>Transaction</SuccessLabel>
-                    <SuccessValue>
-                      <a href={`${config.explorerUrl}/tx/${txHash}`} target="_blank" rel="noopener noreferrer">
-                        {txHash}
-                      </a>
-                    </SuccessValue>
-                  </SuccessBlock>
-                )}
-                {createdToken && (
-                  <SuccessBlock>
-                    <SuccessLabel>Token Address</SuccessLabel>
-                    <SuccessValue>
-                      <a href={`${config.explorerUrl}/token/${createdToken}`} target="_blank" rel="noopener noreferrer">
-                        {createdToken}
-                      </a>
-                    </SuccessValue>
-                  </SuccessBlock>
-                )}
-                {createdPair && (
-                  <SuccessBlock>
-                    <SuccessLabel>Pair Address</SuccessLabel>
-                    <SuccessValue>
-                      <a href={`${config.explorerUrl}/token/${createdPair}`} target="_blank" rel="noopener noreferrer">
-                        {createdPair}
-                      </a>
-                    </SuccessValue>
-                  </SuccessBlock>
-                )}
-                {createdToken && (
-                  <ButtonLight onClick={onAddToMetaMask} style={{ width: '100%' }}>
-                    Add token to MetaMask
-                  </ButtonLight>
-                )}
-                {createdToken && Object.keys(metadataProfile).length ? (
-                  <ButtonLight
-                    onClick={() =>
-                      navigator.clipboard.writeText(
-                        JSON.stringify(
-                          {
-                            name,
-                            symbol,
-                            decimals,
-                            totalSupply,
-                            ...metadataProfile,
-                          },
-                          null,
-                          2
+                <SuccessGrid>
+                  {metaStatus?.state && (
+                    <SuccessBlock>
+                      <SuccessLabel>Metadata</SuccessLabel>
+                      <SuccessValue>
+                        {metaStatus.state === 'saving' && 'Saving metadata...'}
+                        {metaStatus.state === 'saved' && 'Saved ✓'}
+                        {metaStatus.state === 'error' && `Saved locally (remote failed): ${metaStatus.error || ''}`}
+                      </SuccessValue>
+                    </SuccessBlock>
+                  )}
+                  {metadataUri && (
+                    <SuccessBlock>
+                      <SuccessLabel>Metadata URI</SuccessLabel>
+                      <SuccessValue>
+                        <a href={toGatewayUrl(metadataUri)} target="_blank" rel="noopener noreferrer">
+                          {metadataUri}
+                        </a>
+                      </SuccessValue>
+                    </SuccessBlock>
+                  )}
+                  {metadataImageUri && (
+                    <SuccessBlock>
+                      <SuccessLabel>Logo URI</SuccessLabel>
+                      <SuccessValue>
+                        <a href={toGatewayUrl(metadataImageUri)} target="_blank" rel="noopener noreferrer">
+                          {metadataImageUri}
+                        </a>
+                      </SuccessValue>
+                    </SuccessBlock>
+                  )}
+                  {txHash && (
+                    <SuccessBlock>
+                      <SuccessLabel>Transaction</SuccessLabel>
+                      <SuccessValue>
+                        <a href={`${config.explorerUrl}/tx/${txHash}`} target="_blank" rel="noopener noreferrer">
+                          {txHash}
+                        </a>
+                      </SuccessValue>
+                    </SuccessBlock>
+                  )}
+                  {createdToken && (
+                    <SuccessBlock>
+                      <SuccessLabel>Token Address</SuccessLabel>
+                      <SuccessValue>
+                        <a href={`${config.explorerUrl}/token/${createdToken}`} target="_blank" rel="noopener noreferrer">
+                          {createdToken}
+                        </a>
+                      </SuccessValue>
+                    </SuccessBlock>
+                  )}
+                  {createdPair && (
+                    <SuccessBlock data-testid="create-success-pair-address">
+                      <SuccessLabel>Pair Address</SuccessLabel>
+                      <SuccessValue>
+                        <a href={`${config.explorerUrl}/token/${createdPair}`} target="_blank" rel="noopener noreferrer">
+                          {createdPair}
+                        </a>
+                      </SuccessValue>
+                    </SuccessBlock>
+                  )}
+                  {createdPair && (
+                    <SuccessBlock data-testid="create-success-pair-status">
+                      <SuccessLabel>Pair status</SuccessLabel>
+                      <SuccessValue>
+                        {pairLiquidityReady === true
+                          ? 'Liquidity confirmed'
+                          : pairLiquidityReady === false
+                          ? 'Pool created, liquidity pending'
+                          : 'Pending verification'}
+                      </SuccessValue>
+                    </SuccessBlock>
+                  )}
+                </SuccessGrid>
+                <SuccessActions>
+                  {createdToken && (
+                    <ButtonLight onClick={onAddToMetaMask} style={{ width: '100%' }}>
+                      Add token to MetaMask
+                    </ButtonLight>
+                  )}
+                  {createdToken && Object.keys(metadataProfile).length ? (
+                    <ButtonLight
+                      onClick={() =>
+                        navigator.clipboard.writeText(
+                          JSON.stringify(
+                            {
+                              name,
+                              symbol,
+                              decimals,
+                              totalSupply,
+                              ...metadataProfile,
+                            },
+                            null,
+                            2
+                          )
                         )
-                      )
-                    }
-                    style={{ width: '100%' }}
-                  >
-                    Copy Token Profile JSON
-                  </ButtonLight>
-                ) : null}
-                {createdToken && (
-                  <ButtonLight as="a" href={`/#/swap?outputCurrency=${createdToken}`} style={{ width: '100%' }}>
-                    Go to Swap
-                  </ButtonLight>
-                )}
-                {createdPair && (
-                  <ButtonLight as="a" href={`/info/#/pair/${createdPair}`} style={{ width: '100%' }}>
-                    View Pair Analytics
-                  </ButtonLight>
-                )}
+                      }
+                      style={{ width: '100%' }}
+                    >
+                      Copy Token Profile JSON
+                    </ButtonLight>
+                  ) : null}
+                  {createdToken && (
+                    <ButtonLight as="a" href={`/#/swap?outputCurrency=${createdToken}`} style={{ width: '100%' }}>
+                      Go to Swap
+                    </ButtonLight>
+                  )}
+                  {createdToken && (
+                    <ButtonLight as="a" href={`/info/#/token/${createdToken}`} style={{ width: '100%' }}>
+                      View Token Analytics
+                    </ButtonLight>
+                  )}
+                  {createdPair && (
+                    <ButtonLight as="a" href={`/info/#/pair/${createdPair}`} style={{ width: '100%' }}>
+                      View Pair Analytics
+                    </ButtonLight>
+                  )}
+                  {createdPair && (
+                    <ButtonLight as="a" href={`/info/#/pair/${createdPair}#boost`} style={{ width: '100%' }}>
+                      Boost this pair (10 NOVA / 24h)
+                    </ButtonLight>
+                  )}
+                </SuccessActions>
               </AutoColumn>
             )}
           </FormColumn>

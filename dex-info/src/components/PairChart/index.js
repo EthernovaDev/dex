@@ -171,7 +171,7 @@ const PairChart = ({ address, color, base0, base1 }) => {
   if (chartDataMapped && chartDataMapped.length === 0 && (!chartDataWithFallback || !chartDataWithFallback.length)) {
     return (
       <ChartWrapper>
-        <EmptyCard height="160px">No data yet.</EmptyCard>
+        <EmptyCard height="140px">No activity yet.</EmptyCard>
       </ChartWrapper>
     )
   }

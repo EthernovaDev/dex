@@ -1,7 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-/opt/novadex/dex/scripts/require_clean_worktree.sh
+require_clean_strict() {
+  local dirty=0
+  cd "/opt/novadex/dex"
+  if ! git diff --quiet; then
+    dirty=1
+  fi
+  if ! git diff --cached --quiet; then
+    dirty=1
+  fi
+  if git ls-files --others --exclude-standard | grep -q .; then
+    dirty=1
+  fi
+  if [ "$dirty" -ne 0 ]; then
+    echo "[ERROR] Worktree is dirty. Commit or stash changes before running build." >&2
+    git status -sb >&2
+    exit 1
+  fi
+}
+
+require_clean_strict
 
 ENV_FILE="/opt/novadex/.env"
 if [ ! -f "$ENV_FILE" ]; then
@@ -85,6 +104,7 @@ REACT_APP_ROUTER_ADDRESS=${ROUTER}
 REACT_APP_WNOVA_ADDRESS=${WNOVA}
 REACT_APP_TONY_ADDRESS=${TONY}
 REACT_APP_MULTICALL_ADDRESS=${MULTICALL}
+REACT_APP_METADATA_REGISTRY_ADDRESS=$(jq -r '.addresses.metadataRegistry // empty' "$DEPLOYMENTS")
 REACT_APP_BUILD_STAMP=${BUILD_STAMP}
 EOF
 
@@ -123,6 +143,14 @@ done
 echo "[INFO] Building swap UI..."
 $RUN_AS bash -lc "cd ${DEX_UI_DIR} && rm -rf build && NODE_OPTIONS=--openssl-legacy-provider SKIP_PREFLIGHT_CHECK=true yarn build"
 
+echo "[INFO] Writing version stamp..."
+COMMIT_SHA="$(git -C /opt/novadex/dex rev-parse --short HEAD)"
+BUILD_JSON=$(cat <<JSON
+{"commit":"${COMMIT_SHA}","builtAt":"${BUILD_STAMP}"}
+JSON
+)
+echo "${BUILD_JSON}" > "${DEX_UI_DIR}/build/__version.json"
+
 echo "[INFO] Configuring analytics UI env..."
 cat > "${DEX_INFO_DIR}/.env.local" <<EOF
 REACT_APP_SUBGRAPH_URL=https://${DEX_DOMAIN}/info/subgraphs/name/novadex/novadex
@@ -135,12 +163,14 @@ REACT_APP_TONY_ADDRESS=${TONY}
 REACT_APP_FACTORY_ADDRESS=${FACTORY}
 REACT_APP_PAIR_ADDRESS=$(jq -r '.addresses.pair // empty' "$DEPLOYMENTS")
 REACT_APP_BOOST_REGISTRY_ADDRESS=${BOOST_REGISTRY}
+REACT_APP_METADATA_REGISTRY_ADDRESS=$(jq -r '.addresses.metadataRegistry // empty' "$DEPLOYMENTS")
 REACT_APP_BUILD_STAMP=${BUILD_STAMP}
 PUBLIC_URL=/info
 EOF
 
 echo "[INFO] Building analytics UI..."
 $RUN_AS bash -lc "cd ${DEX_INFO_DIR} && corepack enable && yarn install && rm -rf build && NODE_OPTIONS=--openssl-legacy-provider SKIP_PREFLIGHT_CHECK=true yarn build"
+echo "${BUILD_JSON}" > "${DEX_INFO_DIR}/build/__version.json"
 
 echo "[INFO] Creating release snapshot..."
 RELEASES_DIR="/opt/novadex/releases"
@@ -154,5 +184,12 @@ ln -sfn "${RELEASES_DIR}/${TS}/dex-info" /opt/novadex/current/dex-info
 if $SUDO systemctl is-active --quiet caddy; then
   $SUDO systemctl reload caddy || $SUDO systemctl restart caddy
 fi
+
+echo "[INFO] Verifying local version stamps..."
+cat /opt/novadex/current/dex-ui/build/__version.json
+cat /opt/novadex/current/dex-info/build/__version.json
+
+echo "[INFO] Verifying live version stamp..."
+curl -fsS "https://${DEX_DOMAIN}/__version.json"
 
 echo "[INFO] Frontend builds complete (release ${TS})."

@@ -20,8 +20,8 @@ export default function SimpleSeriesChart({
   const seriesRef = useRef(null)
   const tooltipRef = useRef(null)
   const [darkMode] = useDarkModeManager()
-  const textColor = darkMode ? 'rgba(235, 237, 245, 0.95)' : 'rgba(15, 23, 42, 0.9)'
-  const gridColor = darkMode ? 'rgba(148, 163, 184, 0.07)' : 'rgba(15, 23, 42, 0.08)'
+  const textColor = darkMode ? 'rgba(235, 237, 245, 0.92)' : 'rgba(15, 23, 42, 0.9)'
+  const gridColor = darkMode ? 'rgba(148, 163, 184, 0.06)' : 'rgba(15, 23, 42, 0.08)'
   const timeFormatter = useCallback((time) => {
     const ts = typeof time === 'number' ? time * 1000 : Date.parse(time)
     if (!Number.isFinite(ts)) return ''
@@ -89,12 +89,12 @@ export default function SimpleSeriesChart({
       rightPriceScale: {
         borderVisible: false,
         visible: true,
-        scaleMargins: { top: type === 'histogram' ? 0.25 : 0.12, bottom: 0.08 },
+        scaleMargins: { top: type === 'histogram' ? 0.25 : 0.18, bottom: 0.1 },
       },
       timeScale: {
         borderVisible: false,
         rightOffset: 4,
-        barSpacing: 6,
+        barSpacing: type === 'histogram' ? 8 : 10,
         fixLeftEdge: true,
         fixRightEdge: true,
         tickMarkFormatter: timeFormatter,
@@ -127,8 +127,8 @@ export default function SimpleSeriesChart({
     toolTip.style.display = 'block'
     toolTip.style.left = '12px'
     toolTip.style.top = '10px'
-    toolTip.style.backgroundColor = 'rgba(8, 12, 22, 0.75)'
-    toolTip.style.border = '1px solid rgba(255, 255, 255, 0.12)'
+    toolTip.style.backgroundColor = 'rgba(10, 14, 24, 0.72)'
+    toolTip.style.border = '1px solid rgba(255, 255, 255, 0.14)'
     toolTip.style.borderRadius = '10px'
     toolTip.style.padding = '6px 8px'
     toolTip.style.fontSize = '12px'

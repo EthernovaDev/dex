@@ -3,7 +3,7 @@ import { normAddr } from './index'
 
 const RPC_URL = process.env.REACT_APP_RPC_URL
 const REGISTRY_ADDRESS = process.env.REACT_APP_METADATA_REGISTRY_ADDRESS
-const IPFS_GATEWAY = process.env.REACT_APP_IPFS_GATEWAY || 'https://cloudflare-ipfs.com/ipfs/'
+const IPFS_GATEWAY = process.env.REACT_APP_IPFS_GATEWAY || 'https://dex.ethnova.net/ipfs/'
 
 const REGISTRY_ABI = [
   'function tokenURI(address) view returns (string)',
@@ -14,6 +14,11 @@ function resolveIpfs(uri) {
   if (!uri) return ''
   if (uri.startsWith('ipfs://')) {
     return `${IPFS_GATEWAY}${uri.slice(7)}`
+  }
+  if (uri.includes('/ipfs/')) {
+    const idx = uri.indexOf('/ipfs/')
+    const cid = uri.slice(idx + 6)
+    return `${IPFS_GATEWAY}${cid}`
   }
   return uri
 }

@@ -13,6 +13,11 @@ const resolveLogoUri = (uri) => {
   if (uri.startsWith('ipfs://')) {
     return `${IPFS_GATEWAY}${uri.slice(7)}`
   }
+  if (uri.includes('/ipfs/')) {
+    const idx = uri.indexOf('/ipfs/')
+    const cid = uri.slice(idx + 6)
+    return `${IPFS_GATEWAY}${cid}`
+  }
   return uri
 }
 

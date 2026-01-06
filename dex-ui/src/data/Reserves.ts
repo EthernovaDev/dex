@@ -91,7 +91,13 @@ export function usePairs(currencies: [Currency | undefined, Currency | undefined
     const run = async () => {
       const updates: Record<
         string,
-        { state: PairState; reserves?: [BigNumber, BigNumber]; token0?: string; token1?: string }
+        {
+          state: PairState
+          reserves?: [BigNumber, BigNumber]
+          token0?: string
+          token1?: string
+          updatedAt?: number
+        }
       > = {}
       for (let i = 0; i < tokens.length; i++) {
         const tokenA = tokens[i][0]

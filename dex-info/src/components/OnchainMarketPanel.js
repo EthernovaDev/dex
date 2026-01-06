@@ -172,6 +172,7 @@ const ChartShell = styled.div`
   align-items: center;
   justify-content: center;
   border-radius: 16px;
+  overflow: hidden;
 `
 
 const ChartControlsRow = styled.div`

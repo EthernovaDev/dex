@@ -192,29 +192,43 @@ export const GlobalStyle = createGlobalStyle`
 
   
 .three-line-legend {
-	width: 100%;
-	height: 70px;
+	width: auto;
+	max-width: 260px;
+	height: auto;
 	position: absolute;
-	padding: 8px;
+	padding: 8px 10px;
 	font-size: 12px;
 	color: #20262E;
-	background-color: rgba(255, 255, 255, 0.23);
+	background-color: rgba(12, 16, 24, 0.82);
 	text-align: left;
 	z-index: 10;
   pointer-events: none;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+  white-space: nowrap;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .three-line-legend-dark {
-	width: 100%;
-	height: 70px;
+	width: auto;
+	max-width: 260px;
+	height: auto;
 	position: absolute;
-	padding: 8px;
+	padding: 8px 10px;
 	font-size: 12px;
 	color: white;
-	background-color: rgba(255, 255, 255, 0.23);
+	background-color: rgba(12, 16, 24, 0.82);
 	text-align: left;
 	z-index: 10;
   pointer-events: none;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+  white-space: nowrap;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 @media screen and (max-width: 800px) {

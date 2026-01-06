@@ -151,14 +151,14 @@ const TradingViewChart = ({
     toolTip.className = darkMode ? 'three-line-legend-dark' : 'three-line-legend'
     ref.current.appendChild(toolTip)
     tooltipRef.current = toolTip
-    toolTip.style.display = showOverlay ? 'block' : 'none'
+    toolTip.style.display = showOverlay ? 'inline-flex' : 'none'
     toolTip.style.fontWeight = '500'
     toolTip.style.left = '10px'
     toolTip.style.top = '8px'
-    toolTip.style.backgroundColor = 'rgba(8, 12, 22, 0.75)'
-    toolTip.style.border = '1px solid rgba(255, 255, 255, 0.12)'
-    toolTip.style.padding = '6px 8px'
-    toolTip.style.borderRadius = '10px'
+    toolTip.style.maxWidth = '260px'
+    toolTip.style.width = 'auto'
+    toolTip.style.whiteSpace = 'nowrap'
+    toolTip.style.pointerEvents = 'none'
 
     chart.subscribeCrosshairMove((param) => {
       if (

@@ -497,7 +497,7 @@ function GlobalPage() {
 
           <SectionHeader>
             <TYPE.main fontSize={'1.125rem'} style={{ whiteSpace: 'nowrap' }}>
-              Hot (≥ 100 WNOVA)
+              Hot (100+ WNOVA)
             </TYPE.main>
             <CustomLink to={'/pairs'}>See all</CustomLink>
           </SectionHeader>
@@ -505,13 +505,13 @@ function GlobalPage() {
             {hotPairs.length ? (
               <PairList pairs={toPairMap(hotPairs)} useTracked={useTracked} maxItems={10} />
             ) : (
-              <EmptyState>No pairs with ≥100 WNOVA liquidity yet.</EmptyState>
+              <EmptyState>No pairs with 100+ WNOVA liquidity yet.</EmptyState>
             )}
           </Panel>
 
           <SectionHeader>
             <TYPE.main fontSize={'1.125rem'} style={{ whiteSpace: 'nowrap' }}>
-              Trending (≥ 50 WNOVA)
+              Trending (50+ WNOVA)
             </TYPE.main>
             <CustomLink to={'/pairs'}>See all</CustomLink>
           </SectionHeader>
@@ -519,7 +519,7 @@ function GlobalPage() {
             {trendingPairs.length ? (
               <PairList pairs={toPairMap(trendingPairs)} useTracked={useTracked} maxItems={10} />
             ) : (
-              <EmptyState>No pairs with ≥50 WNOVA liquidity yet.</EmptyState>
+              <EmptyState>No pairs with 50+ WNOVA liquidity yet.</EmptyState>
             )}
           </Panel>
           <span>

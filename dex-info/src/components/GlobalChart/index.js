@@ -32,6 +32,7 @@ const ChartHeader = styled.div`
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+  min-height: 52px;
 `
 
 const ChartMeta = styled.div`
@@ -69,6 +70,7 @@ const ChartBody = styled.div`
   height: 260px;
   min-height: 260px;
   position: relative;
+  overflow: hidden;
 `
 
 const EmptyState = styled.div`
@@ -237,7 +239,7 @@ const GlobalChart = ({ display }) => {
                       title={volumeWindow === VOLUME_WINDOW.WEEKLY ? 'Volume (7d, WNOVA)' : 'Volume (WNOVA)'}
                       field={field}
                       width={width}
-                      type={CHART_TYPES.BAR}
+                      type={CHART_TYPES.AREA}
                       useWeekly={volumeWindow === VOLUME_WINDOW.WEEKLY}
                       showOverlay={false}
                     />

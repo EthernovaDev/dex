@@ -280,6 +280,11 @@ function PairPageContent({ pairId, history }) {
 
   const boostInfoState = usePairBoostInfo(pairId, RPC_URL)
   const boostConfigState = useBoostRegistryConfig(RPC_URL)
+  const forceRpcFail =
+    typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('rpcFail') === '1'
+  const boostRpcError = forceRpcFail
+    ? 'Simulated RPC error'
+    : boostInfoState?.error || boostConfigState?.error
   const boostFeeAmount = boostConfigState?.config?.feeAmount
     ? ethers.BigNumber.from(boostConfigState.config.feeAmount)
     : ethers.utils.parseUnits('10', 18)
@@ -290,6 +295,10 @@ function PairPageContent({ pairId, history }) {
     ? Math.max(1, Math.ceil((boostExpiresAt - Math.floor(Date.now() / 1000)) / 3600))
     : 0
   const [boostStatus, setBoostStatus] = useState({ state: 'idle', error: null, tx: null })
+  const handleBoostRetry = () => {
+    boostInfoState?.refresh?.()
+    boostConfigState?.refresh?.()
+  }
 
   const [dismissed, markAsDismissed] = usePathDismissed(history.location.pathname)
   const [latestBlock] = useLatestBlocks()
@@ -524,10 +533,17 @@ function PairPageContent({ pairId, history }) {
             <TYPE.light fontSize={12} style={{ marginTop: '0.25rem' }}>
               Pay {boostFeeDisplay} NOVA (wrapped to WNOVA) to pin this pair in Boosted for 24h.
             </TYPE.light>
+            {boostRpcError && (
+              <TYPE.light fontSize={12} style={{ marginTop: '0.5rem' }}>
+                RPC busy, retrying… {boostRpcError}
+              </TYPE.light>
+            )}
             <RowBetween style={{ marginTop: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
               <ButtonDark disabled={boostStatus.state === 'pending'} onClick={handleBoost}>
                 {boostStatus.state === 'pending' ? 'Boosting…' : 'Boost pair'}
               </ButtonDark>
+              {boostRpcError && <ButtonDark onClick={handleBoostRetry}>Retry</ButtonDark>}
+              <CopyHelper toCopy={pairId} />
               {boostStatus.state === 'confirmed' && boostStatus.tx && (
                 <Link external href={`${explorerBase}/tx/${boostStatus.tx}`}>
                   View tx ↗

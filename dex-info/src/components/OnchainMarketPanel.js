@@ -223,6 +223,8 @@ export default function OnchainMarketPanel({
   testIdPrefix = 'market',
   recentTradesTestId,
   recentTradesEmptyTestId,
+  dataDelayed = false,
+  onRetry,
 }) {
   const [timeframe, setTimeframe] = useState(TIMEFRAMES[0])
   const [chartTab, setChartTab] = useState(CHART_TABS[0].key)
@@ -358,6 +360,8 @@ export default function OnchainMarketPanel({
   const activeCandles = useSubgraph ? subgraphSeries.candles : useOnchain ? candles : []
   const activeTrades = useSubgraph ? subgraphSeries.trades : useOnchain ? trades : []
   const activeLastPrice = useSubgraph ? subgraphSeries.lastPrice : useOnchain ? lastPrice : null
+  const rpcWarning = dataDelayed || activeStatus === 'error'
+  const rpcWarningLabel = activeStatus === 'error' ? 'RPC busy, retrying…' : dataDelayed ? 'Data delayed, retrying…' : ''
 
   const priceSeries = useMemo(() => {
     if (!activeCandles || !activeCandles.length) return []
@@ -478,6 +482,11 @@ export default function OnchainMarketPanel({
       (liquiditySeriesFinal && liquiditySeriesFinal.length)
   )
 
+  const handleRetry = () => {
+    if (onRetry) onRetry()
+    if (refresh) refresh()
+  }
+
   return (
     <Panel style={{ marginBottom: '1.5rem' }}>
       <HeaderRow>
@@ -518,6 +527,28 @@ export default function OnchainMarketPanel({
           <StatValue data-testid="market-24h-trades-value">{tradesValue}</StatValue>
         </StatCard>
       </StatsRow>
+      {rpcWarning && (
+        <Warning data-testid={`${idPrefix}-rpc-warning`}>
+          {rpcWarningLabel}
+          <RetryButton onClick={handleRetry}>Retry</RetryButton>
+          {pairAddress && (
+            <span style={{ marginLeft: '0.5rem', display: 'inline-flex', alignItems: 'center' }}>
+              <span style={{ marginRight: 4 }}>{pairAddress.slice(0, 6)}…{pairAddress.slice(-4)}</span>
+              <button
+                onClick={() => navigator.clipboard?.writeText(pairAddress)}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  color: 'rgba(255,255,255,0.7)',
+                  cursor: 'pointer',
+                }}
+              >
+                Copy
+              </button>
+            </span>
+          )}
+        </Warning>
+      )}
       <ChartControlsRow>
         <ChartTabs>
           {CHART_TABS.map((tab) => (
@@ -559,16 +590,12 @@ export default function OnchainMarketPanel({
             valueFormatter={(val) => formattedNum(val, false)}
           />
         ) : (
-          <EmptyState data-testid={emptyTestId}>Not enough history yet.</EmptyState>
+          <EmptyState data-testid={emptyTestId}>
+            {rpcWarning ? 'Data delayed — retrying…' : 'Not enough history yet.'}
+          </EmptyState>
         )}
         {hasMarketData ? <span data-testid={hasDataTestId} style={{ display: 'none' }} /> : null}
       </ChartShell>
-      {activeStatus === 'error' && !useSubgraph ? (
-        <>
-          <Warning>On-chain data unavailable (RPC unstable).</Warning>
-          <RetryButton onClick={refresh}>Retry</RetryButton>
-        </>
-      ) : null}
       <TradeList data-testid={tradesTestId}>
         <TYPE.main fontSize={'0.95rem'}>Recent trades</TYPE.main>
         <TradeHeaderRow>

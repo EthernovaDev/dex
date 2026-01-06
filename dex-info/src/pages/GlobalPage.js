@@ -13,7 +13,13 @@ import Search from '../components/Search'
 import GlobalStats from '../components/GlobalStats'
 import OnchainMarketPanel from '../components/OnchainMarketPanel'
 
-import { useGlobalData, useGlobalTransactions, useGlobalChartData } from '../contexts/GlobalData'
+import {
+  useGlobalData,
+  useGlobalTransactions,
+  useGlobalChartData,
+  useGlobalTransactionsStatus,
+  useGlobalChartStatus,
+} from '../contexts/GlobalData'
 import { useAllPairData, usePairData } from '../contexts/PairData'
 import { useLatestBlocks } from '../contexts/Application'
 import { useMedia } from 'react-use'
@@ -185,6 +191,8 @@ function GlobalPage() {
   const pinnedPair = usePairData(PAIR_ADDRESS)
   const [latestBlock] = useLatestBlocks()
   const subgraphReady = Boolean(latestBlock)
+  const txStatus = useGlobalTransactionsStatus()
+  const chartStatus = useGlobalChartStatus()
   const { totalLiquidityETH, oneDayVolumeETH, volumeChangeETH, liquidityChangeETH } = useGlobalData()
   const [dailyData] = useGlobalChartData()
 
@@ -204,6 +212,9 @@ function GlobalPage() {
   const wnovaLower = normAddr(WNOVA_ADDRESS)
   const tonyLower = normAddr(TONY_ADDRESS)
   const boostState = useBoostedPairs(RPC_URL, 60000)
+  const forceRpcFail =
+    typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('rpcFail') === '1'
+  const rpcDelayed = Boolean(forceRpcFail || txStatus?.error || chartStatus?.error || boostState?.error)
   const quoteTokenAddress = useMemo(() => {
     const token0Id = normAddr(pinnedPair?.token0?.id)
     const token1Id = normAddr(pinnedPair?.token1?.id)
@@ -343,6 +354,12 @@ function GlobalPage() {
       .filter((entry) => entry.address)
   }, [boostState, pairLookup])
 
+  const handleActivityRetry = () => {
+    txStatus?.refresh?.()
+    chartStatus?.refresh?.()
+    boostState?.refresh?.()
+  }
+
   const boostFeeDisplay = useMemo(() => {
     const feeRaw = boostState?.config?.feeAmount
     if (!feeRaw) return '10'
@@ -382,6 +399,8 @@ function GlobalPage() {
             showVolume={false}
             allowOnchain={!subgraphReady}
             testIdPrefix="overview-market"
+            dataDelayed={rpcDelayed}
+            onRetry={handleActivityRetry}
           />
           {below800 && ( // mobile card
             <Box mb={20}>
@@ -481,6 +500,25 @@ function GlobalPage() {
             </TYPE.main>
             <CustomLink to={`/pair/${PAIR_ADDRESS}`}>Boost your pair</CustomLink>
           </SectionHeader>
+          {boostState?.error && (
+            <Panel style={{ padding: '0.75rem', marginBottom: '0.75rem' }} data-testid="boost-rpc-warning">
+              <TYPE.light fontSize={12}>RPC busy, retrying… {boostState.error}</TYPE.light>
+              <button
+                onClick={handleActivityRetry}
+                style={{
+                  marginTop: '0.5rem',
+                  padding: '6px 10px',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(139, 92, 246, 0.5)',
+                  background: 'rgba(139, 92, 246, 0.2)',
+                  color: 'white',
+                  cursor: 'pointer',
+                }}
+              >
+                Retry
+              </button>
+            </Panel>
+          )}
           {boostedPairs.length ? (
             <BoostedList>
               {boostedPairs.map((entry) => {

@@ -27,6 +27,10 @@ const UPDATE = 'UPDATE'
 const UPDATE_TXNS = 'UPDATE_TXNS'
 const UPDATE_CHART = 'UPDATE_CHART'
 const UPDATE_ETH_PRICE = 'UPDATE_ETH_PRICE'
+const UPDATE_TXNS_ERROR = 'UPDATE_TXNS_ERROR'
+const UPDATE_CHART_ERROR = 'UPDATE_CHART_ERROR'
+const CLEAR_TXNS = 'CLEAR_TXNS'
+const CLEAR_CHART = 'CLEAR_CHART'
 const ETH_PRICE_KEY = 'ETH_PRICE_KEY'
 const UPDATE_ALL_PAIRS_IN_UNISWAP = 'UPDAUPDATE_ALL_PAIRS_IN_UNISWAPTE_TOP_PAIRS'
 const UPDATE_ALL_TOKENS_IN_UNISWAP = 'UPDATE_ALL_TOKENS_IN_UNISWAP'
@@ -64,6 +68,7 @@ function reducer(state, { type, payload }) {
       return {
         ...state,
         transactions,
+        transactionsError: null,
       }
     }
     case UPDATE_CHART: {
@@ -74,6 +79,35 @@ function reducer(state, { type, payload }) {
           daily,
           weekly,
         },
+        chartError: null,
+      }
+    }
+    case UPDATE_TXNS_ERROR: {
+      const { error } = payload
+      return {
+        ...state,
+        transactionsError: error,
+      }
+    }
+    case UPDATE_CHART_ERROR: {
+      const { error } = payload
+      return {
+        ...state,
+        chartError: error,
+      }
+    }
+    case CLEAR_TXNS: {
+      return {
+        ...state,
+        transactions: null,
+        transactionsError: null,
+      }
+    }
+    case CLEAR_CHART: {
+      return {
+        ...state,
+        chartData: null,
+        chartError: null,
       }
     }
     case UPDATE_ETH_PRICE: {
@@ -144,6 +178,32 @@ export default function Provider({ children }) {
     })
   }, [])
 
+  const updateTransactionsError = useCallback((error) => {
+    dispatch({
+      type: UPDATE_TXNS_ERROR,
+      payload: {
+        error,
+      },
+    })
+  }, [])
+
+  const updateChartError = useCallback((error) => {
+    dispatch({
+      type: UPDATE_CHART_ERROR,
+      payload: {
+        error,
+      },
+    })
+  }, [])
+
+  const clearTransactions = useCallback(() => {
+    dispatch({ type: CLEAR_TXNS })
+  }, [])
+
+  const clearChart = useCallback(() => {
+    dispatch({ type: CLEAR_CHART })
+  }, [])
+
   const updateEthPrice = useCallback((ethPrice, oneDayPrice, ethPriceChange) => {
     dispatch({
       type: UPDATE_ETH_PRICE,
@@ -189,6 +249,10 @@ export default function Provider({ children }) {
           {
             update,
             updateTransactions,
+            updateTransactionsError,
+            updateChartError,
+            clearTransactions,
+            clearChart,
             updateChart,
             updateEthPrice,
             updateTopLps,
@@ -200,6 +264,10 @@ export default function Provider({ children }) {
           state,
           update,
           updateTransactions,
+          updateTransactionsError,
+          updateChartError,
+          clearTransactions,
+          clearChart,
           updateTopLps,
           updateChart,
           updateEthPrice,
@@ -446,6 +514,7 @@ const getChartData = async (oldestDateToFetch, offsetData) => {
     }
   } catch (e) {
     console.log(e)
+    throw e
   }
   return [data, weeklyData]
 }
@@ -485,6 +554,7 @@ const getGlobalTransactions = async () => {
       })
   } catch (e) {
     console.log(e)
+    throw e
   }
 
   return transactions
@@ -581,12 +651,13 @@ export function useGlobalData() {
 }
 
 export function useGlobalChartData() {
-  const [state, { updateChart }] = useGlobalDataContext()
+  const [state, { updateChart, updateChartError }] = useGlobalDataContext()
   const [oldestDateFetch, setOldestDateFetched] = useState()
   const [activeWindow] = useTimeframe()
 
   const chartDataDaily = state?.chartData?.daily
   const chartDataWeekly = state?.chartData?.weekly
+  const chartError = state?.chartError
 
   /**
    * Keep track of oldest date fetched. Used to
@@ -612,30 +683,64 @@ export function useGlobalChartData() {
   useEffect(() => {
     async function fetchData() {
       // historical stuff for chart
-      let [newChartData, newWeeklyData] = await getChartData(oldestDateFetch, combinedData)
-      updateChart(newChartData, newWeeklyData)
+      try {
+        let [newChartData, newWeeklyData] = await getChartData(oldestDateFetch, combinedData)
+        updateChart(newChartData, newWeeklyData)
+        updateChartError(null)
+      } catch (err) {
+        updateChartError(err?.message || 'RPC busy')
+      }
     }
     if (oldestDateFetch && !(chartDataDaily && chartDataWeekly) && combinedData) {
-      fetchData()
+      if (!chartError) {
+        fetchData()
+      }
     }
-  }, [chartDataDaily, chartDataWeekly, combinedData, oldestDateFetch, updateChart])
+  }, [chartDataDaily, chartDataWeekly, combinedData, oldestDateFetch, updateChart, updateChartError, chartError])
 
   return [chartDataDaily, chartDataWeekly]
 }
 
 export function useGlobalTransactions() {
-  const [state, { updateTransactions }] = useGlobalDataContext()
+  const [state, { updateTransactions, updateTransactionsError }] = useGlobalDataContext()
   const transactions = state?.transactions
   useEffect(() => {
     async function fetchData() {
       if (!transactions) {
-        let txns = await getGlobalTransactions()
-        updateTransactions(txns)
+        try {
+          let txns = await getGlobalTransactions()
+          updateTransactions(txns)
+          updateTransactionsError(null)
+        } catch (err) {
+          updateTransactionsError(err?.message || 'RPC busy')
+        }
       }
     }
     fetchData()
-  }, [updateTransactions, transactions])
+  }, [updateTransactions, updateTransactionsError, transactions])
   return transactions
+}
+
+export function useGlobalTransactionsStatus() {
+  const [state, { clearTransactions, updateTransactionsError }] = useGlobalDataContext()
+  const error = state?.transactionsError
+  const refresh = useCallback(() => {
+    updateTransactionsError(null)
+    clearTransactions()
+  }, [clearTransactions, updateTransactionsError])
+
+  return { error, refresh }
+}
+
+export function useGlobalChartStatus() {
+  const [state, { clearChart, updateChartError }] = useGlobalDataContext()
+  const error = state?.chartError
+  const refresh = useCallback(() => {
+    updateChartError(null)
+    clearChart()
+  }, [clearChart, updateChartError])
+
+  return { error, refresh }
 }
 
 export function useEthPrice() {

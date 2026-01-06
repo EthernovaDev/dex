@@ -16,6 +16,9 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 export function useBoostedPairs(rpcUrl, refreshMs = 60000) {
   const [state, setState] = useState({ status: 'idle', boosted: [], config: null, error: null })
   const requestRef = useRef(0)
+  const [refreshToken, setRefreshToken] = useState(0)
+
+  const refresh = () => setRefreshToken((value) => value + 1)
 
   useEffect(() => {
     if (!rpcUrl || !BOOST_REGISTRY_ADDRESS) return
@@ -78,14 +81,17 @@ export function useBoostedPairs(rpcUrl, refreshMs = 60000) {
       cancelled = true
       clearInterval(timer)
     }
-  }, [rpcUrl, refreshMs])
+  }, [rpcUrl, refreshMs, refreshToken])
 
-  return state
+  return { ...state, refresh }
 }
 
 export function usePairBoostInfo(pairAddress, rpcUrl) {
   const [state, setState] = useState({ status: 'idle', info: null, error: null })
   const requestRef = useRef(0)
+  const [refreshToken, setRefreshToken] = useState(0)
+
+  const refresh = () => setRefreshToken((value) => value + 1)
 
   useEffect(() => {
     if (!rpcUrl || !BOOST_REGISTRY_ADDRESS || !pairAddress) return
@@ -113,14 +119,17 @@ export function usePairBoostInfo(pairAddress, rpcUrl) {
     return () => {
       cancelled = true
     }
-  }, [pairAddress, rpcUrl])
+  }, [pairAddress, rpcUrl, refreshToken])
 
-  return state
+  return { ...state, refresh }
 }
 
 export function useBoostRegistryConfig(rpcUrl) {
   const [state, setState] = useState({ status: 'idle', config: null, error: null })
   const requestRef = useRef(0)
+  const [refreshToken, setRefreshToken] = useState(0)
+
+  const refresh = () => setRefreshToken((value) => value + 1)
 
   useEffect(() => {
     if (!rpcUrl || !BOOST_REGISTRY_ADDRESS) return
@@ -159,7 +168,7 @@ export function useBoostRegistryConfig(rpcUrl) {
     return () => {
       cancelled = true
     }
-  }, [rpcUrl])
+  }, [rpcUrl, refreshToken])
 
-  return state
+  return { ...state, refresh }
 }

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import styled from 'styled-components'
-const DEFAULT_LOGO = `${process.env.PUBLIC_URL || ''}/ethernova.png`
 import { TONY_ADDRESS, WRAPPED_NATIVE_ADDRESS } from '../../constants/urls'
 import { useTokenMetadata } from '../../hooks/useTokenMetadata'
+
+const DEFAULT_LOGO = `${process.env.PUBLIC_URL || ''}/ethernova.png`
 
 const BAD_IMAGES = {}
 const IPFS_GATEWAY = process.env.REACT_APP_IPFS_GATEWAY || 'https://dex.ethnova.net/ipfs/'

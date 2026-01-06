@@ -6,6 +6,7 @@ import { BigNumber } from '@ethersproject/bignumber'
 import { AddressZero } from '@ethersproject/constants'
 import { useActiveWeb3React } from '../hooks'
 import { useEthernovaConfig } from '../hooks/useEthernovaConfig'
+import { useBlockNumber } from '../state/application/hooks'
 
 import { useMultipleContractSingleData } from '../state/multicall/hooks'
 import { wrappedCurrency } from '../utils/wrappedCurrency'
@@ -30,6 +31,7 @@ export enum PairState {
 export function usePairs(currencies: [Currency | undefined, Currency | undefined][]): [PairState, Pair | null][] {
   const { chainId } = useActiveWeb3React()
   const { config } = useEthernovaConfig()
+  const blockNumber = useBlockNumber()
   const activeChainId = chainId ?? config.chainId ?? 77777
   const factoryAddress = isAddress(config.contracts.factory)
 
@@ -72,7 +74,13 @@ export function usePairs(currencies: [Currency | undefined, Currency | undefined
   const [fallbackResults, setFallbackResults] = useState<
     Record<
       string,
-      { state: PairState; reserves?: [BigNumber, BigNumber]; token0?: string; token1?: string }
+      {
+        state: PairState
+        reserves?: [BigNumber, BigNumber]
+        token0?: string
+        token1?: string
+        updatedAt?: number
+      }
     >
   >({})
 
@@ -91,7 +99,10 @@ export function usePairs(currencies: [Currency | undefined, Currency | undefined
         const key = pairKeys[i]
         if (!tokenA || !tokenB || !key || tokenA.equals(tokenB)) continue
         const existing = fallbackResults[key]
-        if (existing && [PairState.EXISTS, PairState.NOT_EXISTS].includes(existing.state)) continue
+        const now = Date.now()
+        const refreshMs = existing?.state === PairState.NOT_EXISTS ? 30000 : 10000
+        const shouldRefresh = !existing?.updatedAt || now - existing.updatedAt > refreshMs
+        if (existing && [PairState.EXISTS, PairState.NOT_EXISTS].includes(existing.state) && !shouldRefresh) continue
         if (!preferFallback) continue
         if (!existing) {
           updates[key] = { state: PairState.LOADING }
@@ -104,7 +115,7 @@ export function usePairs(currencies: [Currency | undefined, Currency | undefined
           ])) as string
           const [pairAddress] = FACTORY_INTERFACE.decodeFunctionResult('getPair', result) as [string]
           if (!pairAddress || pairAddress === AddressZero) {
-            updates[key] = { state: PairState.NOT_EXISTS }
+            updates[key] = { state: PairState.NOT_EXISTS, updatedAt: now }
             continue
           }
           const token0Raw = (await rpcCallWithFallback('eth_call', [
@@ -126,7 +137,8 @@ export function usePairs(currencies: [Currency | undefined, Currency | undefined
             state: PairState.EXISTS,
             reserves: [decoded[0], decoded[1]],
             token0: token0Addr,
-            token1: token1Addr
+            token1: token1Addr,
+            updatedAt: now
           }
         } catch {
           if (!existing) {
@@ -142,7 +154,7 @@ export function usePairs(currencies: [Currency | undefined, Currency | undefined
     return () => {
       cancelled = true
     }
-  }, [factoryAddress, pairKeys, tokens, fallbackResults, activeChainId])
+  }, [factoryAddress, pairKeys, tokens, fallbackResults, activeChainId, blockNumber])
 
   const preferFallback = activeChainId === 77777
 

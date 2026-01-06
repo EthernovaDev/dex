@@ -131,19 +131,43 @@ export default function SwapModalFooter({
         return { status: 'error', reason: 'no swap call data' }
       }
       setSimulateState({ status: 'loading', message: 'Simulating...' })
+      const nowTs = Math.floor(Date.now() / 1000)
+      const withFreshDeadline = (rawArgs: any[]) => {
+        if (!rawArgs || rawArgs.length === 0) return rawArgs
+        const freshArgs = [...rawArgs]
+        const deadlineIndex = freshArgs.length - 1
+        freshArgs[deadlineIndex] = String(nowTs + deadline)
+        return freshArgs
+      }
+      const callsWithFreshDeadline = swapCalls.map(call => ({
+        ...call,
+        parameters: {
+          ...call.parameters,
+          args: withFreshDeadline(call.parameters.args)
+        }
+      }))
 
       let lastError: any = null
       let selectedCall: any = null
       let gasEstimate: BigNumber | null = null
+      const nowTs = Math.floor(Date.now() / 1000)
+      const withFreshDeadline = (rawArgs: any[]) => {
+        if (!rawArgs || rawArgs.length === 0) return rawArgs
+        const freshArgs = [...rawArgs]
+        const deadlineIndex = freshArgs.length - 1
+        freshArgs[deadlineIndex] = String(nowTs + deadline)
+        return freshArgs
+      }
       const estimatedCalls = await Promise.all(
-        swapCalls.map(async call => {
+        callsWithFreshDeadline.map(async call => {
           const {
             parameters: { methodName, args, value },
             contract
           } = call
+          const freshArgs = withFreshDeadline(args)
           const options = value && value !== '0x0' ? { value } : {}
           try {
-            const estimate = await contract.estimateGas[methodName](...args, options)
+            const estimate = await contract.estimateGas[methodName](...freshArgs, options)
             return { call, gasEstimate: estimate }
           } catch (err) {
             return { call, error: err }
@@ -169,7 +193,7 @@ export default function SwapModalFooter({
         lastError = errorCall && 'error' in errorCall ? errorCall.error : null
       }
 
-      const callToUse = selectedCall || swapCalls[0]
+      const callToUse = selectedCall || callsWithFreshDeadline[0]
       if (!callToUse) {
         setSimulateState({ status: 'error', message: 'no swap call data' })
         return { status: 'error', reason: 'no swap call data' }
@@ -179,7 +203,8 @@ export default function SwapModalFooter({
         parameters: { methodName, args, value },
         contract
       } = callToUse
-      const deadlineArg = args[args.length - 1]
+      const freshArgs = withFreshDeadline(args)
+      const deadlineArg = freshArgs[freshArgs.length - 1]
       const deadlineRaw =
         typeof deadlineArg === 'string'
           ? deadlineArg
@@ -190,19 +215,20 @@ export default function SwapModalFooter({
         ? Number(deadlineRaw.startsWith('0x') ? parseInt(deadlineRaw, 16) : Number(deadlineRaw))
         : null
       const argsSummary = (() => {
-        const toArg = args.length >= 2 ? args[args.length - 2] : null
-        const pathArg = args.length >= 3 && Array.isArray(args[args.length - 3]) ? args[args.length - 3] : null
+        const toArg = freshArgs.length >= 2 ? freshArgs[freshArgs.length - 2] : null
+        const pathArg =
+          freshArgs.length >= 3 && Array.isArray(freshArgs[freshArgs.length - 3]) ? freshArgs[freshArgs.length - 3] : null
         return {
-          amount0: args[0]?.toString?.() ?? String(args[0]),
-          amount1: args[1]?.toString?.() ?? String(args[1]),
+          amount0: freshArgs[0]?.toString?.() ?? String(freshArgs[0]),
+          amount1: freshArgs[1]?.toString?.() ?? String(freshArgs[1]),
           path: pathArg ?? null,
           to: toArg?.toString?.() ?? String(toArg),
-          deadline: deadlineRaw
+          deadline: freshArgs[freshArgs.length - 1]?.toString?.() ?? String(freshArgs[freshArgs.length - 1])
         }
       })()
       const calldata = (() => {
         try {
-          return contract.interface.encodeFunctionData(methodName, args)
+          return contract.interface.encodeFunctionData(methodName, freshArgs)
         } catch {
           return null
         }

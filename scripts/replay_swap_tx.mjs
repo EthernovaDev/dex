@@ -35,7 +35,9 @@ async function rpcCall(method, params) {
   return json.result
 }
 
-function decodeRevertData(data) {
+function decodeRevertData(raw) {
+  if (!raw) return 'execution reverted (no data)'
+  const data = typeof raw === 'string' ? raw : typeof raw?.data === 'string' ? raw.data : ''
   if (!data || data === '0x') return 'execution reverted (no data)'
   const selector = data.slice(0, 10)
   if (selector === '0x08c379a0') {
@@ -89,9 +91,10 @@ async function main() {
       err?.error?.error?.data ||
       err?.error?.data?.data ||
       err?.data?.data
-    const reason = decodeRevertData(typeof data === 'string' ? data : '')
+    const reason = decodeRevertData(data)
     console.log('[SIMULATE] reverted:', reason)
     if (data) console.log('[SIMULATE] raw:', data)
+    if (err?.message) console.log('[SIMULATE] message:', err.message)
     process.exitCode = 1
   }
 
@@ -105,9 +108,10 @@ async function main() {
       err?.error?.error?.data ||
       err?.error?.data?.data ||
       err?.data?.data
-    const reason = decodeRevertData(typeof data === 'string' ? data : '')
+    const reason = decodeRevertData(data)
     console.log('[ESTIMATE] reverted:', reason)
     if (data) console.log('[ESTIMATE] raw:', data)
+    if (err?.message) console.log('[ESTIMATE] message:', err.message)
     process.exitCode = 1
   }
 }

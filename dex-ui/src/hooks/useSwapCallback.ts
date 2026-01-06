@@ -41,6 +41,21 @@ interface FailedCall {
 
 type EstimatedSwapCall = SuccessfulCall | FailedCall
 
+function refreshSwapCallDeadline(call: SwapCall, deadlineSeconds: number, nowTs?: number): SwapCall {
+  const timestamp = typeof nowTs === 'number' ? nowTs : Math.floor(Date.now() / 1000)
+  const args = [...call.parameters.args]
+  if (args.length > 0) {
+    args[args.length - 1] = String(timestamp + deadlineSeconds)
+  }
+  return {
+    ...call,
+    parameters: {
+      ...call.parameters,
+      args
+    }
+  }
+}
+
 function extractRevertData(error: any): string | null {
   const rawBody = typeof error?.body === 'string' ? error.body : null
   const parsedBody = rawBody
@@ -308,8 +323,10 @@ export function useSwapCallback(
     return {
       state: SwapCallbackState.VALID,
       callback: async function onSwap(): Promise<string> {
+        const nowTs = Math.floor(Date.now() / 1000)
+        const freshSwapCalls = swapCalls.map(call => refreshSwapCallDeadline(call, deadline, nowTs))
         const estimatedCalls: EstimatedSwapCall[] = await Promise.all(
-          swapCalls.map(call => {
+          freshSwapCalls.map(call => {
             const {
               parameters: { methodName, args, value },
               contract
@@ -359,7 +376,6 @@ export function useSwapCallback(
           gasEstimate
         } = successfulEstimation
 
-        const nowTs = Math.floor(Date.now() / 1000)
         assertSwapInvariants(methodName, args, value, recipient, nowTs)
 
         const txRequest: any = {

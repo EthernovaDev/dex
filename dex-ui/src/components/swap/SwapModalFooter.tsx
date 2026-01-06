@@ -150,14 +150,6 @@ export default function SwapModalFooter({
       let lastError: any = null
       let selectedCall: any = null
       let gasEstimate: BigNumber | null = null
-      const nowTs = Math.floor(Date.now() / 1000)
-      const withFreshDeadline = (rawArgs: any[]) => {
-        if (!rawArgs || rawArgs.length === 0) return rawArgs
-        const freshArgs = [...rawArgs]
-        const deadlineIndex = freshArgs.length - 1
-        freshArgs[deadlineIndex] = String(nowTs + deadline)
-        return freshArgs
-      }
       const estimatedCalls = await Promise.all(
         callsWithFreshDeadline.map(async call => {
           const {

@@ -270,7 +270,7 @@ function TokenPage({ address, history }) {
               <Panel style={{ padding: '1.25rem', marginBottom: '1.5rem' }} data-testid="token-profile">
                 <AutoColumn gap="10px">
                   <RowFixed>
-                    <TokenLogo address={address} size={'28px'} />
+                    <TokenLogo address={address} size={'var(--avatar-lg)'} />
                     <TYPE.main fontSize={'1.1rem'} style={{ marginLeft: '0.5rem' }}>
                       Token profile
                     </TYPE.main>
@@ -314,7 +314,7 @@ function TokenPage({ address, history }) {
             >
               <RowFixed style={{ flexWrap: 'wrap' }}>
                 <RowFixed style={{ alignItems: 'baseline' }}>
-                  <TokenLogo address={address} size="32px" style={{ alignSelf: 'center' }} />
+                  <TokenLogo address={address} size="var(--avatar-md)" style={{ alignSelf: 'center' }} />
                   <TYPE.main
                     data-testid="token-header"
                     fontSize={below1080 ? '1.5rem' : '2rem'}

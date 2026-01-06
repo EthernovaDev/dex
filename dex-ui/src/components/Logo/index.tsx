@@ -1,5 +1,4 @@
 import React, { useState } from 'react'
-import { HelpCircle } from 'react-feather'
 import { ImageProps } from 'rebass'
 
 const BAD_SRCS: { [tokenAddress: string]: true } = {}
@@ -15,6 +14,7 @@ export default function Logo({ srcs, alt, ...rest }: LogoProps) {
   const [, refresh] = useState<number>(0)
 
   const src: string | undefined = srcs.find(src => !BAD_SRCS[src])
+  const fallback = `${process.env.PUBLIC_URL || ''}/ethernova.png`
 
   if (src) {
     return (
@@ -30,5 +30,5 @@ export default function Logo({ srcs, alt, ...rest }: LogoProps) {
     )
   }
 
-  return <HelpCircle {...rest} />
+  return <img {...rest} alt={alt} src={fallback} />
 }

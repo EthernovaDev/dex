@@ -576,7 +576,7 @@ function PairPageContent({ pairId, history }) {
                 <RowFixed style={{ flexWrap: 'wrap', minWidth: '100px' }}>
                   <RowFixed>
                     {token0 && token1 && (
-                      <DoubleTokenLogo a0={token0?.id || ''} a1={token1?.id || ''} size={32} margin={true} />
+                      <DoubleTokenLogo a0={token0?.id || ''} a1={token1?.id || ''} size={40} margin={true} />
                     )}{' '}
                     <TYPE.main
                       fontSize={below1080 ? '1.5rem' : '2rem'}
@@ -646,7 +646,7 @@ function PairPageContent({ pairId, history }) {
             >
               <FixedPanel onClick={() => history.push(`/token/${token0?.id}`)}>
                 <RowFixed>
-                  <TokenLogo address={token0?.id} size={'16px'} />
+                  <TokenLogo address={token0?.id} size={'var(--avatar-sm)'} />
                   <TYPE.main fontSize={'16px'} lineHeight={1} fontWeight={500} ml={'4px'}>
                     {token0 && token1 ? `1 ${formattedSymbol0} = ${token0Rate} ${formattedSymbol1}` : '-'}
                   </TYPE.main>
@@ -654,7 +654,7 @@ function PairPageContent({ pairId, history }) {
               </FixedPanel>
               <FixedPanel onClick={() => history.push(`/token/${token1?.id}`)}>
                 <RowFixed>
-                  <TokenLogo address={token1?.id} size={'16px'} />
+                  <TokenLogo address={token1?.id} size={'var(--avatar-sm)'} />
                   <TYPE.main fontSize={'16px'} lineHeight={1} fontWeight={500} ml={'4px'}>
                     {token0 && token1 ? `1 ${formattedSymbol1} = ${token1Rate} ${formattedSymbol0}` : '-'}
                   </TYPE.main>

@@ -146,7 +146,7 @@ function BoostedPairCard({ entry, pairData, rpcUrl }) {
       <RowBetween>
         <PairMetaRow>
           {token0Address && token1Address ? (
-            <DoubleTokenLogo a0={token0Address} a1={token1Address} size={20} margin />
+            <DoubleTokenLogo a0={token0Address} a1={token1Address} size={28} margin />
           ) : null}
           <TYPE.main>{pairName}</TYPE.main>
         </PairMetaRow>

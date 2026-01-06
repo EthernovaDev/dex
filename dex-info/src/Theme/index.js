@@ -159,6 +159,11 @@ export const ThemedBackground = styled.div`
 export const GlobalStyle = createGlobalStyle`
   @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
   html { font-family: 'Space Grotesk', sans-serif; }
+  :root {
+    --avatar-sm: 28px;
+    --avatar-md: 32px;
+    --avatar-lg: 44px;
+  }
   
   html,
   body {

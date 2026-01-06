@@ -19,10 +19,11 @@ import { WRAPPED_NATIVE_ADDRESS } from '../../constants/urls'
 
 const ChartWrapper = styled.div`
   height: 100%;
-  max-height: 340px;
+  min-height: 260px;
+  max-height: 320px;
 
   @media screen and (max-width: 600px) {
-    min-height: 200px;
+    min-height: 220px;
   }
 `
 
@@ -308,7 +309,7 @@ const PairChart = ({ address, color, base0, base1 }) => {
       )}
 
       {chartFilter === CHART_VIEW.RATE1 &&
-        (rateSeries1.length ? (
+        (rateSeries1.length > 1 ? (
           <div ref={ref}>
             <SimpleSeriesChart
               data={rateSeries1}
@@ -319,11 +320,11 @@ const PairChart = ({ address, color, base0, base1 }) => {
             />
           </div>
         ) : (
-          <LocalLoader />
+          <EmptyCard height="140px">Not enough history yet.</EmptyCard>
         ))}
 
       {chartFilter === CHART_VIEW.RATE0 &&
-        (rateSeries0.length ? (
+        (rateSeries0.length > 1 ? (
           <div ref={ref}>
             <SimpleSeriesChart
               data={rateSeries0}
@@ -334,10 +335,11 @@ const PairChart = ({ address, color, base0, base1 }) => {
             />
           </div>
         ) : (
-          <LocalLoader />
+          <EmptyCard height="140px">Not enough history yet.</EmptyCard>
         ))}
 
-      {chartFilter === CHART_VIEW.VOLUME && (
+      {chartFilter === CHART_VIEW.VOLUME &&
+        (chartDataWithFallback && chartDataWithFallback.length > 1 ? (
         <ResponsiveContainer aspect={aspect}>
           <BarChart
             margin={{ top: 0, right: 0, bottom: 6, left: below1080 ? 0 : 10 }}
@@ -392,7 +394,9 @@ const PairChart = ({ address, color, base0, base1 }) => {
             />
           </BarChart>
         </ResponsiveContainer>
-      )}
+        ) : (
+          <EmptyCard height="140px">Not enough history yet.</EmptyCard>
+        ))}
     </ChartWrapper>
   )
 }

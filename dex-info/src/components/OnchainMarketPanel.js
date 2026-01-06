@@ -4,7 +4,7 @@ import SimpleSeriesChart from './SimpleSeriesChart'
 import LocalLoader from './LocalLoader'
 import Panel from './Panel'
 import { TYPE } from '../Theme'
-import { formattedNum, formatPrice, isFiniteNum, normAddr, isAddrEq } from '../utils'
+import { formattedNum, formatPrice, formatTime, isFiniteNum, normAddr, isAddrEq } from '../utils'
 import { useOnchainSwapHistory } from '../hooks/useOnchainSwapHistory'
 import BigNumber from 'bignumber.js'
 
@@ -39,7 +39,7 @@ const StatCard = styled.div`
   align-items: flex-start;
   gap: 6px;
   line-height: 1.3;
-  min-height: 78px;
+  min-height: 86px;
 `
 
 const StatLabel = styled.div`
@@ -89,12 +89,44 @@ const TradeList = styled.div`
   gap: 8px;
 `
 
+const TradeHeaderRow = styled.div`
+  display: grid;
+  grid-template-columns: minmax(150px, 200px) minmax(120px, 1fr) minmax(120px, 1fr) minmax(90px, 120px);
+  gap: 8px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+  margin-bottom: 4px;
+
+  @media screen and (max-width: 640px) {
+    grid-template-columns: 1fr 1fr;
+    row-gap: 6px;
+  }
+`
+
 const TradeRow = styled.div`
   display: grid;
-  grid-template-columns: minmax(160px, 220px) 1fr 1fr 1fr;
+  grid-template-columns: minmax(150px, 200px) minmax(120px, 1fr) minmax(120px, 1fr) minmax(90px, 120px);
   gap: 8px;
   font-size: 12px;
   color: rgba(255, 255, 255, 0.8);
+  align-items: center;
+  font-variant-numeric: tabular-nums;
+
+  @media screen and (max-width: 640px) {
+    grid-template-columns: 1fr 1fr;
+    row-gap: 6px;
+  }
+`
+
+const TradeCell = styled.span`
+  text-align: right;
+  white-space: nowrap;
+
+  &:first-child {
+    text-align: left;
+  }
 `
 
 const Badge = styled.span`
@@ -133,7 +165,31 @@ const EmptyState = styled.div`
   color: rgba(255, 255, 255, 0.65);
 `
 
-const CHART_HEIGHT = 250
+const ChartShell = styled.div`
+  margin-top: 12px;
+  min-height: 260px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+`
+
+const ChartControlsRow = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+`
+
+const ChartTabs = styled.div`
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+`
+
+const CHART_HEIGHT = 260
 
 const TIMEFRAMES = [
   { label: '1H', intervalSec: 3600, lookbackBlocks: 60000 },
@@ -461,21 +517,23 @@ export default function OnchainMarketPanel({
           <StatValue data-testid="market-24h-trades-value">{tradesValue}</StatValue>
         </StatCard>
       </StatsRow>
-      <TimeframeRow style={{ marginTop: '10px' }}>
-        {CHART_TABS.map((tab) => (
-          <TimeframeButton
-            key={tab.key}
-            data-active={tab.key === chartTab}
-            onClick={() => setChartTab(tab.key)}
-          >
-            {tab.label}
-          </TimeframeButton>
-        ))}
-      </TimeframeRow>
-      <div id="novadex-candle-chart" ref={ref} style={{ marginTop: '12px' }} data-testid={chartTestId}>
+      <ChartControlsRow>
+        <ChartTabs>
+          {CHART_TABS.map((tab) => (
+            <TimeframeButton
+              key={tab.key}
+              data-active={tab.key === chartTab}
+              onClick={() => setChartTab(tab.key)}
+            >
+              {tab.label}
+            </TimeframeButton>
+          ))}
+        </ChartTabs>
+      </ChartControlsRow>
+      <ChartShell id="novadex-candle-chart" ref={ref} data-testid={chartTestId}>
         {activeStatus === 'loading' && !activeCandles?.length ? (
           <LocalLoader />
-        ) : chartTab === 'price' && priceSeriesFinal.length ? (
+        ) : chartTab === 'price' && priceSeriesFinal.length > 1 ? (
           <SimpleSeriesChart
             data={priceSeriesFinal}
             width={width}
@@ -483,7 +541,7 @@ export default function OnchainMarketPanel({
             type="area"
             valueFormatter={(val) => formatPrice(val)}
           />
-        ) : chartTab === 'volume' && volumeSeriesFinal.length ? (
+        ) : chartTab === 'volume' && volumeSeriesFinal.length > 1 ? (
           <SimpleSeriesChart
             data={volumeSeriesFinal}
             width={width}
@@ -491,7 +549,7 @@ export default function OnchainMarketPanel({
             type="histogram"
             valueFormatter={(val) => formattedNum(val, false)}
           />
-        ) : chartTab === 'liquidity' && liquiditySeriesFinal.length ? (
+        ) : chartTab === 'liquidity' && liquiditySeriesFinal.length > 1 ? (
           <SimpleSeriesChart
             data={liquiditySeriesFinal}
             width={width}
@@ -500,10 +558,10 @@ export default function OnchainMarketPanel({
             valueFormatter={(val) => formattedNum(val, false)}
           />
         ) : (
-          <EmptyState data-testid={emptyTestId}>No activity yet.</EmptyState>
+          <EmptyState data-testid={emptyTestId}>Not enough history yet.</EmptyState>
         )}
         {hasMarketData ? <span data-testid={hasDataTestId} style={{ display: 'none' }} /> : null}
-      </div>
+      </ChartShell>
       {activeStatus === 'error' && !useSubgraph ? (
         <>
           <Warning>On-chain data unavailable (RPC unstable).</Warning>
@@ -512,26 +570,24 @@ export default function OnchainMarketPanel({
       ) : null}
       <TradeList data-testid={tradesTestId}>
         <TYPE.main fontSize={'0.95rem'}>Recent trades</TYPE.main>
+        <TradeHeaderRow>
+          <span>Action</span>
+          <span style={{ textAlign: 'right' }}>{baseSymbol}</span>
+          <span style={{ textAlign: 'right' }}>{quoteSymbol}</span>
+          <span style={{ textAlign: 'right' }}>Time</span>
+        </TradeHeaderRow>
         {activeTrades && activeTrades.length ? (
           activeTrades.map((trade) => {
-            const spent =
-              trade.side === 'buy'
-                ? `${formattedNum(trade.baseAmount)} ${baseSymbol}`
-                : `${formattedNum(trade.quoteAmount)} ${quoteSymbol}`
-            const received =
-              trade.side === 'buy'
-                ? `${formattedNum(trade.quoteAmount)} ${quoteSymbol}`
-                : `${formattedNum(trade.baseAmount)} ${baseSymbol}`
+            const baseAmount = `${formattedNum(trade.baseAmount)} ${baseSymbol}`
+            const quoteAmount = `${formattedNum(trade.quoteAmount)} ${quoteSymbol}`
             return (
               <TradeRow key={`${trade.txHash}-${trade.timestamp}`} data-testid="recent-trade-row">
                 <Badge $side={trade.side}>
                   {trade.sideLabel || (trade.side === 'sell' ? `SELL ${quoteSymbol}` : `BUY ${quoteSymbol}`)}
                 </Badge>
-                <span>{spent}</span>
-                <span>{received}</span>
-                <span>
-                  {formatPrice(trade.price)} {quoteSymbol}/{baseSymbol}
-                </span>
+                <TradeCell>{baseAmount}</TradeCell>
+                <TradeCell>{quoteAmount}</TradeCell>
+                <TradeCell>{formatTime(trade.timestamp)}</TradeCell>
               </TradeRow>
             )
           })

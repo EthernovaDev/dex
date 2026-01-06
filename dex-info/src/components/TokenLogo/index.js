@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import styled from 'styled-components'
-import NovaLogo from '../../assets/nova.svg'
+const DEFAULT_LOGO = `${process.env.PUBLIC_URL || ''}/ethernova.png`
 import { TONY_ADDRESS, WRAPPED_NATIVE_ADDRESS } from '../../constants/urls'
 import { useTokenMetadata } from '../../hooks/useTokenMetadata'
 
@@ -15,12 +15,6 @@ const resolveLogoUri = (uri) => {
   return uri
 }
 
-const Inline = styled.div`
-  display: flex;
-  align-items: center;
-  align-self: center;
-`
-
 const StyledNativeLogo = styled.div`
   display: flex;
   align-items: center;
@@ -32,29 +26,7 @@ const StyledNativeLogo = styled.div`
   }
 `
 
-const FallbackLogo = styled.div`
-  width: ${({ size }) => size};
-  height: ${({ size }) => size};
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(${({ size }) => size} / 2.3);
-  color: rgba(255, 255, 255, 0.92);
-  background: ${({ $bg }) => $bg};
-  border: 1px solid rgba(255, 255, 255, 0.08);
-`
-
-const colorFromAddress = (addr) => {
-  if (!addr) return 'rgba(148, 163, 184, 0.25)'
-  const clean = addr.replace(/^0x/, '')
-  const seed = parseInt(clean.slice(0, 6), 16)
-  if (!Number.isFinite(seed)) return 'rgba(148, 163, 184, 0.25)'
-  const hue = seed % 360
-  return `hsl(${hue}, 70%, 40%)`
-}
-
-export default function TokenLogo({ address, header = false, size = '24px', ...rest }) {
+export default function TokenLogo({ address, header = false, size = 'var(--avatar-sm)', ...rest }) {
   const [error, setError] = useState(false)
   const [customLogo, setCustomLogo] = useState(null)
   const remoteMeta = useTokenMetadata(address)
@@ -74,11 +46,16 @@ export default function TokenLogo({ address, header = false, size = '24px', ...r
 
   if (error || (normalized && BAD_IMAGES[normalized])) {
     return (
-      <Inline>
-        <FallbackLogo size={size} $bg={colorFromAddress(normalized)} {...rest}>
-          ?
-        </FallbackLogo>
-      </Inline>
+      <StyledNativeLogo size={size} {...rest}>
+        <img
+          src={DEFAULT_LOGO}
+          style={{
+            boxShadow: '0px 6px 10px rgba(0, 0, 0, 0.075)',
+            borderRadius: '24px',
+          }}
+          alt=""
+        />
+      </StyledNativeLogo>
     )
   }
 
@@ -102,7 +79,7 @@ export default function TokenLogo({ address, header = false, size = '24px', ...r
     return (
       <StyledNativeLogo size={size} {...rest}>
         <img
-          src={NovaLogo}
+          src={DEFAULT_LOGO}
           style={{
             boxShadow: '0px 6px 10px rgba(0, 0, 0, 0.075)',
             borderRadius: '24px',
@@ -113,12 +90,16 @@ export default function TokenLogo({ address, header = false, size = '24px', ...r
     )
   }
 
-  const label = normalized ? normalized.slice(2, 4).toUpperCase() : '?'
   return (
-    <Inline>
-      <FallbackLogo size={size} $bg={colorFromAddress(normalized)} {...rest}>
-        {label}
-      </FallbackLogo>
-    </Inline>
+    <StyledNativeLogo size={size} {...rest}>
+      <img
+        src={DEFAULT_LOGO}
+        style={{
+          boxShadow: '0px 6px 10px rgba(0, 0, 0, 0.075)',
+          borderRadius: '24px',
+        }}
+        alt=""
+      />
+    </StyledNativeLogo>
   )
 }

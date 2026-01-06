@@ -252,7 +252,7 @@ export function CurrencySearch({
               disabled={!item.currency}
               onClick={() => item.currency && handleCurrencySelect(item.currency)}
             >
-              <CurrencyLogo currency={item.currency ?? ETHER} size={'20px'} />
+              <CurrencyLogo currency={item.currency ?? ETHER} size={'var(--avatar-sm)'} />
               <div>
                 <Text fontWeight={500} fontSize={14}>
                   {item.label}

@@ -19,7 +19,7 @@ const Wrapper = styled.div`
   position: relative;
 `
 
-const HEIGHT = 300
+const HEIGHT = 260
 
 const TradingViewChart = ({
   type = CHART_TYPES.BAR,
@@ -30,6 +30,7 @@ const TradingViewChart = ({
   title,
   width,
   useWeekly = false,
+  showOverlay = true,
 }) => {
   const ref = useRef(null)
   const chartRef = useRef(null)
@@ -150,7 +151,7 @@ const TradingViewChart = ({
     toolTip.className = darkMode ? 'three-line-legend-dark' : 'three-line-legend'
     ref.current.appendChild(toolTip)
     tooltipRef.current = toolTip
-    toolTip.style.display = 'block'
+    toolTip.style.display = showOverlay ? 'block' : 'none'
     toolTip.style.fontWeight = '500'
     toolTip.style.left = '10px'
     toolTip.style.top = '8px'
@@ -168,7 +169,11 @@ const TradingViewChart = ({
         param.point.y < 0 ||
         param.point.y > HEIGHT
       ) {
-        updateTooltip(toolTip)
+        if (showOverlay) {
+          updateTooltip(toolTip)
+        } else if (toolTip) {
+          toolTip.style.display = 'none'
+        }
         return
       }
       const dateStr = useWeekly
@@ -182,21 +187,22 @@ const TradingViewChart = ({
         : dayjs(param.time.year + '-' + param.time.month + '-' + param.time.day).format('MMMM D, YYYY')
       const price = param.seriesPrices.get(series)
 
+      toolTip.style.display = 'block'
       toolTip.innerHTML =
-        `<div style="font-size: 16px; margin: 4px 0px; color: ${textColor};">${title}</div>` +
-        `<div style="font-size: 22px; margin: 4px 0px; color: ${textColor}">` +
+        `<div style="font-size: 12px; margin: 2px 0px; color: ${textColor};">${title}</div>` +
+        `<div style="font-size: 18px; margin: 2px 0px; color: ${textColor}">` +
         formattedNum(price, false) +
         '</div>' +
-        '<div>' +
-        dateStr +
-        '</div>'
+        `<div style="opacity:0.7;font-size:11px;">${dateStr}</div>`
     })
 
     chart.timeScale().fitContent()
 
     chartRef.current = chart
     seriesRef.current = series
-    updateTooltip(toolTip)
+    if (showOverlay) {
+      updateTooltip(toolTip)
+    }
   }, [darkMode, formattedData, title, type, useWeekly, width, textColor, destroyChart, base, baseChange])
 
   const updateTooltip = useCallback(
@@ -210,11 +216,11 @@ const TradingViewChart = ({
       const color = percentValue === null ? textColor : percentValue >= 0 ? 'green' : 'red'
 
       toolTip.innerHTML =
-        `<div style="font-size: 16px; margin: 4px 0px; color: ${textColor};">${title} ` +
+        `<div style="font-size: 12px; margin: 2px 0px; color: ${textColor};">${title} ` +
         `${type === CHART_TYPES.BAR && !useWeekly ? '(24hr)' : ''}</div>` +
-        `<div style="font-size: 22px; margin: 4px 0px; color:${textColor}">` +
+        `<div style="font-size: 18px; margin: 2px 0px; color:${textColor}">` +
         formattedNum(base ?? 0, false) +
-        `<span style="margin-left: 10px; font-size: 16px; color: ${color};">${formattedPercentChange}</span>` +
+        `<span style="margin-left: 8px; font-size: 12px; color: ${color};">${formattedPercentChange}</span>` +
         '</div>'
     },
     [base, baseChange, textColor, title, type, useWeekly]

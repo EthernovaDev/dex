@@ -174,6 +174,9 @@ export const FixedGlobalStyle = createGlobalStyle`
   --nova-accent: #8b5cf6;
   --nova-accent-2: #ff4fd8;
   --nova-accent-3: #4da3ff;
+  --avatar-sm: 28px;
+  --avatar-md: 32px;
+  --avatar-lg: 44px;
 }
 
 html, input, textarea, button {

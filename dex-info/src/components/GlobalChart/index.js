@@ -1,13 +1,13 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react'
+import styled from 'styled-components'
 import { ResponsiveContainer } from 'recharts'
 import { timeframeOptions } from '../../constants'
 import { useGlobalChartData } from '../../contexts/GlobalData'
 import { useMedia } from 'react-use'
 import DropdownSelect from '../DropdownSelect'
 import TradingViewChart, { CHART_TYPES } from '../TradingviewChart'
-import { RowFixed } from '../Row'
 import { OptionButton } from '../ButtonStyled'
-import { getTimeframe } from '../../utils'
+import { formattedNum, getTimeframe } from '../../utils'
 import { TYPE } from '../../Theme'
 
 const CHART_VIEW = {
@@ -19,6 +19,67 @@ const VOLUME_WINDOW = {
   WEEKLY: 'WEEKLY',
   DAYS: 'DAYS',
 }
+const ChartShell = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+`
+
+const ChartHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+`
+
+const ChartMeta = styled.div`
+  display: grid;
+  gap: 6px;
+`
+
+const ChartTitle = styled.div`
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+`
+
+const ChartValue = styled.div`
+  font-size: 20px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+`
+
+const ChartChange = styled.span`
+  font-size: 12px;
+  color: ${({ $positive }) => ($positive ? '#22c55e' : '#ef4444')};
+`
+
+const ChartControls = styled.div`
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+`
+
+const ChartBody = styled.div`
+  height: 260px;
+  min-height: 260px;
+  position: relative;
+`
+
+const EmptyState = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.65);
+`
+
 const GlobalChart = ({ display }) => {
   // chart options
   const [chartView, setChartView] = useState(display === 'volume' ? CHART_VIEW.VOLUME : CHART_VIEW.LIQUIDITY)
@@ -66,82 +127,129 @@ const GlobalChart = ({ display }) => {
   // update the width on a window resize
   const ref = useRef()
   const isClient = typeof window === 'object'
-  const [width, setWidth] = useState(ref?.current?.container?.clientWidth)
+  const [width, setWidth] = useState(560)
   useEffect(() => {
     if (!isClient) {
       return false
     }
     function handleResize() {
-      setWidth(ref?.current?.container?.clientWidth ?? width)
+      setWidth(ref?.current?.clientWidth ?? width)
     }
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
   }, [isClient, width]) // Empty array ensures that effect is only run on mount and unmount
 
+  const hasHistory = chartDataFiltered && chartDataFiltered.length > 1
   return chartDataFiltered ? (
     <>
       {below800 && (
         <DropdownSelect options={CHART_VIEW} active={chartView} setActive={setChartView} color={'#ff007a'} />
       )}
 
-      {chartDataFiltered && chartView === CHART_VIEW.LIQUIDITY && (() => {
-        const { base, change } = deriveBase(chartDataFiltered, 'totalLiquidityETH')
-        return (
-        <ResponsiveContainer aspect={60 / 28} ref={ref}>
-          <TradingViewChart
-            data={dailyData}
-            base={base}
-            baseChange={change}
-            title="Liquidity (WNOVA)"
-            field="totalLiquidityETH"
-            width={width}
-            type={CHART_TYPES.AREA}
-          />
-        </ResponsiveContainer>
-        )
-      })()}
-      {chartDataFiltered && chartView === CHART_VIEW.VOLUME && (() => {
-        const field = volumeWindow === VOLUME_WINDOW.WEEKLY ? 'weeklyVolumeETH' : 'dailyVolumeETH'
-        const { base, change } = deriveBase(chartDataFiltered, field)
-        return (
-        <ResponsiveContainer aspect={60 / 28}>
-          <TradingViewChart
-            data={chartDataFiltered}
-            base={base}
-            baseChange={change}
-            title={volumeWindow === VOLUME_WINDOW.WEEKLY ? 'Volume (7d, WNOVA)' : 'Volume (WNOVA)'}
-            field={field}
-            width={width}
-            type={CHART_TYPES.BAR}
-            useWeekly={volumeWindow === VOLUME_WINDOW.WEEKLY}
-          />
-        </ResponsiveContainer>
-        )
-      })()}
-      {display === 'volume' && (
-        <RowFixed
-          style={{
-            bottom: '70px',
-            position: 'absolute',
-            left: '20px',
-            zIndex: 10,
-          }}
-        >
-          <OptionButton
-            active={volumeWindow === VOLUME_WINDOW.DAYS}
-            onClick={() => setVolumeWindow(VOLUME_WINDOW.DAYS)}
-          >
-            <TYPE.body>D</TYPE.body>
-          </OptionButton>
-          <OptionButton
-            style={{ marginLeft: '4px' }}
-            active={volumeWindow === VOLUME_WINDOW.WEEKLY}
-            onClick={() => setVolumeWindow(VOLUME_WINDOW.WEEKLY)}
-          >
-            <TYPE.body>W</TYPE.body>
-          </OptionButton>
-        </RowFixed>
-      )}
+      <ChartShell>
+        {chartDataFiltered && chartView === CHART_VIEW.LIQUIDITY && (() => {
+          const { base, change } = deriveBase(chartDataFiltered, 'totalLiquidityETH')
+          const changeValue = Number.isFinite(change) ? change.toFixed(2) : null
+          return (
+            <>
+              <ChartHeader>
+                <ChartMeta>
+                  <ChartTitle>Liquidity (WNOVA)</ChartTitle>
+                  <ChartValue>
+                    {Number.isFinite(base) ? formattedNum(base, false) : '—'}
+                    {changeValue ? (
+                      <ChartChange $positive={Number(changeValue) >= 0}>
+                        {Number(changeValue) >= 0 ? '+' : ''}
+                        {changeValue}%
+                      </ChartChange>
+                    ) : (
+                      <ChartChange $positive={true}>—</ChartChange>
+                    )}
+                  </ChartValue>
+                </ChartMeta>
+              </ChartHeader>
+              <ChartBody ref={ref}>
+                {hasHistory ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <TradingViewChart
+                      data={dailyData}
+                      base={base}
+                      baseChange={change}
+                      title="Liquidity (WNOVA)"
+                      field="totalLiquidityETH"
+                      width={width}
+                      type={CHART_TYPES.AREA}
+                      showOverlay={false}
+                    />
+                  </ResponsiveContainer>
+                ) : (
+                  <EmptyState>Not enough history yet.</EmptyState>
+                )}
+              </ChartBody>
+            </>
+          )
+        })()}
+        {chartDataFiltered && chartView === CHART_VIEW.VOLUME && (() => {
+          const field = volumeWindow === VOLUME_WINDOW.WEEKLY ? 'weeklyVolumeETH' : 'dailyVolumeETH'
+          const { base, change } = deriveBase(chartDataFiltered, field)
+          const changeValue = Number.isFinite(change) ? change.toFixed(2) : null
+          return (
+            <>
+              <ChartHeader>
+                <ChartMeta>
+                  <ChartTitle>{volumeWindow === VOLUME_WINDOW.WEEKLY ? 'Volume (7d, WNOVA)' : 'Volume (WNOVA)'}</ChartTitle>
+                  <ChartValue>
+                    {Number.isFinite(base) ? formattedNum(base, false) : '—'}
+                    {changeValue ? (
+                      <ChartChange $positive={Number(changeValue) >= 0}>
+                        {Number(changeValue) >= 0 ? '+' : ''}
+                        {changeValue}%
+                      </ChartChange>
+                    ) : (
+                      <ChartChange $positive={true}>—</ChartChange>
+                    )}
+                  </ChartValue>
+                </ChartMeta>
+                {display === 'volume' && (
+                  <ChartControls>
+                    <OptionButton
+                      active={volumeWindow === VOLUME_WINDOW.DAYS}
+                      onClick={() => setVolumeWindow(VOLUME_WINDOW.DAYS)}
+                    >
+                      <TYPE.body>D</TYPE.body>
+                    </OptionButton>
+                    <OptionButton
+                      active={volumeWindow === VOLUME_WINDOW.WEEKLY}
+                      onClick={() => setVolumeWindow(VOLUME_WINDOW.WEEKLY)}
+                    >
+                      <TYPE.body>W</TYPE.body>
+                    </OptionButton>
+                  </ChartControls>
+                )}
+              </ChartHeader>
+              <ChartBody ref={ref}>
+                {hasHistory ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <TradingViewChart
+                      data={chartDataFiltered}
+                      base={base}
+                      baseChange={change}
+                      title={volumeWindow === VOLUME_WINDOW.WEEKLY ? 'Volume (7d, WNOVA)' : 'Volume (WNOVA)'}
+                      field={field}
+                      width={width}
+                      type={CHART_TYPES.BAR}
+                      useWeekly={volumeWindow === VOLUME_WINDOW.WEEKLY}
+                      showOverlay={false}
+                    />
+                  </ResponsiveContainer>
+                ) : (
+                  <EmptyState>Not enough history yet.</EmptyState>
+                )}
+              </ChartBody>
+            </>
+          )
+        })()}
+      </ChartShell>
     </>
   ) : (
     ''

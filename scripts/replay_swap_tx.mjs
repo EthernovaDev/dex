@@ -70,6 +70,18 @@ async function main() {
     txRequest.gas = txRequest.gasLimit
     delete txRequest.gasLimit
   }
+  if (typeof txRequest?.gas === 'string') {
+    let gasHex = txRequest.gas.toLowerCase()
+    if (gasHex.startsWith('0x0') && gasHex.length > 3) {
+      gasHex = `0x${gasHex.replace(/^0x0+/, '')}`
+      if (gasHex === '0x') gasHex = '0x0'
+      txRequest.gas = gasHex
+    }
+  }
+  // eth_call/estimateGas do not accept chainId in tx params
+  if (txRequest?.chainId !== undefined) {
+    delete txRequest.chainId
+  }
   if (typeof txRequest?.value === 'string') {
     try {
       const valueBig = BigInt(txRequest.value)

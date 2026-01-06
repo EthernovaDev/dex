@@ -13,6 +13,21 @@ METADATA_BASE_URL="$METADATA_BASE_URL_LOCAL" node "$ROOT_DIR/scripts/smoke_metad
 METADATA_BASE_URL="$METADATA_BASE_URL_LOCAL" node "$ROOT_DIR/scripts/smoke_metadata_upload_image.mjs"
 METADATA_BASE_URL="$METADATA_BASE_URL_LOCAL" node "$ROOT_DIR/scripts/smoke_quota_wallet.mjs"
 
+if [ "${SMOKE_SWAP_QUOTE:-0}" = "1" ]; then
+  echo "[INFO] Running smoke_swap_quote..."
+  node "$ROOT_DIR/scripts/smoke_swap_quote.mjs"
+fi
+
+if [ "${SMOKE_SWAP_SIM:-0}" = "1" ]; then
+  echo "[INFO] Running smoke_swap_simulate..."
+  node "$ROOT_DIR/scripts/smoke_swap_simulate.mjs"
+fi
+
+if [ "${SMOKE_BOOST_E2E:-0}" = "1" ]; then
+  echo "[INFO] Running smoke_boost_e2e..."
+  node "$ROOT_DIR/scripts/smoke_boost_e2e.mjs"
+fi
+
 echo "[INFO] Running smoke_rpc_health..."
 RPC_STATUS=0
 node "$ROOT_DIR/scripts/smoke_rpc_health.mjs" || RPC_STATUS=$?

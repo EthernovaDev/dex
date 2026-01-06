@@ -355,9 +355,9 @@ function GlobalPage() {
   }, [boostState, pairLookup])
 
   const handleActivityRetry = () => {
-    txStatus?.refresh?.()
-    chartStatus?.refresh?.()
-    boostState?.refresh?.()
+    if (txStatus?.refresh) txStatus.refresh()
+    if (chartStatus?.refresh) chartStatus.refresh()
+    if (boostState?.refresh) boostState.refresh()
   }
 
   const boostFeeDisplay = useMemo(() => {

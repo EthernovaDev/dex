@@ -296,8 +296,8 @@ function PairPageContent({ pairId, history }) {
     : 0
   const [boostStatus, setBoostStatus] = useState({ state: 'idle', error: null, tx: null })
   const handleBoostRetry = () => {
-    boostInfoState?.refresh?.()
-    boostConfigState?.refresh?.()
+    if (boostInfoState?.refresh) boostInfoState.refresh()
+    if (boostConfigState?.refresh) boostConfigState.refresh()
   }
 
   const [dismissed, markAsDismissed] = usePathDismissed(history.location.pathname)

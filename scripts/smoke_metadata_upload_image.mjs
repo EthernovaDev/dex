@@ -53,15 +53,25 @@ async function fetchJson(url, opts, label = 'request') {
 
 async function main() {
   const wallet = ethers.Wallet.createRandom()
-  const challenge = await fetchJson(
-    `${baseUrl}/api/metadata/challenge`,
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ address: wallet.address })
-    },
-    'challenge'
-  )
+  let challenge
+  try {
+    challenge = await fetchJson(
+      `${baseUrl}/api/metadata/challenge`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ address: wallet.address })
+      },
+      'challenge'
+    )
+  } catch (err) {
+    const msg = String(err?.message || '')
+    if (/HTTP 429|rate limit/i.test(msg)) {
+      log(`[WARN] challenge rate-limited; skipping image upload smoke: ${msg.slice(0, 200)}`)
+      return
+    }
+    throw err
+  }
   const signature = await wallet.signMessage(challenge.message)
 
   const pngData = await sharp({

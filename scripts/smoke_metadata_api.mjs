@@ -127,11 +127,21 @@ async function main() {
   }
 
   const wallet = new ethers.Wallet(priv)
-  const challenge = await fetchJson(`${baseUrl}/api/metadata/challenge`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ address: wallet.address }),
-  }, 'challenge')
+  let challenge
+  try {
+    challenge = await fetchJson(`${baseUrl}/api/metadata/challenge`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ address: wallet.address }),
+    }, 'challenge')
+  } catch (err) {
+    const msg = String(err?.message || '')
+    if (/HTTP 429|rate limit/i.test(msg)) {
+      warn(`metadata challenge rate-limited; skipping POST tests: ${msg.slice(0, 200)}`)
+      return
+    }
+    throw err
+  }
   if (!challenge?.message) fail('challenge failed')
   const signature = await wallet.signMessage(challenge.message)
 

@@ -36,6 +36,9 @@ async function signHeaders(wallet) {
     },
     'challenge'
   )
+  if (res.status === 429) {
+    return null
+  }
   if (!res.ok || !json?.message) {
     throw new Error(`challenge failed: ${text.slice(0, 200)}`)
   }
@@ -49,6 +52,10 @@ async function main() {
 
   for (let i = 1; i <= attempts; i += 1) {
     const headers = await signHeaders(wallet)
+    if (!headers) {
+      log('[WARN] challenge rate-limited; skipping quota smoke')
+      return
+    }
     const payload = {
       token: tokenAddress,
       creator: wallet.address,

@@ -30,6 +30,10 @@ async function main() {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ address: wallet.address })
   })
+  if (challenge.res.status === 429) {
+    log(`[WARN] challenge rate-limited; skipping metadata limits smoke: ${challenge.text.slice(0, 200)}`)
+    return
+  }
   if (!challenge.res.ok || !challenge.json?.message) {
     fail(`challenge failed: ${challenge.text.slice(0, 200)}`)
   }

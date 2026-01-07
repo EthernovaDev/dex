@@ -68,7 +68,7 @@ async function main() {
     if (res.status === 429) {
       hitLimit = true
       const msg = text.slice(0, 200)
-      const isIpLimit = /IP publish limit|IP request limit|IP bytes limit/i.test(msg)
+      const isIpLimit = /IP publish limit|IP request limit|IP bytes limit|Rate limit exceeded/i.test(msg)
       if (i <= expectedLimit && !isIpLimit) {
         fail(`quota triggered too early on attempt ${i}: ${msg}`)
       }

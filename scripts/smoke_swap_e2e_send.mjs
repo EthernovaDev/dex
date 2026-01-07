@@ -22,10 +22,14 @@ function loadConfig() {
 }
 
 function loadPrivateKey() {
-  if (process.env.SMOKE_PRIVKEY?.trim()) return process.env.SMOKE_PRIVKEY.trim()
+  if (process.env.SMOKE_PRIVKEY?.trim()) {
+    const raw = process.env.SMOKE_PRIVKEY.trim()
+    return raw.startsWith('0x') ? raw : `0x${raw}`
+  }
   if (fs.existsSync(PK_FILE)) {
     const key = fs.readFileSync(PK_FILE, 'utf8').trim()
-    return key || null
+    if (!key) return null
+    return key.startsWith('0x') ? key : `0x${key}`
   }
   return null
 }

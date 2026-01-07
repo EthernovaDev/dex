@@ -3,7 +3,7 @@ import { Contract } from '@ethersproject/contracts'
 import { Interface } from '@ethersproject/abi'
 import { JSBI, Percent, Router, SwapParameters, Trade, TradeType } from '@im33357/uniswap-v2-sdk'
 import { useMemo } from 'react'
-import { BIPS_BASE, DEFAULT_DEADLINE_FROM_NOW, INITIAL_ALLOWED_SLIPPAGE } from '../constants'
+import { BIPS_BASE, DEFAULT_DEADLINE_FROM_NOW, INITIAL_ALLOWED_SLIPPAGE, TREASURY_FEE_BPS } from '../constants'
 import { getTradeVersion, useV1TradeExchangeAddress } from '../data/V1'
 import { useTransactionAdder } from '../state/transactions/hooks'
 import { calculateGasMargin, getRouterContract, isAddress, shortenAddress } from '../utils'
@@ -17,6 +17,7 @@ import { useSwapRouterAddress } from './useSwapRouterAddress'
 import { computeSwapSlippageAmounts } from '../utils/prices'
 import { Field } from '../state/swap/actions'
 import { emitDebug } from '../utils/debugEvents'
+import { isWnovaCurrency } from '../utils/treasuryFee'
 
 export enum SwapCallbackState {
   INVALID,
@@ -52,6 +53,61 @@ function refreshSwapCallDeadline(call: SwapCall, deadlineSeconds: number, nowTs?
     parameters: {
       ...call.parameters,
       args
+    }
+  }
+}
+
+async function refreshSwapCallMinOut(
+  call: SwapCall,
+  trade: Trade,
+  allowedSlippage: number
+): Promise<SwapCall> {
+  const {
+    parameters: { methodName, args },
+    contract
+  } = call
+
+  if (trade.tradeType !== TradeType.EXACT_INPUT) return call
+  if (!methodName.startsWith('swapExactTokens')) return call
+  if (!args || args.length < 3) return call
+
+  const path = args[2]
+  if (!Array.isArray(path) || path.length < 2) return call
+
+  let amountIn: BigNumber
+  try {
+    amountIn = BigNumber.from(args[0].toString())
+  } catch {
+    return call
+  }
+
+  let amountInForQuote = amountIn
+  if (isWnovaCurrency(trade.inputAmount.currency)) {
+    amountInForQuote = amountIn.mul(10000 - TREASURY_FEE_BPS).div(10000)
+  }
+
+  let amountsOut: BigNumber[] | null = null
+  try {
+    const out = await contract.getAmountsOut(amountInForQuote.toString(), path)
+    amountsOut = out ? (Array.isArray(out) ? out.map(value => BigNumber.from(value)) : null) : null
+  } catch {
+    return call
+  }
+
+  if (!amountsOut || amountsOut.length === 0) return call
+  const rawOut = amountsOut[amountsOut.length - 1]
+  let minOut = rawOut.mul(10000 - allowedSlippage).div(10000)
+  if (isWnovaCurrency(trade.outputAmount.currency)) {
+    minOut = minOut.mul(10000 - TREASURY_FEE_BPS).div(10000)
+  }
+
+  const updatedArgs = [...args]
+  updatedArgs[1] = minOut.toString()
+  return {
+    ...call,
+    parameters: {
+      ...call.parameters,
+      args: updatedArgs
     }
   }
 }
@@ -325,8 +381,11 @@ export function useSwapCallback(
       callback: async function onSwap(): Promise<string> {
         const nowTs = Math.floor(Date.now() / 1000)
         const freshSwapCalls = swapCalls.map(call => refreshSwapCallDeadline(call, deadline, nowTs))
+        const refreshedSwapCalls = await Promise.all(
+          freshSwapCalls.map(call => refreshSwapCallMinOut(call, trade, allowedSlippage))
+        )
         const estimatedCalls: EstimatedSwapCall[] = await Promise.all(
-          freshSwapCalls.map(call => {
+          refreshedSwapCalls.map(call => {
             const {
               parameters: { methodName, args, value },
               contract

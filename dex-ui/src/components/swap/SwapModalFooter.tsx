@@ -23,6 +23,8 @@ import { useSwapCallArguments } from '../../hooks/useSwapCallback'
 import { Interface } from '@ethersproject/abi'
 import { BigNumber } from '@ethersproject/bignumber'
 import { calculateGasMargin } from '../../utils'
+import { TREASURY_FEE_BPS } from '../../constants'
+import { isWnovaCurrency } from '../../utils/treasuryFee'
 import { emitDebug } from '../../utils/debugEvents'
 
 export default function SwapModalFooter({
@@ -147,11 +149,57 @@ export default function SwapModalFooter({
         }
       }))
 
+      const callsWithFreshMinOut = await Promise.all(
+        callsWithFreshDeadline.map(async call => {
+          const {
+            parameters: { methodName, args },
+            contract
+          } = call
+          if (trade.tradeType !== TradeType.EXACT_INPUT) return call
+          if (!methodName.startsWith('swapExactTokens')) return call
+          if (!args || args.length < 3) return call
+          const path = args[2]
+          if (!Array.isArray(path) || path.length < 2) return call
+          let amountIn: BigNumber
+          try {
+            amountIn = BigNumber.from(args[0].toString())
+          } catch {
+            return call
+          }
+          let amountInForQuote = amountIn
+          if (isWnovaCurrency(trade.inputAmount.currency)) {
+            amountInForQuote = amountIn.mul(10000 - TREASURY_FEE_BPS).div(10000)
+          }
+          let amountsOut: BigNumber[] | null = null
+          try {
+            const out = await (contract as any).getAmountsOut(amountInForQuote.toString(), path)
+            amountsOut = out ? (Array.isArray(out) ? out.map((v: any) => BigNumber.from(v)) : null) : null
+          } catch {
+            return call
+          }
+          if (!amountsOut || amountsOut.length === 0) return call
+          const rawOut = amountsOut[amountsOut.length - 1]
+          let minOut = rawOut.mul(10000 - allowedSlippage).div(10000)
+          if (isWnovaCurrency(trade.outputAmount.currency)) {
+            minOut = minOut.mul(10000 - TREASURY_FEE_BPS).div(10000)
+          }
+          const updatedArgs = [...args]
+          updatedArgs[1] = minOut.toString()
+          return {
+            ...call,
+            parameters: {
+              ...call.parameters,
+              args: updatedArgs
+            }
+          }
+        })
+      )
+
       let lastError: any = null
       let selectedCall: any = null
       let gasEstimate: BigNumber | null = null
       const estimatedCalls = await Promise.all(
-        callsWithFreshDeadline.map(async call => {
+        callsWithFreshMinOut.map(async call => {
           const {
             parameters: { methodName, args, value },
             contract
@@ -185,7 +233,7 @@ export default function SwapModalFooter({
         lastError = errorCall && 'error' in errorCall ? errorCall.error : null
       }
 
-      const callToUse = selectedCall || callsWithFreshDeadline[0]
+      const callToUse = selectedCall || callsWithFreshMinOut[0]
       if (!callToUse) {
         setSimulateState({ status: 'error', message: 'no swap call data' })
         return { status: 'error', reason: 'no swap call data' }

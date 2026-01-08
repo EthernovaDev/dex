@@ -365,7 +365,9 @@ function GlobalPage() {
     const feeRaw = boostState?.config?.feeAmount
     if (!feeRaw) return '10'
     try {
-      const parsed = Number(ethers.utils.formatUnits(feeRaw.toString(), 18))
+      const formatter = ethers?.utils?.formatUnits || ethers?.formatUnits
+      const formatted = formatter ? formatter(feeRaw.toString(), 18) : feeRaw.toString()
+      const parsed = Number(formatted)
       return formattedNum(parsed, false)
     } catch {
       return '10'

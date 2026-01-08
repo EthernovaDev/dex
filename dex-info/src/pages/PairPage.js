@@ -287,15 +287,32 @@ function PairPageContent({ pairId, history }) {
     ? 'Simulated RPC error'
     : boostInfoState?.error || boostConfigState?.error
   const boostFeeRaw = boostConfigState?.config?.feeAmount || '10000000000000000000'
-  let boostFeeAmount = ethers.utils.parseUnits('10', 18)
-  try {
-    boostFeeAmount = ethers.BigNumber.from(boostFeeRaw)
-  } catch {
-    boostFeeAmount = ethers.utils.parseUnits('10', 18)
+  const toBigIntSafe = (value) => {
+    try {
+      if (value === null || value === undefined) return 0n
+      if (typeof value === 'bigint') return value
+      if (typeof value === 'number') return BigInt(Math.floor(value))
+      if (typeof value === 'string') return BigInt(value)
+      if (typeof value?.toString === 'function') return BigInt(value.toString())
+      return BigInt(String(value))
+    } catch {
+      return 0n
+    }
   }
+  const formatUnitsSafe = (value, decimals = 18) => {
+    try {
+      if (ethers?.utils?.formatUnits) return ethers.utils.formatUnits(value, decimals)
+      if (ethers?.formatUnits) return ethers.formatUnits(value, decimals)
+      return value?.toString?.() || String(value || '0')
+    } catch {
+      return '0'
+    }
+  }
+  const boostFeeAmount = boostFeeRaw
+  const boostFeeAmountBI = toBigIntSafe(boostFeeRaw)
   let boostFeeDisplay = '10'
   try {
-    boostFeeDisplay = formattedNum(Number(ethers.utils.formatUnits(boostFeeRaw, 18)), false)
+    boostFeeDisplay = formattedNum(Number(formatUnitsSafe(boostFeeRaw, 18)), false)
   } catch {
     boostFeeDisplay = '10'
   }
@@ -411,13 +428,14 @@ function PairPageContent({ pairId, history }) {
 
       const feeAmount = boostFeeAmount
       const novaBalance = await provider.getBalance(account)
+      const novaBalanceBI = toBigIntSafe(novaBalance)
       let tx
 
-      if (novaBalance.gte(feeAmount)) {
+      if (novaBalanceBI >= boostFeeAmountBI) {
         tx = await boostContract.boostPair(pairId, BOOST_DURATION, { value: feeAmount })
       } else {
         const allowance = await wnovaContract.allowance(account, BOOST_REGISTRY_ADDRESS)
-        if (allowance.lt(feeAmount)) {
+        if (toBigIntSafe(allowance) < boostFeeAmountBI) {
           const approveTx = await wnovaContract.approve(BOOST_REGISTRY_ADDRESS, feeAmount)
           await approveTx.wait(1)
         }

@@ -427,6 +427,9 @@ function PairPageContent({ pairId, history }) {
       setBoostStatus({ state: 'submitted', error: null, tx: tx.hash })
       await tx.wait(1)
       setBoostStatus({ state: 'confirmed', error: null, tx: tx.hash })
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('boosted-pairs-refresh'))
+      }
     } catch (err) {
       const message = err?.message || 'Boost failed'
       setBoostStatus({ state: 'error', error: message, tx: null })

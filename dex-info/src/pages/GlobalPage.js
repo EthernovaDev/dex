@@ -148,7 +148,7 @@ function BoostedPairCard({ entry, pairData, rpcUrl }) {
   const onchainMissing = onchainPair?.status === 'not_found'
 
   return (
-    <BoostCard key={entry.address}>
+    <BoostCard key={entry.address} data-testid="boosted-card" data-boost-pair={entry.address}>
       <RowBetween>
         <PairMetaRow>
           {token0Address && token1Address ? (

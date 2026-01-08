@@ -11,6 +11,12 @@ const BOOST_ABI = [
   'function maxDuration() view returns (uint256)',
 ]
 
+const BOOST_EVENT_ABI = ['event Boosted(address indexed pair, address indexed booster, uint256 amount, uint256 expiresAt)']
+const idFn = (ethers.utils && ethers.utils.id) || ethers.id
+const InterfaceCtor = (ethers.utils && ethers.utils.Interface) || ethers.Interface
+const BOOST_EVENT_TOPIC = idFn('Boosted(address,address,uint256,uint256)')
+const BOOST_LOOKBACK_BLOCKS = 200000
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const toNumberSafe = (value) => {
@@ -41,6 +47,13 @@ export function useBoostedPairs(rpcUrl, refreshMs = 60000) {
   const refresh = () => setRefreshToken((value) => value + 1)
 
   useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+    const handler = () => refresh()
+    window.addEventListener('boosted-pairs-refresh', handler)
+    return () => window.removeEventListener('boosted-pairs-refresh', handler)
+  }, [])
+
+  useEffect(() => {
     if (!rpcUrl || !BOOST_REGISTRY_ADDRESS) return
     let cancelled = false
     const requestId = ++requestRef.current
@@ -48,32 +61,88 @@ export function useBoostedPairs(rpcUrl, refreshMs = 60000) {
     const fetchBoosts = async () => {
       setState((prev) => ({ ...prev, status: prev.boosted.length ? 'ok' : 'loading', error: null }))
       try {
-        const provider = new ethers.providers.JsonRpcProvider(rpcUrl)
+        const JsonRpcProvider = ethers.providers?.JsonRpcProvider || ethers.JsonRpcProvider
+        const provider = new JsonRpcProvider(rpcUrl)
         const contract = new ethers.Contract(BOOST_REGISTRY_ADDRESS, BOOST_ABI, provider)
 
-        const [countRaw, feeAmountRaw, treasury, maxDurationRaw] = await Promise.all([
-          contract.boostCount(),
-          contract.feeAmount(),
-          contract.treasury(),
-          contract.maxDuration(),
-        ])
+        let feeAmountRaw
+        let treasury
+        let maxDurationRaw
+        try {
+          ;[feeAmountRaw, treasury, maxDurationRaw] = await Promise.all([
+            contract.feeAmount(),
+            contract.treasury(),
+            contract.maxDuration(),
+          ])
+        } catch (err) {
+          console.warn('[boostConfig] RPC busy', err)
+        }
 
-        const count = toNumberSafe(countRaw)
+        let count = 0
+        try {
+          const countRaw = await contract.boostCount()
+          count = toNumberSafe(countRaw)
+        } catch (err) {
+          console.warn('[boostedPairs] boostCount failed, falling back to logs', err)
+        }
         const now = Math.floor(Date.now() / 1000)
-        const boosted = []
-
-        for (let i = 0; i < count; i += 1) {
-          // eslint-disable-next-line no-await-in-loop
-          const [pair, booster, expiresAtRaw] = await contract.boostAt(i)
-          const expiresAt = toNumberSafe(expiresAtRaw)
-          if (expiresAt > now) {
-            boosted.push({ pair, booster, expiresAt })
-          }
-          if (i % 10 === 0) {
-            // avoid hammering RPC
+        let boosted = []
+        let logFallbackFailed = false
+        if (count > 0) {
+          for (let i = 0; i < count; i += 1) {
             // eslint-disable-next-line no-await-in-loop
-            await sleep(50)
+            const [pair, booster, expiresAtRaw] = await contract.boostAt(i)
+            const expiresAt = toNumberSafe(expiresAtRaw)
+            if (expiresAt > now) {
+              boosted.push({ pair, booster, expiresAt })
+            }
+            if (i % 10 === 0) {
+              // avoid hammering RPC
+              // eslint-disable-next-line no-await-in-loop
+              await sleep(50)
+            }
           }
+        }
+
+        if (!boosted.length) {
+          try {
+            const iface = new InterfaceCtor(BOOST_EVENT_ABI)
+            const latest = await provider.getBlockNumber()
+            const fromBlock = Math.max(0, latest - BOOST_LOOKBACK_BLOCKS)
+            const logs = await provider.getLogs({
+              address: BOOST_REGISTRY_ADDRESS,
+              fromBlock,
+              toBlock: latest,
+              topics: [BOOST_EVENT_TOPIC],
+            })
+            const byPair = new Map()
+            for (const log of logs) {
+              let parsed
+              try {
+                parsed = iface.parseLog(log)
+              } catch (err) {
+                continue
+              }
+              const pair = parsed?.args?.pair || parsed?.args?.[0]
+              const booster = parsed?.args?.booster || parsed?.args?.[1]
+              const expiresAtRaw = parsed?.args?.expiresAt || parsed?.args?.[3]
+              const expiresAt = toNumberSafe(expiresAtRaw)
+              if (!pair || expiresAt <= now) continue
+              const key = String(pair).toLowerCase()
+              const existing = byPair.get(key)
+              if (!existing || expiresAt > existing.expiresAt) {
+                byPair.set(key, { pair, booster, expiresAt })
+              }
+            }
+            boosted = Array.from(byPair.values())
+          } catch (err) {
+            logFallbackFailed = true
+            console.warn('[boostedPairs] log fallback failed', err)
+          }
+        }
+
+        if (!boosted.length && logFallbackFailed) {
+          throw new Error('Boosted log fetch failed')
         }
 
         if (!cancelled && requestRef.current === requestId) {
@@ -122,7 +191,8 @@ export function usePairBoostInfo(pairAddress, rpcUrl) {
     const fetchInfo = async () => {
       setState((prev) => ({ ...prev, status: prev.info ? 'ok' : 'loading', error: null }))
       try {
-        const provider = new ethers.providers.JsonRpcProvider(rpcUrl)
+        const JsonRpcProvider = ethers.providers?.JsonRpcProvider || ethers.JsonRpcProvider
+        const provider = new JsonRpcProvider(rpcUrl)
         const contract = new ethers.Contract(BOOST_REGISTRY_ADDRESS, BOOST_ABI, provider)
         const [booster, expiresAtRaw] = await contract.boostInfo(pairAddress)
         const expiresAt = toNumberSafe(expiresAtRaw)
@@ -161,7 +231,8 @@ export function useBoostRegistryConfig(rpcUrl) {
     const fetchConfig = async () => {
       setState((prev) => ({ ...prev, status: prev.config ? 'ok' : 'loading', error: null }))
       try {
-        const provider = new ethers.providers.JsonRpcProvider(rpcUrl)
+        const JsonRpcProvider = ethers.providers?.JsonRpcProvider || ethers.JsonRpcProvider
+        const provider = new JsonRpcProvider(rpcUrl)
         const contract = new ethers.Contract(BOOST_REGISTRY_ADDRESS, BOOST_ABI, provider)
         const [feeAmountRaw, treasury, maxDurationRaw] = await Promise.all([
           contract.feeAmount(),

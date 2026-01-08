@@ -13,22 +13,21 @@ const BOOST_ABI = [
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
-const toBI = (value) => {
-  try {
-    if (value === null || value === undefined) return 0n
-    if (typeof value === 'bigint') return value
-    if (typeof value === 'number') return BigInt(Math.floor(value))
-    if (typeof value === 'string') return BigInt(value)
-    if (typeof value?.toString === 'function') return BigInt(value.toString())
-    return BigInt(String(value))
-  } catch {
-    return 0n
-  }
-}
-
 const toNumberSafe = (value) => {
   try {
-    return Number(toBI(value))
+    if (value === null || value === undefined) return 0
+    if (typeof value === 'number') return Number.isFinite(value) ? Math.floor(value) : 0
+    if (typeof value === 'string') {
+      const parsed = Number.parseInt(value, value.startsWith('0x') ? 16 : 10)
+      return Number.isFinite(parsed) ? parsed : 0
+    }
+    if (typeof value?.toString === 'function') {
+      const text = value.toString()
+      const parsed = Number.parseInt(text, text.startsWith('0x') ? 16 : 10)
+      return Number.isFinite(parsed) ? parsed : 0
+    }
+    const parsed = Number.parseInt(String(value), 10)
+    return Number.isFinite(parsed) ? parsed : 0
   } catch {
     return 0
   }

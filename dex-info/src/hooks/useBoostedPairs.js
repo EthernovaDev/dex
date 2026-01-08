@@ -15,7 +15,7 @@ const BOOST_EVENT_ABI = ['event Boosted(address indexed pair, address indexed bo
 const idFn = (ethers.utils && ethers.utils.id) || ethers.id
 const InterfaceCtor = (ethers.utils && ethers.utils.Interface) || ethers.Interface
 const BOOST_EVENT_TOPIC = idFn('Boosted(address,address,uint256,uint256)')
-const BOOST_LOOKBACK_BLOCKS = 200000
+const BOOST_LOOKBACK_BLOCKS = 20000
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -42,9 +42,26 @@ const toNumberSafe = (value) => {
 export function useBoostedPairs(rpcUrl, refreshMs = 60000) {
   const [state, setState] = useState({ status: 'idle', boosted: [], config: null, error: null })
   const requestRef = useRef(0)
+  const lastGoodRef = useRef([])
   const [refreshToken, setRefreshToken] = useState(0)
 
   const refresh = () => setRefreshToken((value) => value + 1)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const cached = window.localStorage.getItem('novadex.boostedPairs')
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        if (Array.isArray(parsed?.boosted) && parsed.boosted.length) {
+          lastGoodRef.current = parsed.boosted
+          setState((prev) => ({ ...prev, boosted: parsed.boosted, status: 'ok' }))
+        }
+      }
+    } catch {
+      // ignore cache errors
+    }
+  }, [])
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined
@@ -88,13 +105,18 @@ export function useBoostedPairs(rpcUrl, refreshMs = 60000) {
         const now = Math.floor(Date.now() / 1000)
         let boosted = []
         let logFallbackFailed = false
+        let boostAtFailures = 0
         if (count > 0) {
           for (let i = 0; i < count; i += 1) {
-            // eslint-disable-next-line no-await-in-loop
-            const [pair, booster, expiresAtRaw] = await contract.boostAt(i)
-            const expiresAt = toNumberSafe(expiresAtRaw)
-            if (expiresAt > now) {
-              boosted.push({ pair, booster, expiresAt })
+            try {
+              // eslint-disable-next-line no-await-in-loop
+              const [pair, booster, expiresAtRaw] = await contract.boostAt(i)
+              const expiresAt = toNumberSafe(expiresAtRaw)
+              if (pair && expiresAt > now) {
+                boosted.push({ pair, booster, expiresAt })
+              }
+            } catch (err) {
+              boostAtFailures += 1
             }
             if (i % 10 === 0) {
               // avoid hammering RPC
@@ -104,7 +126,7 @@ export function useBoostedPairs(rpcUrl, refreshMs = 60000) {
           }
         }
 
-        if (!boosted.length) {
+        if (!boosted.length || boostAtFailures === count) {
           try {
             const iface = new InterfaceCtor(BOOST_EVENT_ABI)
             const latest = await provider.getBlockNumber()
@@ -117,17 +139,27 @@ export function useBoostedPairs(rpcUrl, refreshMs = 60000) {
             })
             const byPair = new Map()
             for (const log of logs) {
-              let parsed
+              let pair
+              let booster
+              let expiresAt
               try {
-                parsed = iface.parseLog(log)
+                const parsed = iface.parseLog(log)
+                pair = parsed?.args?.pair || parsed?.args?.[0]
+                booster = parsed?.args?.booster || parsed?.args?.[1]
+                const expiresAtRaw = parsed?.args?.expiresAt || parsed?.args?.[3]
+                expiresAt = toNumberSafe(expiresAtRaw)
               } catch (err) {
-                continue
+                try {
+                  pair = log?.topics?.[1] ? `0x${log.topics[1].slice(26)}` : null
+                  booster = log?.topics?.[2] ? `0x${log.topics[2].slice(26)}` : null
+                  const data = log?.data?.replace(/^0x/, '') || ''
+                  const expiresHex = data.length >= 128 ? data.slice(64, 128) : ''
+                  expiresAt = toNumberSafe(expiresHex ? `0x${expiresHex}` : 0)
+                } catch (inner) {
+                  continue
+                }
               }
-              const pair = parsed?.args?.pair || parsed?.args?.[0]
-              const booster = parsed?.args?.booster || parsed?.args?.[1]
-              const expiresAtRaw = parsed?.args?.expiresAt || parsed?.args?.[3]
-              const expiresAt = toNumberSafe(expiresAtRaw)
-              if (!pair || expiresAt <= now) continue
+              if (!pair || !expiresAt || expiresAt <= now) continue
               const key = String(pair).toLowerCase()
               const existing = byPair.get(key)
               if (!existing || expiresAt > existing.expiresAt) {
@@ -146,9 +178,19 @@ export function useBoostedPairs(rpcUrl, refreshMs = 60000) {
         }
 
         if (!cancelled && requestRef.current === requestId) {
+          if (boosted.length) {
+            lastGoodRef.current = boosted
+            try {
+              if (typeof window !== 'undefined') {
+                window.localStorage.setItem('novadex.boostedPairs', JSON.stringify({ boosted, ts: Date.now() }))
+              }
+            } catch {
+              // ignore cache errors
+            }
+          }
           setState({
             status: 'ok',
-            boosted,
+            boosted: boosted.length ? boosted : lastGoodRef.current,
             config: {
               feeAmount: feeAmountRaw?.toString?.() || String(feeAmountRaw || '0'),
               treasury,
@@ -160,7 +202,12 @@ export function useBoostedPairs(rpcUrl, refreshMs = 60000) {
       } catch (err) {
         if (!cancelled && requestRef.current === requestId) {
           console.warn('[boostedPairs] RPC busy', err)
-          setState((prev) => ({ ...prev, status: prev.boosted.length ? 'ok' : 'error', error: 'RPC busy' }))
+          setState((prev) => ({
+            ...prev,
+            boosted: prev.boosted.length ? prev.boosted : lastGoodRef.current,
+            status: prev.boosted.length || lastGoodRef.current.length ? 'ok' : 'error',
+            error: 'RPC busy',
+          }))
         }
       }
     }

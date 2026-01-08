@@ -11,10 +11,8 @@ const BOOST_ABI = [
   'function maxDuration() view returns (uint256)',
 ]
 
-const BOOST_EVENT_ABI = ['event Boosted(address indexed pair, address indexed booster, uint256 amount, uint256 expiresAt)']
 const idFn = (ethers.utils && ethers.utils.id) || ethers.id
-const InterfaceCtor = (ethers.utils && ethers.utils.Interface) || ethers.Interface
-const BOOST_EVENT_TOPIC = idFn('Boosted(address,address,uint256,uint256)')
+const BOOST_EVENT_TOPIC = idFn ? idFn('Boosted(address,address,uint256,uint256)') : null
 const BOOST_LOOKBACK_BLOCKS = 20000
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -156,7 +154,6 @@ export function useBoostedPairs(rpcUrl, refreshMs = 60000) {
 
         if (!boosted.length || boostAtFailures === count) {
           try {
-            const iface = new InterfaceCtor(BOOST_EVENT_ABI)
             let latest = 0
             try {
               latest = await callWithRetry(() => provider.getBlockNumber(), 3)
@@ -216,21 +213,13 @@ export function useBoostedPairs(rpcUrl, refreshMs = 60000) {
               let booster
               let expiresAt
               try {
-                const parsed = iface.parseLog(log)
-                pair = parsed?.args?.pair || parsed?.args?.[0]
-                booster = parsed?.args?.booster || parsed?.args?.[1]
-                const expiresAtRaw = parsed?.args?.expiresAt || parsed?.args?.[3]
-                expiresAt = toNumberSafe(expiresAtRaw)
-              } catch (err) {
-                try {
-                  pair = log?.topics?.[1] ? `0x${log.topics[1].slice(26)}` : null
-                  booster = log?.topics?.[2] ? `0x${log.topics[2].slice(26)}` : null
-                  const data = log?.data?.replace(/^0x/, '') || ''
-                  const expiresHex = data.length >= 128 ? data.slice(64, 128) : ''
-                  expiresAt = toNumberSafe(expiresHex ? `0x${expiresHex}` : 0)
-                } catch (inner) {
-                  continue
-                }
+                pair = log?.topics?.[1] ? `0x${log.topics[1].slice(26)}` : null
+                booster = log?.topics?.[2] ? `0x${log.topics[2].slice(26)}` : null
+                const data = log?.data?.replace(/^0x/, '') || ''
+                const expiresHex = data.length >= 128 ? data.slice(64, 128) : ''
+                expiresAt = toNumberSafe(expiresHex ? `0x${expiresHex}` : 0)
+              } catch (inner) {
+                continue
               }
               if (!pair || !expiresAt || expiresAt <= now) continue
               const key = String(pair).toLowerCase()

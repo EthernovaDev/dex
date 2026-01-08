@@ -59,6 +59,7 @@ async function main() {
   const minLiqWnova = Number(process.env.SMOKE_MIN_LIQ_WNOVA || '0.1')
   const minVolWnova = Number(process.env.SMOKE_MIN_VOL24H_WNOVA || '0.001')
   const pairExpect = (process.env.SMOKE_PAIR_EXPECT || 'TONY-WNOVA').toUpperCase()
+  const boostPairExpect = (process.env.SMOKE_BOOST_PAIR || '').toLowerCase()
 
   let rpcSoft503 = 0
   let rpcOtherErrors = 0
@@ -949,6 +950,15 @@ async function main() {
     }
     if (/Page\\s+1\\s+of\\s+0/i.test(htmlContent)) {
       addLiquidityFailures.push('Overview pagination shows Page 1 of 0')
+    }
+    if (boostPairExpect) {
+      const boostPairs = await page.$$eval('[data-boost-pair]', (nodes) =>
+        nodes.map((node) => node.getAttribute('data-boost-pair')).filter(Boolean)
+      )
+      const found = boostPairs.some((addr) => String(addr).toLowerCase() === boostPairExpect)
+      if (!found) {
+        addLiquidityFailures.push(`Boosted pair not found in home list: ${boostPairExpect}`)
+      }
     }
   }
   routesRendered.infoOverview = true

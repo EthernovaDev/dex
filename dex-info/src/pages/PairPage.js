@@ -285,10 +285,13 @@ function PairPageContent({ pairId, history }) {
   const boostRpcError = forceRpcFail
     ? 'Simulated RPC error'
     : boostInfoState?.error || boostConfigState?.error
-  const boostFeeAmount = boostConfigState?.config?.feeAmount
-    ? ethers.BigNumber.from(boostConfigState.config.feeAmount)
-    : ethers.utils.parseUnits('10', 18)
-  const boostFeeDisplay = formattedNum(Number(ethers.utils.formatUnits(boostFeeAmount, 18)), false)
+  const boostFeeRaw = boostConfigState?.config?.feeAmount || '10000000000000000000'
+  let boostFeeDisplay = '10'
+  try {
+    boostFeeDisplay = formattedNum(Number(ethers.utils.formatUnits(boostFeeRaw, 18)), false)
+  } catch {
+    boostFeeDisplay = '10'
+  }
   const boostExpiresAt = boostInfoState?.info?.expiresAt || 0
   const boostActive = boostExpiresAt > Math.floor(Date.now() / 1000)
   const boostRemainingHours = boostActive
@@ -535,7 +538,7 @@ function PairPageContent({ pairId, history }) {
             </TYPE.light>
             {boostRpcError && (
               <TYPE.light fontSize={12} style={{ marginTop: '0.5rem' }}>
-                RPC busy, retrying… {boostRpcError}
+                RPC busy, retrying…
               </TYPE.light>
             )}
             <RowBetween style={{ marginTop: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>

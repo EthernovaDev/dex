@@ -13,6 +13,27 @@ const BOOST_ABI = [
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
+const toBI = (value) => {
+  try {
+    if (value === null || value === undefined) return 0n
+    if (typeof value === 'bigint') return value
+    if (typeof value === 'number') return BigInt(Math.floor(value))
+    if (typeof value === 'string') return BigInt(value)
+    if (typeof value?.toString === 'function') return BigInt(value.toString())
+    return BigInt(String(value))
+  } catch {
+    return 0n
+  }
+}
+
+const toNumberSafe = (value) => {
+  try {
+    return Number(toBI(value))
+  } catch {
+    return 0
+  }
+}
+
 export function useBoostedPairs(rpcUrl, refreshMs = 60000) {
   const [state, setState] = useState({ status: 'idle', boosted: [], config: null, error: null })
   const requestRef = useRef(0)
@@ -38,14 +59,14 @@ export function useBoostedPairs(rpcUrl, refreshMs = 60000) {
           contract.maxDuration(),
         ])
 
-        const count = countRaw.toNumber()
+        const count = toNumberSafe(countRaw)
         const now = Math.floor(Date.now() / 1000)
         const boosted = []
 
         for (let i = 0; i < count; i += 1) {
           // eslint-disable-next-line no-await-in-loop
           const [pair, booster, expiresAtRaw] = await contract.boostAt(i)
-          const expiresAt = ethers.BigNumber.from(expiresAtRaw).toNumber()
+          const expiresAt = toNumberSafe(expiresAtRaw)
           if (expiresAt > now) {
             boosted.push({ pair, booster, expiresAt })
           }
@@ -61,16 +82,17 @@ export function useBoostedPairs(rpcUrl, refreshMs = 60000) {
             status: 'ok',
             boosted,
             config: {
-              feeAmount: feeAmountRaw.toString(),
+              feeAmount: feeAmountRaw?.toString?.() || String(feeAmountRaw || '0'),
               treasury,
-              maxDuration: ethers.BigNumber.from(maxDurationRaw).toNumber(),
+              maxDuration: toNumberSafe(maxDurationRaw),
             },
             error: null,
           })
         }
       } catch (err) {
         if (!cancelled && requestRef.current === requestId) {
-          setState((prev) => ({ ...prev, status: prev.boosted.length ? 'ok' : 'error', error: err?.message || 'RPC error' }))
+          console.warn('[boostedPairs] RPC busy', err)
+          setState((prev) => ({ ...prev, status: prev.boosted.length ? 'ok' : 'error', error: 'RPC busy' }))
         }
       }
     }
@@ -104,13 +126,14 @@ export function usePairBoostInfo(pairAddress, rpcUrl) {
         const provider = new ethers.providers.JsonRpcProvider(rpcUrl)
         const contract = new ethers.Contract(BOOST_REGISTRY_ADDRESS, BOOST_ABI, provider)
         const [booster, expiresAtRaw] = await contract.boostInfo(pairAddress)
-        const expiresAt = ethers.BigNumber.from(expiresAtRaw).toNumber()
+        const expiresAt = toNumberSafe(expiresAtRaw)
         if (!cancelled && requestRef.current === requestId) {
           setState({ status: 'ok', info: { booster, expiresAt }, error: null })
         }
       } catch (err) {
         if (!cancelled && requestRef.current === requestId) {
-          setState((prev) => ({ ...prev, status: prev.info ? 'ok' : 'error', error: err?.message || 'RPC error' }))
+          console.warn('[pairBoostInfo] RPC busy', err)
+          setState((prev) => ({ ...prev, status: prev.info ? 'ok' : 'error', error: 'RPC busy' }))
         }
       }
     }
@@ -150,16 +173,17 @@ export function useBoostRegistryConfig(rpcUrl) {
           setState({
             status: 'ok',
             config: {
-              feeAmount: feeAmountRaw.toString(),
+              feeAmount: feeAmountRaw?.toString?.() || String(feeAmountRaw || '0'),
               treasury,
-              maxDuration: ethers.BigNumber.from(maxDurationRaw).toNumber(),
+              maxDuration: toNumberSafe(maxDurationRaw),
             },
             error: null,
           })
         }
       } catch (err) {
         if (!cancelled && requestRef.current === requestId) {
-          setState((prev) => ({ ...prev, status: prev.config ? 'ok' : 'error', error: err?.message || 'RPC error' }))
+          console.warn('[boostConfig] RPC busy', err)
+          setState((prev) => ({ ...prev, status: prev.config ? 'ok' : 'error', error: 'RPC busy' }))
         }
       }
     }

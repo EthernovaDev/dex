@@ -953,6 +953,18 @@ async function main() {
   }
   routesRendered.infoOverview = true
 
+  currentRoute = 'info-home-rpcfail'
+  await page.goto(`${BASE_URL}/info/?rpcFail=1#/home`, { waitUntil: 'domcontentloaded', timeout: 60000 })
+  await page.waitForTimeout(3000)
+  const rpcWarning = await page.locator('[data-testid="boost-rpc-warning"]').count()
+  if (!rpcWarning) {
+    addLiquidityFailures.push('RPC busy banner missing on home when rpcFail=1')
+  }
+  const rpcFailHtml = await page.content()
+  if (/Cannot read properties|TypeError/i.test(rpcFailHtml)) {
+    addLiquidityFailures.push('RPC busy page contains JS TypeError text')
+  }
+
   currentRoute = 'create'
   await page.goto(`${DEBUG_URL}#/create`, { waitUntil: 'domcontentloaded', timeout: 60000 })
   await page.waitForTimeout(2000)

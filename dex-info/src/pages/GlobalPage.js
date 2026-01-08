@@ -502,7 +502,7 @@ function GlobalPage() {
           </SectionHeader>
           {boostState?.error && (
             <Panel style={{ padding: '0.75rem', marginBottom: '0.75rem' }} data-testid="boost-rpc-warning">
-              <TYPE.light fontSize={12}>RPC busy, retrying… {boostState.error}</TYPE.light>
+              <TYPE.light fontSize={12}>RPC busy, retrying…</TYPE.light>
               <button
                 onClick={handleActivityRetry}
                 style={{

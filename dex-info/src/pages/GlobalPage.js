@@ -528,6 +528,10 @@ function GlobalPage() {
                 return <BoostedPairCard key={entry.address} entry={entry} pairData={entry.pair} rpcUrl={RPC_URL} />
               })}
             </BoostedList>
+          ) : boostRpcError ? (
+            <Panel>
+              <EmptyState>Unable to load boosted pairs right now. Please retry.</EmptyState>
+            </Panel>
           ) : (
             <Panel>
               <EmptyState>

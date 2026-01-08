@@ -447,6 +447,19 @@ function PairPageContent({ pairId, history }) {
       await tx.wait(1)
       setBoostStatus({ state: 'confirmed', error: null, tx: tx.hash })
       if (typeof window !== 'undefined') {
+        try {
+          const expiresAt = Math.floor(Date.now() / 1000) + BOOST_DURATION
+          const cached = window.localStorage.getItem('novadex.boostedPairs')
+          const parsed = cached ? JSON.parse(cached) : {}
+          const current = Array.isArray(parsed?.boosted) ? parsed.boosted : []
+          const next = [
+            { pair: pairId, booster: account, expiresAt },
+            ...current.filter((entry) => entry?.pair?.toLowerCase() !== pairId.toLowerCase()),
+          ]
+          window.localStorage.setItem('novadex.boostedPairs', JSON.stringify({ boosted: next, ts: Date.now() }))
+        } catch (err) {
+          console.warn('[boostedPairs] cache update failed', err)
+        }
         window.dispatchEvent(new CustomEvent('boosted-pairs-refresh'))
       }
     } catch (err) {

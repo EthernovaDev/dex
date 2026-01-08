@@ -101,6 +101,7 @@ export function useBoostedPairs(rpcUrl, refreshMs = 60000) {
         let feeAmountRaw
         let treasury
         let maxDurationRaw
+        let hadRpcError = false
         try {
           ;[feeAmountRaw, treasury, maxDurationRaw] = await Promise.all([
             contract.feeAmount(),
@@ -108,7 +109,12 @@ export function useBoostedPairs(rpcUrl, refreshMs = 60000) {
             contract.maxDuration(),
           ])
         } catch (err) {
-          console.warn('[boostConfig] RPC busy', err)
+          if (isRpcBusy(err)) {
+            hadRpcError = true
+            console.warn('[boostConfig] RPC busy', err)
+          } else {
+            throw err
+          }
         }
 
         let count = 0
@@ -116,7 +122,12 @@ export function useBoostedPairs(rpcUrl, refreshMs = 60000) {
           const countRaw = await callWithRetry(() => contract.boostCount(), 4)
           count = toNumberSafe(countRaw)
         } catch (err) {
-          console.warn('[boostedPairs] boostCount failed, falling back to logs', err)
+          if (isRpcBusy(err)) {
+            hadRpcError = true
+            console.warn('[boostedPairs] boostCount failed, falling back to logs', err)
+          } else {
+            throw err
+          }
         }
         const now = Math.floor(Date.now() / 1000)
         let boosted = []
@@ -133,6 +144,7 @@ export function useBoostedPairs(rpcUrl, refreshMs = 60000) {
               }
             } catch (err) {
               boostAtFailures += 1
+              if (isRpcBusy(err)) hadRpcError = true
             }
             if (i % 10 === 0) {
               // avoid hammering RPC
@@ -145,7 +157,20 @@ export function useBoostedPairs(rpcUrl, refreshMs = 60000) {
         if (!boosted.length || boostAtFailures === count) {
           try {
             const iface = new InterfaceCtor(BOOST_EVENT_ABI)
-            const latest = await provider.getBlockNumber()
+            let latest = 0
+            try {
+              latest = await callWithRetry(() => provider.getBlockNumber(), 3)
+            } catch (err) {
+              if (isRpcBusy(err)) {
+                hadRpcError = true
+                console.warn('[boostedPairs] getBlockNumber failed', err)
+              } else {
+                throw err
+              }
+            }
+            if (!latest) {
+              throw new Error('Missing latest block for boosted logs')
+            }
             const fromBlock = Math.max(0, latest - BOOST_LOOKBACK_BLOCKS)
             let logs = []
             try {
@@ -157,7 +182,9 @@ export function useBoostedPairs(rpcUrl, refreshMs = 60000) {
               })
             } catch (err) {
               if (!isRpcBusy(err)) throw err
+              hadRpcError = true
               const chunkSize = 5000
+              let chunkFailures = 0
               for (let start = fromBlock; start <= latest; start += chunkSize) {
                 const end = Math.min(latest, start + chunkSize - 1)
                 try {
@@ -171,12 +198,16 @@ export function useBoostedPairs(rpcUrl, refreshMs = 60000) {
                   logs = logs.concat(chunk || [])
                 } catch (inner) {
                   if (isRpcBusy(inner)) {
+                    chunkFailures += 1
                     // eslint-disable-next-line no-await-in-loop
                     await sleep(250)
                     continue
                   }
                   throw inner
                 }
+              }
+              if (!logs.length && chunkFailures) {
+                logFallbackFailed = true
               }
             }
             const byPair = new Map()
@@ -216,7 +247,7 @@ export function useBoostedPairs(rpcUrl, refreshMs = 60000) {
         }
 
         if (!boosted.length && logFallbackFailed) {
-          throw new Error('Boosted log fetch failed')
+          hadRpcError = true
         }
 
         if (!cancelled && requestRef.current === requestId) {
@@ -230,15 +261,17 @@ export function useBoostedPairs(rpcUrl, refreshMs = 60000) {
               // ignore cache errors
             }
           }
+          const fallbackBoosted = boosted.length ? boosted : lastGoodRef.current
+          const error = hadRpcError && !boosted.length ? 'RPC busy' : null
           setState({
-            status: 'ok',
-            boosted: boosted.length ? boosted : lastGoodRef.current,
+            status: fallbackBoosted.length ? 'ok' : error ? 'error' : 'ok',
+            boosted: fallbackBoosted,
             config: {
               feeAmount: feeAmountRaw?.toString?.() || String(feeAmountRaw || '0'),
               treasury,
               maxDuration: toNumberSafe(maxDurationRaw),
             },
-            error: null,
+            error,
           })
         }
       } catch (err) {

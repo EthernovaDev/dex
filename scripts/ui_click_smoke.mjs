@@ -970,8 +970,12 @@ async function main() {
   if (!rpcWarning) {
     addLiquidityFailures.push('RPC busy banner missing on home when rpcFail=1')
   }
+  const boostedHeader = await page.locator('text=Boosted Tokens (24h)').count()
+  if (!boostedHeader) {
+    addLiquidityFailures.push('Boosted Tokens header missing on home when rpcFail=1')
+  }
   const rpcFailHtml = await page.content()
-  if (/Cannot read properties|TypeError/i.test(rpcFailHtml)) {
+  if (/Cannot read properties|TypeError|NovaDEX Analytics crashed/i.test(rpcFailHtml)) {
     addLiquidityFailures.push('RPC busy page contains JS TypeError text')
   }
 

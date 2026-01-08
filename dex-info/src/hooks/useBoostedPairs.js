@@ -18,6 +18,7 @@ const BOOST_EVENT_TOPIC = idFn('Boosted(address,address,uint256,uint256)')
 const BOOST_LOOKBACK_BLOCKS = 20000
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+const isRpcBusy = (err) => /429|503|timeout|temporarily unavailable|rate limit/i.test(err?.message || '')
 
 const toNumberSafe = (value) => {
   try {
@@ -131,12 +132,38 @@ export function useBoostedPairs(rpcUrl, refreshMs = 60000) {
             const iface = new InterfaceCtor(BOOST_EVENT_ABI)
             const latest = await provider.getBlockNumber()
             const fromBlock = Math.max(0, latest - BOOST_LOOKBACK_BLOCKS)
-            const logs = await provider.getLogs({
-              address: BOOST_REGISTRY_ADDRESS,
-              fromBlock,
-              toBlock: latest,
-              topics: [BOOST_EVENT_TOPIC],
-            })
+            let logs = []
+            try {
+              logs = await provider.getLogs({
+                address: BOOST_REGISTRY_ADDRESS,
+                fromBlock,
+                toBlock: latest,
+                topics: [BOOST_EVENT_TOPIC],
+              })
+            } catch (err) {
+              if (!isRpcBusy(err)) throw err
+              const chunkSize = 5000
+              for (let start = fromBlock; start <= latest; start += chunkSize) {
+                const end = Math.min(latest, start + chunkSize - 1)
+                try {
+                  // eslint-disable-next-line no-await-in-loop
+                  const chunk = await provider.getLogs({
+                    address: BOOST_REGISTRY_ADDRESS,
+                    fromBlock: start,
+                    toBlock: end,
+                    topics: [BOOST_EVENT_TOPIC],
+                  })
+                  logs = logs.concat(chunk || [])
+                } catch (inner) {
+                  if (isRpcBusy(inner)) {
+                    // eslint-disable-next-line no-await-in-loop
+                    await sleep(250)
+                    continue
+                  }
+                  throw inner
+                }
+              }
+            }
             const byPair = new Map()
             for (const log of logs) {
               let pair

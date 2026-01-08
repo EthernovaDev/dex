@@ -19,6 +19,21 @@ const BOOST_LOOKBACK_BLOCKS = 20000
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 const isRpcBusy = (err) => /429|503|timeout|temporarily unavailable|rate limit/i.test(err?.message || '')
+const callWithRetry = async (fn, attempts = 3) => {
+  let lastErr
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      return await fn()
+    } catch (err) {
+      lastErr = err
+      if (!isRpcBusy(err)) throw err
+      // eslint-disable-next-line no-await-in-loop
+      await sleep(200 + i * 150)
+    }
+  }
+  throw lastErr
+}
 
 const toNumberSafe = (value) => {
   try {
@@ -98,7 +113,7 @@ export function useBoostedPairs(rpcUrl, refreshMs = 60000) {
 
         let count = 0
         try {
-          const countRaw = await contract.boostCount()
+          const countRaw = await callWithRetry(() => contract.boostCount(), 4)
           count = toNumberSafe(countRaw)
         } catch (err) {
           console.warn('[boostedPairs] boostCount failed, falling back to logs', err)
@@ -111,7 +126,7 @@ export function useBoostedPairs(rpcUrl, refreshMs = 60000) {
           for (let i = 0; i < count; i += 1) {
             try {
               // eslint-disable-next-line no-await-in-loop
-              const [pair, booster, expiresAtRaw] = await contract.boostAt(i)
+              const [pair, booster, expiresAtRaw] = await callWithRetry(() => contract.boostAt(i), 3)
               const expiresAt = toNumberSafe(expiresAtRaw)
               if (pair && expiresAt > now) {
                 boosted.push({ pair, booster, expiresAt })

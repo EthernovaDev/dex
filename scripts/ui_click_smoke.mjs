@@ -335,7 +335,16 @@ async function main() {
     }
   })
   page.on('pageerror', err => {
-    pageErrors.push(`[pageerror] ${err?.message || err}`)
+    const message = err?.message || String(err)
+    const hostHint = rpcBaseUrl !== 'unknown' ? getHost(rpcBaseUrl) : null
+    const isSoftRpc =
+      isSoftRpcText(message) &&
+      ((lastRpcUrl && isRpcUrl(lastRpcUrl)) || (hostHint && message.includes(hostHint)) || rpcHosts.some(host => message.includes(host)))
+    if (isSoftRpc) {
+      recordRpcSoft({ url: lastRpcUrl, method: '', status: 'other' })
+      return
+    }
+    pageErrors.push(`[pageerror] ${message}`)
   })
   page.on('requestfailed', req => {
     const url = req.url()

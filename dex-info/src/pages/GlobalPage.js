@@ -214,7 +214,8 @@ function GlobalPage() {
   const boostState = useBoostedPairs(RPC_URL, 60000)
   const forceRpcFail =
     typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('rpcFail') === '1'
-  const rpcDelayed = Boolean(forceRpcFail || txStatus?.error || chartStatus?.error || boostState?.error)
+  const boostRpcError = forceRpcFail ? 'RPC busy' : boostState?.error
+  const rpcDelayed = Boolean(forceRpcFail || txStatus?.error || chartStatus?.error || boostRpcError)
   const quoteTokenAddress = useMemo(() => {
     const token0Id = normAddr(pinnedPair?.token0?.id)
     const token1Id = normAddr(pinnedPair?.token1?.id)
@@ -500,7 +501,7 @@ function GlobalPage() {
             </TYPE.main>
             <CustomLink to={`/pair/${PAIR_ADDRESS}`}>Boost your pair</CustomLink>
           </SectionHeader>
-          {boostState?.error && (
+          {boostRpcError && (
             <Panel style={{ padding: '0.75rem', marginBottom: '0.75rem' }} data-testid="boost-rpc-warning">
               <TYPE.light fontSize={12}>RPC busy, retrying…</TYPE.light>
               <button

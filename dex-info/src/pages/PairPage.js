@@ -287,6 +287,12 @@ function PairPageContent({ pairId, history }) {
     ? 'Simulated RPC error'
     : boostInfoState?.error || boostConfigState?.error
   const boostFeeRaw = boostConfigState?.config?.feeAmount || '10000000000000000000'
+  let boostFeeAmount = ethers.utils.parseUnits('10', 18)
+  try {
+    boostFeeAmount = ethers.BigNumber.from(boostFeeRaw)
+  } catch {
+    boostFeeAmount = ethers.utils.parseUnits('10', 18)
+  }
   let boostFeeDisplay = '10'
   try {
     boostFeeDisplay = formattedNum(Number(ethers.utils.formatUnits(boostFeeRaw, 18)), false)

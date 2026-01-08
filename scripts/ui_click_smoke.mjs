@@ -721,6 +721,13 @@ async function main() {
     if (!tokenHeader) {
       addLiquidityFailures.push('Token header missing on WNOVA token page')
     }
+    const tokenProfile = await page.locator('[data-testid="token-profile"]').count()
+    if (tokenProfile) {
+      const headerText = await page.locator('[data-testid="token-header"]').innerText()
+      if (/Unknown Token/i.test(headerText) || /\(UNKNOWN\)/i.test(headerText)) {
+        addLiquidityFailures.push('Token header did not fall back to profile metadata')
+      }
+    }
   }
 
   currentRoute = 'info-tokens'

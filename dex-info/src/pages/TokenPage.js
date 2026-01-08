@@ -151,15 +151,39 @@ function TokenPage({ address, history }) {
   const onchainInfo = useOnchainTokenInfo(address, shouldUseOnchain ? rpcUrl : null)
   const tokenMeta = useTokenMetadata(address)
   const isWrappedNative = isAddrEq(address, WRAPPED_NATIVE_ADDRESS)
-  const safeSymbol = symbol || onchainInfo.info?.symbol || (isWrappedNative ? 'WNOVA' : 'UNKNOWN')
-  const safeName = name || onchainInfo.info?.name || (isWrappedNative ? 'Wrapped NOVA' : 'Unknown Token')
+  const isUnknownString = (value) => {
+    if (value === null || value === undefined) return true
+    const normalized = String(value).trim().toLowerCase()
+    if (!normalized) return true
+    return ['unknown', 'unknown token', 'unknown-token', 'n/a', 'na', '-', 'undefined', 'null', '?'].includes(normalized)
+  }
+  const profileName = tokenMeta?.name || tokenMeta?.displayName || tokenMeta?.title
+  const profileSymbol = tokenMeta?.symbol || tokenMeta?.ticker || tokenMeta?.displaySymbol
+  const resolvedName = !isUnknownString(name)
+    ? name
+    : !isUnknownString(onchainInfo.info?.name)
+    ? onchainInfo.info?.name
+    : !isUnknownString(profileName)
+    ? profileName
+    : isWrappedNative
+    ? 'Wrapped NOVA'
+    : 'Unknown Token'
+  const resolvedSymbol = !isUnknownString(symbol)
+    ? symbol
+    : !isUnknownString(onchainInfo.info?.symbol)
+    ? onchainInfo.info?.symbol
+    : !isUnknownString(profileSymbol)
+    ? profileSymbol
+    : isWrappedNative
+    ? 'WNOVA'
+    : 'UNKNOWN'
 
   useEffect(() => {
     document.querySelector('body').scrollTo(0, 0)
   }, [])
 
   // detect color from token
-  const backgroundColor = useColor(id || address, safeSymbol)
+  const backgroundColor = useColor(id || address, resolvedSymbol)
 
   const allPairs = useTokenPairs(address)
 
@@ -195,7 +219,7 @@ function TokenPage({ address, history }) {
 
   // format for long symbol
   const LENGTH = below1080 ? 10 : 16
-  const formattedSymbol = safeSymbol?.length > LENGTH ? safeSymbol.slice(0, LENGTH) + '...' : safeSymbol
+  const formattedSymbol = resolvedSymbol?.length > LENGTH ? resolvedSymbol.slice(0, LENGTH) + '...' : resolvedSymbol
   const showMeta =
     tokenMeta &&
     (tokenMeta.description ||
@@ -216,6 +240,13 @@ function TokenPage({ address, history }) {
       top: 0,
     })
   }, [])
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const title = resolvedName || 'Unknown Token'
+    const suffix = resolvedSymbol ? ` (${resolvedSymbol})` : ''
+    document.title = `${title}${suffix} — NovaDEX`
+  }, [resolvedName, resolvedSymbol])
 
   const [useTracked, setUseTracked] = useState(false)
 
@@ -249,7 +280,7 @@ function TokenPage({ address, history }) {
         <RowBetween style={{ flexWrap: 'wrap', alingItems: 'start' }}>
           <AutoRow align="flex-end" style={{ width: 'fit-content' }}>
             <TYPE.body>
-              <BasicLink to="/tokens">{'Tokens '}</BasicLink>→ {safeSymbol}
+              <BasicLink to="/tokens">{'Tokens '}</BasicLink>→ {resolvedSymbol}
             </TYPE.body>
             <Link
               style={{ width: 'fit-content' }}
@@ -322,11 +353,11 @@ function TokenPage({ address, history }) {
                     style={{ margin: '0 1rem' }}
                   >
                     <RowFixed gap="6px">
-                      <FormattedName
-                        text={safeName ? safeName + ' ' : ''}
-                        maxCharacters={16}
-                        style={{ marginRight: '6px' }}
-                      />{' '}
+                    <FormattedName
+                      text={resolvedName ? resolvedName + ' ' : ''}
+                      maxCharacters={16}
+                      style={{ marginRight: '6px' }}
+                    />{' '}
                       {formattedSymbol ? `(${formattedSymbol})` : ''}
                     </RowFixed>
                   </TYPE.main>{' '}
@@ -343,7 +374,7 @@ function TokenPage({ address, history }) {
               <span>
                 <RowFixed ml={below500 ? '0' : '2.5rem'} mt={below500 ? '1rem' : '0'}>
                   {!!!savedTokens[address] && !below800 ? (
-                    <Hover onClick={() => addToken(address, safeSymbol)}>
+                    <Hover onClick={() => addToken(address, resolvedSymbol)}>
                       <StyledIcon>
                         <PlusCircle style={{ marginRight: '0.5rem' }} />
                       </StyledIcon>
@@ -497,13 +528,13 @@ function TokenPage({ address, history }) {
                   <Column>
                     <TYPE.main>Symbol</TYPE.main>
                     <Text style={{ marginTop: '.5rem' }} fontSize={24} fontWeight="500">
-                      <FormattedName text={safeSymbol} maxCharacters={12} />
+                      <FormattedName text={resolvedSymbol} maxCharacters={12} />
                     </Text>
                   </Column>
                   <Column>
                     <TYPE.main>Name</TYPE.main>
                     <TYPE.main style={{ marginTop: '.5rem' }} fontSize={24} fontWeight="500">
-                      <FormattedName text={safeName} maxCharacters={16} />
+                      <FormattedName text={resolvedName} maxCharacters={16} />
                     </TYPE.main>
                   </Column>
                   <Column>

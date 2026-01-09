@@ -109,6 +109,10 @@ REACT_APP_BUILD_STAMP=${BUILD_STAMP}
 EOF
 
 echo "[INFO] Writing runtime config for swap UI..."
+REACT_APP_CHAIN_ID="${CHAIN_ID}" \
+REACT_APP_NETWORK_URL="${RPC_URL}" \
+REACT_APP_EXPLORER_URL="${EXPLORER_URL}" \
+CHAIN_ID="${CHAIN_ID}" \
 node "${DEX_UI_DIR}/scripts/write-config-from-deployments.js"
 
 echo "[INFO] Building swap UI..."

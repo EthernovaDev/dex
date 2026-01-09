@@ -6,7 +6,7 @@ const OUT_DIR = '/opt/novadex/scripts/out'
 const BASE_URL = process.env.BASE_URL || 'https://dex.ethnova.net'
 const RPC_URL = process.env.RPC_URL || 'https://rpc.ethnova.net'
 const ACCOUNT = (process.env.TEST_ADDRESS || '0x2DAf4F20180b5f5b2DaD430691f5ac961d7295b6').toLowerCase()
-const CHAIN_ID_HEX = '0x12fd1'
+const CHAIN_ID_HEX = '0x1dab5'
 const DEPLOYMENTS = '/opt/novadex/contracts/deployments.json'
 
 function ensureDir() {

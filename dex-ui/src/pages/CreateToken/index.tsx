@@ -889,7 +889,7 @@ export default function CreateToken() {
     }
   }, [createdToken, symbol, parsedDecimals])
 
-  if (chainId && chainId !== 77777) {
+  if (chainId && chainId !== 121525) {
     return (
       <PageContainer data-testid="create-page">
         <TabsRow>
@@ -899,7 +899,7 @@ export default function CreateToken() {
           <CreateCard>
             <FormColumn gap="lg">
               <TYPE.largeHeader>Wrong network</TYPE.largeHeader>
-              <TYPE.body style={{ marginTop: 8 }}>Switch to Ethernova (77777) to create tokens.</TYPE.body>
+              <TYPE.body style={{ marginTop: 8 }}>Switch to Ethernova (121525) to create tokens.</TYPE.body>
               <ButtonPrimary
                 style={{ marginTop: 16, width: '100%' }}
                 onClick={() => switchToEthernova().catch(() => undefined)}

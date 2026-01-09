@@ -44,7 +44,7 @@ const PUBLIC_URL = (process.env.PUBLIC_URL ?? '').replace(/\/+$/, '')
 const CONFIG_URL = `${PUBLIC_URL}/ethernova.config.json`
 
 const FALLBACK_CONFIG: EthernovaConfig = {
-  chainId: CHAIN_ID || 77777,
+  chainId: CHAIN_ID || 121525,
   rpcUrl: process.env.REACT_APP_NETWORK_URL ?? 'https://rpc.ethnova.net',
   explorerUrl: EXPLORER_URL ?? 'https://explorer.ethnova.net',
   nativeSymbol: 'NOVA',

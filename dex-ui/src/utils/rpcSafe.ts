@@ -219,7 +219,7 @@ export async function getHealthyRpcUrls(): Promise<string[]> {
 }
 
 export function createEthernovaFallbackProvider(urls: string[]): FallbackProvider {
-  const providers = urls.map(url => new StaticJsonRpcProvider(url, 77777))
+  const providers = urls.map(url => new StaticJsonRpcProvider(url, 121525))
   const configs = providers.map((provider, index) => ({
     provider,
     priority: index + 1,

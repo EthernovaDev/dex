@@ -25,7 +25,7 @@ export type PairLookupResult = {
 export function usePairLookup(currencyA?: Currency, currencyB?: Currency): PairLookupResult {
   const { library, chainId } = useActiveWeb3React()
   const { config } = useEthernovaConfig()
-  const targetChainId = config.chainId || 77777
+  const targetChainId = config.chainId || 121525
   const factoryAddress = isAddress(config.contracts.factory)
 
   const tokenA = useMemo(() => wrappedCurrency(currencyA, targetChainId), [currencyA, targetChainId])

@@ -36,7 +36,7 @@ async function fetchChunk(
   let resultsBlockNumber, returnData
   const calls = chunk.map(obj => [obj.address, obj.callData])
   try {
-    if (chainId === 77777 && multicallContract.tryAggregate) {
+    if (chainId === 121525 && multicallContract.tryAggregate) {
       try {
         const results = await multicallContract.tryAggregate(false, calls)
         const mapped = results.map((result: { success: boolean; returnData: string }) =>
@@ -149,7 +149,7 @@ export default function Updater(): null {
 
   useEffect(() => {
     if (!latestBlockNumber || !chainId || !multicallContract) return
-    if (chainId === 77777 && pauseUntilRef.current && Date.now() < pauseUntilRef.current) {
+    if (chainId === 121525 && pauseUntilRef.current && Date.now() < pauseUntilRef.current) {
       return
     }
 
@@ -206,7 +206,7 @@ export default function Updater(): null {
               return
             }
             console.error('Failed to fetch multicall chunk', chunk, chainId, error)
-            if (chainId === 77777) {
+            if (chainId === 121525) {
               pauseUntilRef.current = Date.now() + 30000
             }
             dispatch(

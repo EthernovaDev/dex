@@ -636,7 +636,7 @@ export default function Swap() {
                   <ButtonLight onClick={toggleWalletModal}>Connect Wallet</ButtonLight>
                 ) : isWrongNetwork ? (
                   <ButtonPrimary onClick={handleSwitchEthernova}>
-                    Switch to Ethernova (77777)
+                    Switch to Ethernova (121525)
                   </ButtonPrimary>
                 ) : (
                   <RowBetween>
@@ -665,7 +665,7 @@ export default function Swap() {
               <ButtonLight onClick={toggleWalletModal}>Connect Wallet</ButtonLight>
             ) : isWrongNetwork ? (
               <ButtonPrimary onClick={handleSwitchEthernova}>
-                Switch to Ethernova (77777)
+                Switch to Ethernova (121525)
               </ButtonPrimary>
             ) : noRoute && userHasSpecifiedInputOutput ? (
               <GreyCard style={{ textAlign: 'center' }}>

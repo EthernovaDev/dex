@@ -32,7 +32,7 @@ export function usePairs(currencies: [Currency | undefined, Currency | undefined
   const { chainId } = useActiveWeb3React()
   const { config } = useEthernovaConfig()
   const blockNumber = useBlockNumber()
-  const activeChainId = chainId ?? config.chainId ?? 77777
+  const activeChainId = chainId ?? config.chainId ?? 121525
   const factoryAddress = isAddress(config.contracts.factory)
 
   const tokens = useMemo(
@@ -86,7 +86,7 @@ export function usePairs(currencies: [Currency | undefined, Currency | undefined
 
   useEffect(() => {
     if (!factoryAddress) return
-    const preferFallback = activeChainId === 77777
+    const preferFallback = activeChainId === 121525
     let cancelled = false
     const run = async () => {
       const updates: Record<
@@ -162,7 +162,7 @@ export function usePairs(currencies: [Currency | undefined, Currency | undefined
     }
   }, [factoryAddress, pairKeys, tokens, fallbackResults, activeChainId, blockNumber])
 
-  const preferFallback = activeChainId === 77777
+  const preferFallback = activeChainId === 121525
 
   return useMemo(() => {
     return results.map((result, i) => {

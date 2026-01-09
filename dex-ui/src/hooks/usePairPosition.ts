@@ -68,7 +68,7 @@ export function usePairPosition(pairAddress?: string, account?: string): PairPos
   }, [pairAddress, account, chainId])
 
   const shouldFallback = useMemo(() => {
-    if (!pairAddress || chainId !== 77777) return false
+    if (!pairAddress || chainId !== 121525) return false
     const balanceMissing = account
       ? balanceCall.error || (!balanceCall.loading && !hasResult(balanceCall.result?.[0]))
       : false
@@ -100,7 +100,7 @@ export function usePairPosition(pairAddress?: string, account?: string): PairPos
   ])
 
   useEffect(() => {
-    if (!pairAddress || chainId !== 77777) return
+    if (!pairAddress || chainId !== 121525) return
     if (
       !balanceCall.loading &&
       !totalSupplyCall.loading &&
@@ -129,7 +129,7 @@ export function usePairPosition(pairAddress?: string, account?: string): PairPos
   ])
 
   useEffect(() => {
-    if (!pairAddress || chainId !== 77777) return
+    if (!pairAddress || chainId !== 121525) return
     if (!shouldFallback) return
     let cancelled = false
     setDirectState(prev => ({ ...prev, status: 'loading', error: undefined }))
@@ -142,35 +142,35 @@ export function usePairPosition(pairAddress?: string, account?: string): PairPos
           const data = PAIR_INTERFACE.encodeFunctionData('balanceOf', [account])
           return callReadWithFallback(
             { to: pairAddress, data },
-            { provider: library as any, expectedChainId: 77777, debugTag: 'pair.balanceOf' }
+            { provider: library as any, expectedChainId: 121525, debugTag: 'pair.balanceOf' }
           )
         }
         const callTotalSupply = async () => {
           const data = PAIR_INTERFACE.encodeFunctionData('totalSupply', [])
           return callReadWithFallback(
             { to: pairAddress, data },
-            { provider: library as any, expectedChainId: 77777, debugTag: 'pair.totalSupply' }
+            { provider: library as any, expectedChainId: 121525, debugTag: 'pair.totalSupply' }
           )
         }
         const callReserves = async () => {
           const data = PAIR_INTERFACE.encodeFunctionData('getReserves', [])
           return callReadWithFallback(
             { to: pairAddress, data },
-            { provider: library as any, expectedChainId: 77777, debugTag: 'pair.getReserves' }
+            { provider: library as any, expectedChainId: 121525, debugTag: 'pair.getReserves' }
           )
         }
         const callToken0 = async () => {
           const data = PAIR_INTERFACE.encodeFunctionData('token0', [])
           return callReadWithFallback(
             { to: pairAddress, data },
-            { provider: library as any, expectedChainId: 77777, debugTag: 'pair.token0' }
+            { provider: library as any, expectedChainId: 121525, debugTag: 'pair.token0' }
           )
         }
         const callToken1 = async () => {
           const data = PAIR_INTERFACE.encodeFunctionData('token1', [])
           return callReadWithFallback(
             { to: pairAddress, data },
-            { provider: library as any, expectedChainId: 77777, debugTag: 'pair.token1' }
+            { provider: library as any, expectedChainId: 121525, debugTag: 'pair.token1' }
           )
         }
 
@@ -239,7 +239,7 @@ export function usePairPosition(pairAddress?: string, account?: string): PairPos
   const hasCompleteData = hasBalance && hasResult(totalSupply) && hasResult(reserves) && hasResult(token0) && hasResult(token1)
 
   useEffect(() => {
-    if (!pairAddress || chainId !== 77777) return
+    if (!pairAddress || chainId !== 121525) return
     if (hasCompleteData) return
     let cancelled = false
     const timeout = setTimeout(() => {
@@ -259,7 +259,7 @@ export function usePairPosition(pairAddress?: string, account?: string): PairPos
   }, [pairAddress, chainId, hasCompleteData])
 
   const status: PairPositionStatus = useMemo(() => {
-    if (!pairAddress || chainId !== 77777) return 'idle'
+    if (!pairAddress || chainId !== 121525) return 'idle'
     if (hasCompleteData) return 'ok'
     if (directState.status === 'rpc_unstable') return 'rpc_unstable'
     if (balanceCall.loading || totalSupplyCall.loading || reservesCall.loading) return 'loading'

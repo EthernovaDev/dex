@@ -20,8 +20,11 @@ const startBlock = Number(
     0
 )
 
+const chainIdOverride = process.env.REACT_APP_CHAIN_ID || process.env.CHAIN_ID
+const resolvedChainId = Number(chainIdOverride || deployments.chainId || 121525)
+
 const config = {
-  chainId: Number(deployments.chainId || 77777),
+  chainId: resolvedChainId,
   rpcUrl: process.env.REACT_APP_NETWORK_URL || 'https://rpc.ethnova.net',
   explorerUrl: process.env.REACT_APP_EXPLORER_URL || 'https://explorer.ethnova.net',
   nativeSymbol: 'NOVA',

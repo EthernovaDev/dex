@@ -39,7 +39,7 @@ export function useBalances(): {
     return new Contract(wnovaAddress, WNOVA_ABI, fallbackProvider)
   }, [fallbackProvider, wnovaAddress])
 
-  const expectedChainId = config.chainId || 77777
+  const expectedChainId = config.chainId || 121525
   const wrongNetwork = Boolean(account && chainId && chainId !== expectedChainId)
 
   const refreshBalances = useCallback(async () => {

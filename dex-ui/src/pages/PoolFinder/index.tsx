@@ -36,7 +36,7 @@ enum Fields {
 export default function PoolFinder() {
   const { account, chainId } = useActiveWeb3React()
   const { config } = useEthernovaConfig()
-  const fallbackChainId = config.chainId || 77777
+  const fallbackChainId = config.chainId || 121525
 
   const [showSearch, setShowSearch] = useState<boolean>(false)
   const [activeField, setActiveField] = useState<number>(Fields.TOKEN1)
@@ -115,7 +115,7 @@ export default function PoolFinder() {
   }, [pair, pairLookup.status, pairLookup.reserves, pairLookup.token0, pairLookup.token1, wrapped0, wrapped1])
   const effectivePair = pair ?? fallbackPair
   const pairAddress =
-    pairLookup.pairAddress ?? (activeChainId !== 77777 ? pair?.liquidityToken?.address : undefined)
+    pairLookup.pairAddress ?? (activeChainId !== 121525 ? pair?.liquidityToken?.address : undefined)
   const lpTokenOverride = useMemo(() => {
     if (!pairAddress || !isAddress(pairAddress)) return undefined
     return new Token(fallbackChainId, pairAddress, 18, 'LP', 'NovaDEX LP')

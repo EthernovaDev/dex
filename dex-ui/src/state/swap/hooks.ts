@@ -162,7 +162,7 @@ export function useDerivedSwapInfo(): {
   const fallbackPair = useMemo(() => {
     if (pairLookup.status !== 'exists' || !pairLookup.reserves) return null
     if (!inputCurrency || !outputCurrency) return null
-    const targetChainId = chainId ?? 77777
+    const targetChainId = chainId ?? 121525
     const tokenA = wrappedCurrency(inputCurrency, targetChainId) as Token | undefined
     const tokenB = wrappedCurrency(outputCurrency, targetChainId) as Token | undefined
     if (!tokenA || !tokenB) return null

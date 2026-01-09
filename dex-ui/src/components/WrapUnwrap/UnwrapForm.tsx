@@ -156,7 +156,7 @@ export default function UnwrapForm() {
   const [copyStatus, setCopyStatus] = useState<string | null>(null)
   const debugEnabled = getDebugEnabled()
 
-  const expectedChainId = config.chainId || 77777
+  const expectedChainId = config.chainId || 121525
   const wnovaAddress = isAddress(config.tokens.WNOVA.address)
   const wrongNetwork = Boolean(account && chainId && chainId !== expectedChainId) || status === 'wrong_network'
   const gasPriceWei = process.env.REACT_APP_GAS_PRICE_WEI

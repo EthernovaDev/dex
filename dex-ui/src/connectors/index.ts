@@ -13,8 +13,8 @@ const parseChainId = (value: string | undefined, fallback: number): number => {
   return Number.isNaN(parsed) ? fallback : parsed
 }
 
-export const NETWORK_CHAIN_ID: number = parseChainId(process.env.REACT_APP_CHAIN_ID, 77777)
-export const NETWORK_DEFAULT_CHAIN_ID: number = 77777
+export const NETWORK_CHAIN_ID: number = parseChainId(process.env.REACT_APP_CHAIN_ID, 121525)
+export const NETWORK_DEFAULT_CHAIN_ID: number = 121525
 export const INJECTED_SUPPORTED_CHAIN_IDS = [NETWORK_CHAIN_ID]
 export const WALLETCONNECT_SUPPORTED_CHAIN_IDS = [NETWORK_CHAIN_ID]
 export const WALLETCONNECT_RPC_URLS: { [chainId: number]: string } = {

@@ -375,7 +375,7 @@ function PairPageContent({ pairId, history }) {
   }, [pairId])
 
   const switchToEthernova = async (ethereum) => {
-    const chainIdHex = '0x12fd1'
+    const chainIdHex = '0x1dab5'
     const params = {
       chainId: chainIdHex,
       chainName: 'Ethernova',
@@ -418,7 +418,7 @@ function PairPageContent({ pairId, history }) {
       await switchToEthernova(window.ethereum)
       const provider = new ethers.providers.Web3Provider(window.ethereum)
       const network = await provider.getNetwork()
-      if (Number(network.chainId) !== 77777) {
+      if (Number(network.chainId) !== 121525) {
         throw new Error('Wrong network: switch to Ethernova')
       }
       const signer = provider.getSigner()

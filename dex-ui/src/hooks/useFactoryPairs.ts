@@ -137,7 +137,7 @@ export function useFactoryPairs(page: number, pageSize: number): PairState & { r
         let token1Raw: string | undefined
         let reservesRaw: string | undefined
 
-        if (multicall && chainId === 77777 && (multicall as any).tryAggregate) {
+        if (multicall && chainId === 121525 && (multicall as any).tryAggregate) {
           try {
             const calls = [
               [pairAddress, token0Data],

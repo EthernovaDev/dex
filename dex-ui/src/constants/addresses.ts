@@ -15,7 +15,7 @@ const parseChainId = (value: string | undefined, fallback: number): number => {
   return Number.isNaN(parsed) ? fallback : parsed
 }
 
-export const CHAIN_ID = parseChainId(process.env.REACT_APP_CHAIN_ID, 77777)
+export const CHAIN_ID = parseChainId(process.env.REACT_APP_CHAIN_ID, 121525)
 export const EXPLORER_URL = process.env.REACT_APP_EXPLORER_URL ?? ''
 
 export const FACTORY_ADDRESS = requiredEnv('REACT_APP_FACTORY_ADDRESS')

@@ -31,7 +31,7 @@ export default function Pool() {
   const { account } = useActiveWeb3React()
   const { config } = useEthernovaConfig()
 
-  const fallbackChainId = config.chainId || 77777
+  const fallbackChainId = config.chainId || 121525
   const tonyAddress = isAddress(config.tokens.TONY.address)
   const wnovaAddress = isAddress(config.tokens.WNOVA.address)
   const tonyToken = useMemo(
@@ -95,7 +95,7 @@ export default function Pool() {
             ? `${tokenA.address.toLowerCase()}:${tokenB.address.toLowerCase()}`
             : `${tokenB.address.toLowerCase()}:${tokenA.address.toLowerCase()}`
         const pairAddress = pairAddressMap[key]
-        if (!pairAddress && fallbackChainId === 77777) {
+        if (!pairAddress && fallbackChainId === 121525) {
           return null
         }
         const liquidityToken = pairAddress

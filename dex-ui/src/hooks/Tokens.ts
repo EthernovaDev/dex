@@ -17,7 +17,7 @@ export function useAllTokens(): { [address: string]: Token } {
   const allTokens = useSelectedTokenList()
 
   return useMemo(() => {
-    const activeChainId = chainId ?? config.chainId ?? 77777
+    const activeChainId = chainId ?? config.chainId ?? 121525
     const tokenMap: { [address: string]: Token } = { ...(allTokens[activeChainId] ?? {}) }
 
     const wnova = isAddress(config.tokens.WNOVA.address)

@@ -17,7 +17,7 @@ export function useTotalSupply(token?: Token): TokenAmount | undefined {
   const [fallbackSupply, setFallbackSupply] = useState<BigNumber | undefined>()
 
   const fetchFallback = useCallback(async () => {
-    if (!token || !token.address || chainId !== 77777) return
+    if (!token || !token.address || chainId !== 121525) return
     try {
       const data = new Interface(ERC20_ABI).encodeFunctionData('totalSupply', [])
       const result = await rpcCallWithFallback('eth_call', [{ to: token.address, data }, 'latest'])

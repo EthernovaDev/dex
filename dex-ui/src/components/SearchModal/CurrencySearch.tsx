@@ -100,7 +100,7 @@ export function CurrencySearch({
 
   const tokenComparator = useTokenComparator(invertSearchOrder)
   const { config, error: configError } = useEthernovaConfig()
-  const fallbackChainId = config.chainId || 77777
+  const fallbackChainId = config.chainId || 121525
 
   const wnovaAddress = config.tokens.WNOVA.address
   const tonyAddress = config.tokens.TONY.address

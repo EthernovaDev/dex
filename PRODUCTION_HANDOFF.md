@@ -10,7 +10,7 @@
 - GraphQL friendly: https://dex.ethnova.net/graphql
 - Blocks subgraph: https://dex.ethnova.net/subgraphs/name/novadex/blocks
 
-## Contracts (Ethernova, chainId 77777)
+## Contracts (Ethernova, chainId 121525)
 - WNOVA: `0x0f6547E149FBc1d6E515BA15199CB6848ca43517`
 - Multicall2: `0x1e43D57fB3E86f81AC8C20b396Ab939FbEB3a545`
 - Factory: `0x80d81D354557A5acDda0a2e3f6c2D563b9Ca4E15`
@@ -28,7 +28,7 @@
 1) Add custom network in MetaMask:
    - Network name: Ethernova
    - RPC: https://rpc.ethnova.net
-   - Chain ID: 77777
+   - Chain ID: 121525
    - Symbol: NOVA
    - Explorer: https://explorer.ethnova.net
 2) Import tokens:
@@ -95,7 +95,7 @@
 - MAX for NOVA uses native balance minus a gas buffer; if RPC fails it shows “Balance unavailable (RPC)” instead of 0.
 
 ## UI Notes (Ethernova-only)
-- Chain-locked to 77777; wrong network shows “Switch to Ethernova” (wallet_switchEthereumChain + add chain).
+- Chain-locked to 121525; wrong network shows “Switch to Ethernova” (wallet_switchEthereumChain + add chain).
 - Default token list is local-only (WNOVA + TONY); no remote lists enabled by default.
 - Labels use NOVA/WNOVA and links use the Ethernova explorer.
 - Swaps route through **NovaRouter** (treasury fee), liquidity uses **Router02**.
@@ -105,7 +105,7 @@
   - Source: `/opt/novadex/contracts/deployments.json`
 - RPC fallback: UI uses multiple RPCs for read-only calls and retries if the primary returns HTML/503.
   - Env: `REACT_APP_ETHERNOVA_RPC_URLS` (comma-separated, injected at build time via `ETHERNOVA_RPC_URLS`)
-- Multicall soft-fails on 77777 (tryAggregate); direct eth_call fallback is used for pair/reserve reads.
+- Multicall soft-fails on 121525 (tryAggregate); direct eth_call fallback is used for pair/reserve reads.
 - Explore page (`/#/explore`) lists pools directly from factory (no subgraph dependency).
 - My Positions on Explore uses on-chain LP balance with fallback; no false “no liquidity yet.”
 - “View pool information” links to internal analytics:
@@ -139,8 +139,8 @@
 2) If you connect while on another chain (e.g. Ethereum Mainnet), the UI will show “Wrong Network”.
 3) Click “Switch to Ethernova” to run `wallet_switchEthereumChain` (or add the network if missing).
 4) After switching, the modal closes and balances load from the wallet provider.
-   - ChainId (hex): `0x12fd1`
-   - ChainId (decimal): `77777`
+   - ChainId (hex): `0x1dab5`
+   - ChainId (decimal): `121525`
 
 ## Debug Mode
 - Append `?debug=1` to the URL to show a debug overlay (provider detection, account, chainId raw/number, connector, last activation error).
@@ -245,14 +245,14 @@
 - Script: `/opt/novadex/scripts/ui_subgraph_smoke.sh`
 
 ## Wallet Connection Troubleshooting
-- ChainId (decimal): `77777`
-- ChainId (hex): `0x12fd1`
+- ChainId (decimal): `121525`
+- ChainId (hex): `0x1dab5`
 - RPC: https://rpc.ethnova.net
 - Explorer: https://explorer.ethnova.net
 - Optional backups: set `ETHERNOVA_RPC_URLS` in `/opt/novadex/.env` and rebuild to enable additional RPCs.
 - If you see “Unsupported chain id”, open `?debug=1` and verify:
-  - Injected supports: `77777` (not enforced; UI handles wrong network)
-  - Network default: `77777`
+  - Injected supports: `121525` (not enforced; UI handles wrong network)
+  - Network default: `121525`
   - Then click “Switch to Ethernova” to add/switch network.
 
 ## On-chain Smoke Test (Read-only)

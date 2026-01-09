@@ -1,5 +1,5 @@
-export const ETHERNOVA_CHAIN_ID = 77777
-export const ETHERNOVA_CHAIN_ID_HEX = '0x12fd1'
+export const ETHERNOVA_CHAIN_ID = 121525
+export const ETHERNOVA_CHAIN_ID_HEX = '0x1dab5'
 
 const DEFAULT_RPC_URL = process.env.REACT_APP_NETWORK_URL ?? 'https://rpc.ethnova.net'
 const EXPLORER_URL = process.env.REACT_APP_EXPLORER_URL

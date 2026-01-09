@@ -1,6 +1,6 @@
 # NovaDEX
 
-Production-ready NovaDEX codebase for Ethernova (chainId 77777).
+Production-ready NovaDEX codebase for Ethernova (chainId 121525).
 
 ## Structure
 - `dex-ui/` – Swap & pools UI (Ethernova-only)

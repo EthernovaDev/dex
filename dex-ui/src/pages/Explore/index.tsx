@@ -76,7 +76,7 @@ export default function Explore() {
     () =>
       tonyAddress
         ? new Token(
-            config.chainId || 77777,
+            config.chainId || 121525,
             tonyAddress,
             config.tokens.TONY.decimals || 18,
             config.tokens.TONY.symbol || 'TONY',
@@ -89,7 +89,7 @@ export default function Explore() {
     () =>
       wnovaAddress
         ? new Token(
-            config.chainId || 77777,
+            config.chainId || 121525,
             wnovaAddress,
             config.tokens.WNOVA.decimals || 18,
             config.tokens.WNOVA.symbol || 'WNOVA',
@@ -189,7 +189,7 @@ export default function Explore() {
 
   const lpTokens = useMemo(() => {
     if (!pairs.length) return []
-    return pairs.map(pair => new Token(config.chainId || 77777, pair.address, 18, 'LP', 'NovaDEX LP'))
+    return pairs.map(pair => new Token(config.chainId || 121525, pair.address, 18, 'LP', 'NovaDEX LP'))
   }, [pairs, config.chainId])
 
   const [lpBalances, lpBalancesLoading] = useTokenBalancesWithLoadingIndicator(account ?? undefined, lpTokens)

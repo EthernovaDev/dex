@@ -17,7 +17,7 @@ export function useTokenAllowance(token?: Token, owner?: string, spender?: strin
   const allowance = useSingleCallResult(contract, 'allowance', inputs).result
 
   useEffect(() => {
-    if (!token || !owner || !spender || !library || chainId !== 77777) return
+    if (!token || !owner || !spender || !library || chainId !== 121525) return
     let stale = false
     setDirectError(false)
     const read = async () => {
@@ -45,7 +45,7 @@ export function useTokenAllowance(token?: Token, owner?: string, spender?: strin
     allowance
   ])
 
-  if (chainId === 77777) {
+  if (chainId === 121525) {
     if (directAllowance) return directAllowance
     if (directError && token && owner && spender) return new TokenAmount(token, '0')
     return multicallAllowance

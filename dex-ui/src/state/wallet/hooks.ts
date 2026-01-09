@@ -255,7 +255,7 @@ export function useTokenBalancesWithLoadingIndicator(
           const data = ERC20_INTERFACE.encodeFunctionData('balanceOf', [address])
           const result = await callReadWithFallback(
             { to: token.address, data },
-            { provider: library as any, expectedChainId: 77777, debugTag: 'token.balanceOf' }
+            { provider: library as any, expectedChainId: 121525, debugTag: 'token.balanceOf' }
           )
           const amount = JSBI.BigInt(BigNumber.from(result as string).toString())
           if (!stale) {

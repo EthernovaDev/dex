@@ -55,7 +55,7 @@ async function main() {
     throw new Error(`Invalid address: ${target}`)
   }
 
-  const provider = new ethers.providers.JsonRpcProvider(rpcUrl, 77777)
+  const provider = new ethers.providers.JsonRpcProvider(rpcUrl, 121525)
   const contract = new ethers.Contract(wnova, WNOVA_ABI, provider)
 
   console.log(`[wrap_test] RPC: ${rpcUrl}`)
